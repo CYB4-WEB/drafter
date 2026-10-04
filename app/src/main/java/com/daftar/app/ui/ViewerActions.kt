@@ -3,6 +3,7 @@ package com.daftar.app.ui
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.OpenInBrowser
+import androidx.compose.material.icons.rounded.Print
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.Transform
 import androidx.compose.material.icons.rounded.VerticalSplit
@@ -14,6 +15,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -29,6 +34,9 @@ import java.io.File
  * Open in another app. Create once per viewer with [rememberViewerActions]; it also hosts the convert sheet and the
  * side-by-side file picker.
  */
+/** Outlives the dropdown menu that starts a print job. */
+private val printScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+
 class ViewerActions internal constructor(val file: File) {
     internal var showConvert by mutableStateOf(false)
     internal var pickSecond: (File) -> Unit = {}
@@ -56,13 +64,15 @@ fun ConvertButton(a: ViewerActions) {
  * [onShare] overrides plain sharing (e.g. the PDF viewer shares the annotated copy).
  */
 @Composable
-fun ViewerMenuItems(a: ViewerActions, close: () -> Unit, onShare: (() -> Unit)? = null, showConvert: Boolean = true) {
+fun ViewerMenuItems(a: ViewerActions, close: () -> Unit, onShare: (() -> Unit)? = null, showConvert: Boolean = true, showPrint: Boolean = true) {
     val ctx = LocalContext.current
     val c = D.c
     DropdownMenuItem({ Text(stringResource(R.string.share)) }, { close(); if (onShare != null) onShare() else shareFiles(ctx, listOf(a.file)) },
         leadingIcon = { Icon(Icons.Rounded.Share, null, tint = c.muted) })
     if (showConvert) DropdownMenuItem({ Text(stringResource(R.string.convert)) }, { close(); a.convert() },
         leadingIcon = { Icon(Icons.Rounded.Transform, null, tint = c.muted) })
+    if (showPrint && canPrint(a.file)) DropdownMenuItem({ Text(stringResource(R.string.print)) }, { close(); printScope.launch { printFile(ctx, a.file) } },
+        leadingIcon = { Icon(Icons.Rounded.Print, null, tint = c.muted) })
     DropdownMenuItem({ Text(stringResource(R.string.open_side_by_side)) }, { close(); a.openSideBySide() },
         leadingIcon = { Icon(Icons.Rounded.VerticalSplit, null, tint = c.muted) })
     DropdownMenuItem({ Text(stringResource(R.string.open_new_window)) }, { close(); Workspace.openInNewWindow(ctx, a.file) },

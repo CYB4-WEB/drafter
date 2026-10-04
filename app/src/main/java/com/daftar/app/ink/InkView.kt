@@ -486,6 +486,7 @@ class InkView(context: Context) : View(context) {
             sy = max(0f, topDoc * scale)
         }
         clamp(); tiles.values.forEach { it.bmp.recycle() }; tiles.clear(); settleSoon(); notifyZoom(); invalidate()
+        if (editItem != null) post { ensureCaretVisible() }     // keyboard opened / window resized while typing
     }
 
     // =====================================================================================
@@ -524,6 +525,8 @@ class InkView(context: Context) : View(context) {
         sy = margin + gt * scale - ay
         if (gl > 0f || gt > 0f) {
             sel?.let { it.dx += gl; it.dy += gt; it.changed = true }
+            editItem = editItem?.let { it.copy(x = it.x + gl, y = it.y + gt) }
+            tStart = tStart?.let { it.copy(x = it.x + gl, y = it.y + gt) }
             for (k in 0 until LZ_MAX) { lzX[k] += gl; lzY[k] += gt }
         }
         clamp()
@@ -1448,12 +1451,14 @@ class InkView(context: Context) : View(context) {
     }
 
     fun undo() {
+        endTextEdit()
         commitSelection()
         val prev = undo.removeLastOrNull() ?: return
         redo.addLast(snapshot()); restore(prev)
     }
 
     fun redo() {
+        endTextEdit()
         commitSelection()
         val next = redo.removeLastOrNull() ?: return
         undo.addLast(snapshot()); restore(next)
@@ -1471,6 +1476,8 @@ class InkView(context: Context) : View(context) {
             sy = margin + dy * scale - ay
         }
         clamp(); updateCurrentPage(); notifyUndo(); changed()
+        if (textSelPage >= 0 && currentText() == null) { textSelPage = -1; textSelId = 0L }
+        notifyTextUi()
     }
 
     private fun stampTime(s: Stroke): Stroke =
@@ -1730,6 +1737,196 @@ class InkView(context: Context) : View(context) {
         return if (doc.infinite) x to y else x.coerceIn(0f, p.w) to y.coerceIn(0f, p.h)
     }
 
+    // ---- text boxes on the canvas ----
+
+    /** Which part of the selected / edited box's frame is under ([x], [y]): a handle, the body (move) or nothing (0). */
+    private fun textHandleAt(x: Float, y: Float): Int {
+        val (page, t) = currentText() ?: return 0
+        if (page >= pageTops.size) return 0
+        val b = textScreenRect(page, t, textRect)
+        val pad = 6 * density
+        b.inset(-pad, -pad)
+        val hr = 22 * density
+        if (hypot(x - b.left, y - b.top) < hr) return H_TL
+        if (hypot(x - b.right, y - b.top) < hr) return H_TR
+        if (hypot(x - b.left, y - b.bottom) < hr) return H_BL
+        if (hypot(x - b.right, y - b.bottom) < hr) return H_BR
+        val inY = y > b.top && y < b.bottom
+        if (inY && abs(x - b.left) < 16 * density) return H_L
+        if (inY && abs(x - b.right) < 16 * density) return H_R
+        // body (while editing, touches inside the box go to the editor; the frame ring moves the box)
+        val ring = 14 * density
+        if (x > b.left - ring && x < b.right + ring && y > b.top - ring && y < b.bottom + ring) return H_MOVE
+        return 0
+    }
+
+    /** Applies a live change of the selected / edited box (one undo step per gesture). */
+    private fun applyTextLive(n: TextItem) {
+        if (editItem != null) { editItem = n; textOverlay.apply(n); invalidate(); return }
+        val page = textSelPage
+        if (page < 0) return
+        if (!tUndoPushed) { pushUndo(); tUndoPushed = true }
+        replaceText(page, n)
+        invalidate()
+    }
+
+    private fun replaceText(page: Int, n: TextItem) {
+        val p = doc.pages[page]
+        setPage(page, p.copy(texts = p.texts.map { if (it.id == n.id) n else it }))
+    }
+
+    private fun dragText(e: MotionEvent) {
+        val t0 = tStart ?: return
+        val dx = (e.x - tGrabX) / scale; val dy = (e.y - tGrabY) / scale
+        val w0 = t0.w; val h0 = max(1f, tStartH)
+        val minW = max(24f, t0.size * 1.2f)
+        val n = when (tHandle) {
+            H_MOVE -> t0.copy(x = t0.x + dx, y = t0.y + dy)
+            H_L -> { val w = (w0 - dx).coerceAtLeast(minW); t0.copy(x = t0.x + w0 - w, w = w) }
+            H_R -> t0.copy(w = (w0 + dx).coerceAtLeast(minW))
+            else -> {
+                // corner: scale font and width proportionally, the opposite corner stays put
+                val sxSign = if (tHandle == H_TR || tHandle == H_BR) 1f else -1f
+                val sySign = if (tHandle == H_BL || tHandle == H_BR) 1f else -1f
+                var f = ((w0 + sxSign * dx) * w0 + (h0 + sySign * dy) * h0) / (w0 * w0 + h0 * h0)
+                f = f.coerceIn(max(0.05f, 4f / t0.size), 400f / t0.size)
+                val w = w0 * f; val h = h0 * f
+                t0.copy(size = t0.size * f, w = w, x = if (sxSign < 0) t0.x + w0 - w else t0.x, y = if (sySign < 0) t0.y + h0 - h else t0.y)
+            }
+        }
+        applyTextLive(n)
+    }
+
+    private fun pinchText(e: MotionEvent) {
+        val t0 = tStart ?: return
+        val d = hypot(e.getX(0) - e.getX(1), e.getY(0) - e.getY(1))
+        val f = (d / tPinchD0).coerceIn(max(0.05f, 4f / t0.size), 400f / t0.size)
+        val cx = t0.x + t0.w / 2f; val cy = t0.y + tStartH / 2f
+        val w = t0.w * f; val h = tStartH * f
+        applyTextLive(t0.copy(size = t0.size * f, w = w, x = cx - w / 2f, y = cy - h / 2f))
+    }
+
+    private fun finishTextGesture() {
+        tStart = null
+        if (tUndoPushed) { tUndoPushed = false; changed() }
+        notifyTextUi()
+        invalidate()
+    }
+
+    private fun notifyTextUi() {
+        val cur = currentText()
+        listener?.onTextBox(cur?.let { TextBoxUi(it.first, it.second, editItem != null) })
+    }
+
+    /** Selects a text box (frame + handles + format bar). */
+    fun selectText(page: Int, item: TextItem) {
+        commitSelection()
+        if (editItem != null && editItem?.id != item.id) endTextEdit()
+        textSelPage = page; textSelId = item.id
+        notifyTextUi(); invalidate()
+    }
+
+    fun clearTextSelection() {
+        if (textSelPage < 0 && editItem == null) return
+        if (editItem != null) endTextEdit()
+        textSelPage = -1; textSelId = 0L
+        notifyTextUi(); invalidate()
+    }
+
+    /** Starts typing on the canvas in [item] ([isNew]: not on the page yet). */
+    private fun beginEdit(page: Int, item: TextItem, isNew: Boolean) {
+        commitSelection()
+        if (editItem != null) endTextEdit()
+        editPage = page; editItem = item; editIsNew = isNew
+        textSelPage = page; textSelId = item.id
+        textOverlay.show(item, textHint)
+        val b = textScreenRect(page, item, textRect)
+        textOverlay.place(b.left, b.top)
+        notifyTextUi(); invalidate()
+    }
+
+    /** Edits the selected box in place. */
+    fun editSelectedText() { currentText()?.let { (pg, t) -> if (editItem == null) beginEdit(pg, t, false) } }
+
+    /** Ends on-canvas typing and commits it to the page as one undo step (blank text removes the box). */
+    fun endTextEdit() {
+        val t = editItem ?: return
+        val page = editPage
+        val text = textOverlay.text().trimEnd()
+        editItem = null
+        textOverlay.hide()
+        if (page !in doc.pages.indices) { notifyTextUi(); return }
+        val existing = doc.pages[page].texts.firstOrNull { it.id == t.id }
+        if (text.isBlank()) {
+            if (existing != null) deleteText(page, t.id)
+            textSelPage = -1; textSelId = 0L
+        } else {
+            val n = t.copy(text = text)
+            if (existing != n) upsertText(page, n)
+        }
+        notifyTextUi(); invalidate()
+    }
+
+    /** Ends typing and drops every selection (back, Done, tool change, leaving the editor). */
+    fun finishEditing() {
+        endTextEdit(); clearTextSelection(); commitSelection()
+    }
+
+    /** Changes the selected / edited box's formatting (live while typing; one undo step otherwise). */
+    fun formatText(f: (TextItem) -> TextItem) {
+        editItem?.let { val n = f(it); editItem = n; textOverlay.apply(n); notifyTextUi(); invalidate(); return }
+        val (page, old) = currentText() ?: return
+        val n = f(old)
+        if (n == old) return
+        pushUndo(); replaceText(page, n); changed(); notifyTextUi()
+    }
+
+    fun duplicateText() {
+        if (editItem != null) endTextEdit()
+        val (page, t) = currentText() ?: return
+        val n = t.copy(id = System.nanoTime(), x = t.x + 24f, y = t.y + 24f)
+        pushUndo()
+        val p = doc.pages[page]
+        setPage(page, p.copy(texts = p.texts + n))
+        textSelPage = page; textSelId = n.id
+        changed(); notifyTextUi()
+    }
+
+    fun deleteSelectedText() {
+        val e = editItem
+        if (e != null) {
+            editItem = null; textOverlay.hide()
+            if (!editIsNew && editPage in doc.pages.indices) deleteText(editPage, e.id)
+        } else currentText()?.let { (pg, t) -> deleteText(pg, t.id) }
+        textSelPage = -1; textSelId = 0L
+        notifyTextUi(); invalidate()
+    }
+
+    /** Opens the classic text dialog for the selected box ("Edit text…" fallback). */
+    fun editSelectedTextInDialog() {
+        if (editItem != null) endTextEdit()
+        val (pg, t) = currentText() ?: return
+        listener?.onTextRequest(pg, t.x, t.y, t)
+    }
+
+    /** Scrolls so the caret of the on-canvas editor stays visible above the keyboard (and the box horizontally). */
+    private fun ensureCaretVisible() {
+        if (editItem == null || !textOverlay.showing || width == 0 || height == 0) return
+        val (top, bottom) = textOverlay.caretLine() ?: return
+        val ed = textOverlay.edit
+        val m = 24 * density
+        val ct = ed.translationY + top; val cb = ed.translationY + bottom
+        var dy = 0f
+        if (cb > height - m) dy = cb - (height - m) else if (ct < m) dy = ct - m
+        var dx = 0f
+        val l = ed.translationX; val r = l + ed.width
+        if (ed.width < width - 2 * m) { if (r > width - m) dx = r - (width - m) else if (l < m) dx = l - m }
+        if (dx == 0f && dy == 0f) return
+        scroller.forceFinished(true)
+        sx += dx; sy += dy
+        growIfNeeded(); clamp(); updateCurrentPage(); invalidate()
+    }
+
     fun upsertText(page: Int, item: TextItem) {
         commitSelection()
         pushUndo()
@@ -1740,6 +1937,7 @@ class InkView(context: Context) : View(context) {
     }
 
     fun deleteText(page: Int, id: Long) {
+        if (doc.pages.getOrNull(page)?.texts?.none { it.id == id } != false) return
         pushUndo()
         val p = doc.pages[page]
         setPage(page, p.copy(texts = p.texts.filterNot { it.id == id }))
@@ -1862,7 +2060,7 @@ class InkView(context: Context) : View(context) {
 
     fun addPage(after: Int, paper: String) {
         if (doc.infinite) return
-        commitSelection()
+        finishEditing()
         pushUndo()
         val ref = doc.pages.getOrNull(after) ?: InkPage()
         doc.pages = doc.pages.toMutableList().also { it.add(after + 1, InkPage(ref.w, ref.h, paper)) }
@@ -1872,7 +2070,7 @@ class InkView(context: Context) : View(context) {
 
     fun deletePage(i: Int) {
         if (doc.pages.size <= 1 || doc.infinite) return
-        commitSelection()
+        finishEditing()
         pushUndo()
         doc.pages = doc.pages.toMutableList().also { it.removeAt(i) }
         relayout(); clamp(); updateCurrentPage(); changed()
@@ -1886,7 +2084,7 @@ class InkView(context: Context) : View(context) {
     }
 
     fun clearPage(i: Int) {
-        commitSelection()
+        finishEditing()
         if (doc.pages[i].isEmpty()) return
         pushUndo()
         setPage(i, doc.pages[i].copy(strokes = emptyList(), texts = emptyList(), images = emptyList(), links = emptyList()))
@@ -1898,6 +2096,7 @@ class InkView(context: Context) : View(context) {
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
         main.removeCallbacks(settle)
+        main.removeCallbacks(layerCheck); layerCheckPosted = false
         main.removeCallbacks(longPress)
     }
 
@@ -1909,6 +2108,13 @@ class InkView(context: Context) : View(context) {
         private const val BOARD_H = 1638f
         private const val MAX_BOARD = 400_000f
         private const val LZ_MAX = 256
+        private const val H_MOVE = 1
+        private const val H_TL = 2
+        private const val H_TR = 3
+        private const val H_BL = 4
+        private const val H_BR = 5
+        private const val H_L = 6
+        private const val H_R = 7
         private const val LASER_LIFE = 650L
         private const val LASER_COLOR = 0xFFFF3B30.toInt()
     }

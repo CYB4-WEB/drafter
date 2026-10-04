@@ -422,7 +422,7 @@ private fun PdfHeaderActions(
                     item(stringResource(R.string.pdf_copy_text), Icons.Rounded.ContentCopy) { closeMenu(); dlg = Dlg.TEXT }
                     item(stringResource(R.string.pdf_pages_to_images), Icons.Rounded.Image) { closeMenu(); dlg = Dlg.IMAGES }
                     HorizontalDivider(color = c.line)
-                    ViewerMenuItems(actions, close = { closeMenu() }, onShare = { shareAnnotated() }, showConvert = narrow)
+                    ViewerMenuItems(actions, close = { closeMenu() }, onShare = { shareAnnotated() }, showConvert = narrow, showPrint = false)
                 }
                 MenuLevel.PAGES -> {
                     item(stringResource(R.string.pdf_pages_menu), Icons.AutoMirrored.Rounded.ArrowBack) { level = MenuLevel.MAIN }
