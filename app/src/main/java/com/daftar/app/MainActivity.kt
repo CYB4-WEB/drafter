@@ -169,6 +169,7 @@ private data class NavItem(val screen: Screen, val label: Int, val icon: ImageVe
 private val ItemHome = NavItem(Screen.Home, R.string.home, Icons.Rounded.Home)
 private val ItemNotes = NavItem(Screen.Notes, R.string.notes, Icons.AutoMirrored.Rounded.StickyNote2)
 private val ItemPlanner = NavItem(Screen.Planner, R.string.planner, Icons.Rounded.CalendarMonth)
+private val ItemStudy = NavItem(Screen.Study, R.string.study, Icons.Rounded.School)
 private val ItemConvert = NavItem(Screen.Convert(), R.string.convert, Icons.Rounded.Transform)
 private val ItemSearch = NavItem(Screen.Search(""), R.string.search, Icons.Rounded.Search)
 private val ItemSettings = NavItem(Screen.Settings, R.string.settings, Icons.Rounded.Settings)
@@ -187,9 +188,9 @@ private fun AppShell(tiny: Boolean) {
     val current = Nav.current
     BackHandler(enabled = Nav.stack.size > 1) { Nav.pop() }
     val itemFiles = NavItem(Screen.Library(Storage.root.absolutePath), R.string.files, Icons.Rounded.Folder)
-    val sideItems = listOf(ItemHome, itemFiles, ItemNotes, ItemPlanner, ItemConvert, ItemSearch, ItemSettings)
+    val sideItems = listOf(ItemHome, itemFiles, ItemNotes, ItemPlanner, ItemStudy, ItemConvert, ItemSearch, ItemSettings)
     val barItems = listOf(ItemHome, itemFiles, ItemNotes, ItemPlanner)
-    val moreItems = listOf(ItemSearch, ItemConvert, ItemSettings)
+    val moreItems = listOf(ItemStudy, ItemSearch, ItemConvert, ItemSettings)
     val root = Nav.stack.first()
     fun selected(it: NavItem) = sameDestination(it.screen, root)
     val split = current is Screen.Split
@@ -289,5 +290,8 @@ fun Route(s: Screen) {
         is Screen.Web -> WebScreen(s.url)
         is Screen.Convert -> com.daftar.app.convert.ConvertScreen(s.path)
         is Screen.Split -> SplitScreen(s)
+        Screen.Study -> com.daftar.app.study.StudyScreen()
+        is Screen.Review -> com.daftar.app.study.ReviewScreen(s.deck)
+        Screen.Trash -> com.daftar.app.ui.TrashScreen()
     }
 }

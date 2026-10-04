@@ -55,4 +55,6 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
     implementation("com.tom-roush:pdfbox-android:2.0.27.0")
     implementation("com.google.mlkit:digital-ink-recognition:19.0.0")
+    // Document scanner (camera → cropped pages); the UI/model ship with Google Play services, so the APK stays small.
+    implementation("com.google.android.gms:play-services-mlkit-document-scanner:16.0.0-beta1")
 }

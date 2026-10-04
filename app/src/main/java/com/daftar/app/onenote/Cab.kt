@@ -160,7 +160,8 @@ object Cab {
         val inf = Inflater(true)
         try {
             if (hist.isNotEmpty()) inf.setDictionary(hist)
-            val input = data.copyOfRange(2, data.size + 1) // extra dummy byte for raw inflate
+            val input = ByteArray(data.size - 1)          // payload + one dummy byte (raw inflate may want it)
+            System.arraycopy(data, 2, input, 0, data.size - 2)
             inf.setInput(input)
             val out = ByteArray(cbUncomp)
             var n = 0

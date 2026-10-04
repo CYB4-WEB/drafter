@@ -35,8 +35,14 @@ sealed class Screen {
     data class Split(val first: Screen, val second: Screen, val vertical: Boolean = false) : Screen()
     /** Planner editor; id null = new event, preset type optional. */
     data class EditEvent(val id: Long?, val presetType: Int = -1) : Screen()
+    /** Study hub: flashcard decks + focus timer (study-agent). */
+    data object Study : Screen()
+    /** Spaced-repetition review; deck = subject folder path or null for all due cards. */
+    data class Review(val deck: String? = null) : Screen()
+    /** Recycle bin (files-agent). */
+    data object Trash : Screen()
 
-    val isTopLevel get() = this is Home || this is Planner || this is Settings || this is Notes || this is Search || this is Convert || (this is Library && dir == Storage.root.absolutePath)
+    val isTopLevel get() = this is Home || this is Planner || this is Settings || this is Notes || this is Search || this is Convert || this is Study || (this is Library && dir == Storage.root.absolutePath)
 }
 
 /** Intent extra used by widgets / notifications to deep-link: values below. */

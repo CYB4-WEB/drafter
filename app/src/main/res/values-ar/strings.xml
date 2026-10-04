@@ -160,4 +160,6 @@
     <string name="countdown_left">متبقٍّ</string>
     <string name="print">طباعة</string>
     <string name="print_preparing">جارٍ التحضير للطباعة…</string>
+    <string name="study">المذاكرة</string>
+    <string name="trash">سلة المحذوفات</string>
 </resources>

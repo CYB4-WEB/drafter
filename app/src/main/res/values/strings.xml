@@ -164,4 +164,6 @@
     <string name="countdown_left">left</string>
     <string name="print">Print</string>
     <string name="print_preparing">Preparing to print…</string>
+    <string name="study">Study</string>
+    <string name="trash">Recycle bin</string>
 </resources>

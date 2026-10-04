@@ -9,7 +9,15 @@ object OneLoader {
      * Loads [f]. [cacheRoot] receives extracted package sections (old extractions are pruned). Throws [OneException]
      * when nothing can be shown; per-section problems inside a package are reported on the section instead.
      */
-    fun load(f: File, cacheRoot: File, cancelled: () -> Boolean = { false }): OneBook {
+    fun load(f: File, cacheRoot: File, cancelled: () -> Boolean = { false }): OneBook = try {
+        loadChecked(f, cacheRoot, cancelled)
+    } catch (e: OneException) { throw e }
+    catch (e: InterruptedException) { throw e }
+    catch (e: java.io.IOException) { throw OneException(OneError.IO, e.message, e) }
+    catch (e: Exception) { throw OneException(OneError.CORRUPT, e.toString(), e) }
+    catch (e: StackOverflowError) { throw OneException(OneError.CORRUPT, "too deep", e) }
+
+    private fun loadChecked(f: File, cacheRoot: File, cancelled: () -> Boolean): OneBook {
         if (!f.exists() || !f.canRead()) throw OneException(OneError.IO)
         val ext = f.extension.lowercase()
         if (ext == "onetoc2") throw OneException(OneError.TOC)
@@ -27,14 +35,16 @@ object OneLoader {
             n.endsWith(".one") && !n.contains("onenote_recyclebin/") && !n.startsWith("onenote_recyclebin")
         }
         if (sections.isEmpty()) throw OneException(OneError.EMPTY_PACKAGE)
-        val files: List<Pair<Cab.Entry, File>> = if (done.exists()) {
-            sections.map { it to File(dir, Cab.safeName(it.name)) }
+        val cached = sections.map { it to File(dir, Cab.safeName(it.name)) }
+        val files: List<Pair<Cab.Entry, File>> = if (done.exists() && cached.all { (e, file) -> file.length() == e.size }) {
+            dir.setLastModified(System.currentTimeMillis())
+            cached
         } else {
             prune(cacheRoot, keep = 3)
             dir.deleteRecursively()
             dir.mkdirs()
-            val wanted = sections.toSet()
-            val out = Cab.extract(f, dir, { it in wanted }, cancelled)
+            val wanted = sections.map { it.name }.toSet()
+            val out = Cab.extract(f, dir, { it.name in wanted }, cancelled)
             done.writeText("ok")
             out
         }
@@ -45,6 +55,7 @@ object OneLoader {
             result.add(
                 try { OneReader.readSection(file, name) }
                 catch (ex: OneException) { OneSection(name, emptyList(), ex.kind, file) }
+                catch (ex: InterruptedException) { throw ex }
                 catch (ex: Exception) { OneSection(name, emptyList(), OneError.CORRUPT, file) }
             )
         }
