@@ -136,4 +136,24 @@
     <string name="open_new_window">Open in new window</string>
     <string name="pick_second_file">Choose a file to open next to this one</string>
     <string name="select_n">Select (%1$d)</string>
+    <string name="app_tagline">Your study files, organised.</string>
+    <string name="whiteboard">Whiteboard</string>
+    <string name="new_whiteboard">New whiteboard</string>
+    <string name="set_display">Display &amp; text</string>
+    <string name="set_text_size">Text size</string>
+    <string name="text_small">Small</string>
+    <string name="text_default">Default</string>
+    <string name="text_large">Large</string>
+    <string name="text_xlarge">Extra large</string>
+    <string name="text_huge">Huge</string>
+    <string name="set_text_preview">Headers, menus and documents follow this size.</string>
+    <string name="set_large_controls">Larger buttons</string>
+    <string name="set_large_controls_desc">Bigger top bars, toolbar buttons and icons</string>
+    <string name="set_keep_screen_on">Keep screen on</string>
+    <string name="set_keep_screen_on_desc">While a note, document or presentation is open</string>
+    <string name="set_links_in_app">Open links inside Daftar</string>
+    <string name="set_links_in_app_desc">Web pages and videos placed in notes open in the built-in browser</string>
+    <string name="set_clear_cache">Clear temporary files</string>
+    <string name="set_clear_cache_desc">%1$s used by previews, shares and exports</string>
+    <string name="cache_cleared">Temporary files cleared</string>
 </resources>

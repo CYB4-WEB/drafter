@@ -145,7 +145,7 @@ fun Modifier.card(c: com.daftar.app.ui.theme.DaftarColors, radius: Dp = 16.dp) =
 fun ViewerTopBar(title: String, onBack: () -> Unit, onTitleClick: (() -> Unit)? = null, actions: @Composable RowScope.() -> Unit = {}) {
     Row(
         Modifier.fillMaxWidth().background(D.c.surface).windowInsetsPadding(WindowInsets.statusBars)
-            .height(56.dp).padding(horizontal = 4.dp),
+            .height(if (com.daftar.app.data.Prefs.largeControls) 64.dp else 56.dp).padding(horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, stringResource(R.string.back), tint = D.c.ink) }
