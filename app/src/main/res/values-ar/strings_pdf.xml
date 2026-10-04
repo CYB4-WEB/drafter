@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="pdf_opening">جارٍ فتح ملف PDF…</string>
+    <string name="pdf_error_open">تعذّر فتح ملف PDF هذا. قد يكون تالفًا.</string>
+    <string name="pdf_error_password">ملف PDF هذا محمي بكلمة مرور.</string>
+    <string name="pdf_thumbnails">الصفحات</string>
+    <string name="pdf_page_label">صفحة %1$d</string>
+    <string name="pdf_tools">الأدوات</string>
+    <string name="pdf_go_to_page">الانتقال إلى صفحة</string>
+    <string name="pdf_go">انتقال</string>
+    <string name="pdf_page_number">رقم الصفحة (1–%1$d)</string>
+    <string name="pdf_invalid_page">أدخل رقمًا من 1 إلى %1$d</string>
+    <string name="pdf_export_annotated">تصدير PDF مع التعليقات</string>
+    <string name="pdf_print">طباعة</string>
+    <string name="pdf_copy_text">نسخ النص</string>
+    <string name="pdf_extract_pages">استخراج صفحات</string>
+    <string name="pdf_pages_to_images">الصفحات ← صور</string>
+    <string name="pdf_extract">استخراج</string>
+    <string name="pdf_convert">تحويل</string>
+    <string name="pdf_scope_all">كل الصفحات</string>
+    <string name="pdf_scope_current">الصفحة الحالية (%1$d)</string>
+    <string name="pdf_scope_range">نطاق صفحات</string>
+    <string name="pdf_this_page">هذه الصفحة</string>
+    <string name="pdf_range_label">الصفحات</string>
+    <string name="pdf_range_hint">مثال: 1-3، 5، 8-10</string>
+    <string name="pdf_range_invalid">نطاق غير صالح. استخدم الصفحات 1–%1$d، مثال: 1-3، 5</string>
+    <string name="pdf_include_annotations">تضمين تعليقاتي</string>
+    <string name="pdf_format">الصيغة</string>
+    <string name="pdf_format_png">PNG</string>
+    <string name="pdf_format_jpeg">JPEG</string>
+    <string name="pdf_no_text">لا يوجد نص قابل للتحديد (صفحة ممسوحة ضوئيًا)</string>
+    <string name="pdf_reading_text">جارٍ قراءة النص…</string>
+    <string name="pdf_text_truncated">يُعرض الجزء الأول فقط. «نسخ الكل» ينسخ النص كاملًا.</string>
+    <string name="pdf_exporting">جارٍ التصدير…</string>
+    <string name="pdf_preparing_print">جارٍ التحضير للطباعة…</string>
+    <string name="pdf_extracting">جارٍ استخراج الصفحات…</string>
+    <string name="pdf_rendering">جارٍ تحويل الصفحات إلى صور…</string>
+    <string name="pdf_progress">%1$d من %2$d</string>
+    <string name="pdf_images_saved">تم حفظ %1$d صورة في «%2$s»</string>
+    <string name="pdf_file_annotated">%1$s (مع التعليقات)</string>
+    <string name="pdf_file_pages">%1$s (الصفحات %2$s)</string>
+    <string name="pdf_folder_images">صور %1$s</string>
+    <string name="pdf_image_name">صفحة %1$s</string>
+</resources>

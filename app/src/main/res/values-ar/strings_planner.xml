@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="planner_title">الجدول</string>
+    <string name="planner_tab_agenda">المواعيد</string>
+    <string name="planner_tab_week">الأسبوع</string>
+    <string name="planner_tab_month">الشهر</string>
+
+    <string name="planner_type_exam">اختبار</string>
+    <string name="planner_type_assignment">واجب</string>
+    <string name="planner_type_meeting">اجتماع</string>
+    <string name="planner_type_class">محاضرة</string>
+    <string name="planner_type_other">أخرى</string>
+
+    <string name="planner_today">اليوم</string>
+    <string name="planner_tomorrow">غدًا</string>
+    <string name="planner_yesterday">أمس</string>
+    <string name="planner_all_day">طوال اليوم</string>
+    <string name="planner_time_range">%1$s – %2$s</string>
+    <string name="planner_due_at">التسليم %1$s</string>
+    <string name="planner_weekly">كل أسبوع</string>
+    <string name="planner_overdue">متأخر</string>
+    <string name="planner_empty">لا توجد مواعيد قادمة</string>
+    <string name="planner_no_events_day">لا توجد مواعيد في هذا اليوم</string>
+    <string name="planner_show_more">عرض المزيد</string>
+    <string name="planner_show_done">عرض المكتمل</string>
+    <string name="planner_marked_done">تم وضع علامة مكتمل</string>
+    <string name="planner_undo">تراجع</string>
+    <string name="planner_this_week">هذا الأسبوع</string>
+    <string name="planner_today_btn">اليوم</string>
+    <string name="planner_prev">السابق</string>
+    <string name="planner_next">التالي</string>
+    <string name="planner_more_count">+%1$d أخرى</string>
+
+    <string name="planner_open_link">فتح الرابط</string>
+    <string name="planner_mark_done">تم الإنجاز</string>
+    <string name="planner_notif_banner">الإشعارات متوقفة، لذلك لن تظهر التذكيرات</string>
+    <string name="planner_turn_on">تشغيل</string>
+    <string name="planner_exact_banner">اسمح بالمنبّهات لتصلك التذكيرات في وقتها تمامًا</string>
+    <string name="planner_allow">سماح</string>
+
+    <string name="planner_new_event">موعد جديد</string>
+    <string name="planner_edit_event">تعديل الموعد</string>
+    <string name="planner_field_title">العنوان</string>
+    <string name="planner_title_required">أدخل عنوانًا</string>
+    <string name="planner_date">التاريخ</string>
+    <string name="planner_start">يبدأ</string>
+    <string name="planner_end">ينتهي</string>
+    <string name="planner_due_time">موعد التسليم</string>
+    <string name="planner_end_before_start">يجب أن يكون وقت الانتهاء بعد وقت البدء</string>
+    <string name="planner_repeat_weekly">يتكرر أسبوعيًا</string>
+    <string name="planner_until">حتى</string>
+    <string name="planner_until_none">بدون تاريخ انتهاء</string>
+    <string name="planner_clear">مسح</string>
+    <string name="planner_location">المكان</string>
+    <string name="planner_link">الرابط (Zoom أو Teams أو Drive…)</string>
+    <string name="planner_link_invalid">أدخل عنوان ويب صحيحًا</string>
+    <string name="planner_description">الوصف</string>
+    <string name="planner_reminders">التذكيرات</string>
+    <string name="planner_rem_at">في الموعد</string>
+    <string name="planner_rem_10m">قبل ١٠ دقائق</string>
+    <string name="planner_rem_30m">قبل ٣٠ دقيقة</string>
+    <string name="planner_rem_1h">قبل ساعة</string>
+    <string name="planner_rem_1d">قبل يوم</string>
+    <string name="planner_rem_1w">قبل أسبوع</string>
+    <string name="planner_folder">مجلد المادة</string>
+    <string name="planner_folder_none">بدون</string>
+    <string name="planner_open_folder">فتح المجلد</string>
+    <string name="planner_delete_event">حذف الموعد</string>
+    <string name="planner_delete_title">حذف الموعد؟</string>
+    <string name="planner_delete_text">سيتم حذف \"%1$s\" مع تذكيراته.</string>
+    <string name="planner_not_found">هذا الموعد لم يعد موجودًا</string>
+
+    <string name="planner_daily_title">اليوم: %1$s</string>
+    <string name="planner_list_sep">، </string>
+    <plurals name="planner_n_exams">
+        <item quantity="zero">لا اختبارات</item>
+        <item quantity="one">اختبار واحد</item>
+        <item quantity="two">اختباران</item>
+        <item quantity="few">%d اختبارات</item>
+        <item quantity="many">%d اختبارًا</item>
+        <item quantity="other">%d اختبار</item>
+    </plurals>
+    <plurals name="planner_n_assignments">
+        <item quantity="zero">لا واجبات</item>
+        <item quantity="one">واجب واحد</item>
+        <item quantity="two">واجبان</item>
+        <item quantity="few">%d واجبات</item>
+        <item quantity="many">%d واجبًا</item>
+        <item quantity="other">%d واجب</item>
+    </plurals>
+    <plurals name="planner_n_meetings">
+        <item quantity="zero">لا اجتماعات</item>
+        <item quantity="one">اجتماع واحد</item>
+        <item quantity="two">اجتماعان</item>
+        <item quantity="few">%d اجتماعات</item>
+        <item quantity="many">%d اجتماعًا</item>
+        <item quantity="other">%d اجتماع</item>
+    </plurals>
+    <plurals name="planner_n_classes">
+        <item quantity="zero">لا محاضرات</item>
+        <item quantity="one">محاضرة واحدة</item>
+        <item quantity="two">محاضرتان</item>
+        <item quantity="few">%d محاضرات</item>
+        <item quantity="many">%d محاضرة</item>
+        <item quantity="other">%d محاضرة</item>
+    </plurals>
+    <plurals name="planner_n_other">
+        <item quantity="zero">لا مواعيد أخرى</item>
+        <item quantity="one">موعد آخر</item>
+        <item quantity="two">موعدان آخران</item>
+        <item quantity="few">%d مواعيد أخرى</item>
+        <item quantity="many">%d موعدًا آخر</item>
+        <item quantity="other">%d موعد آخر</item>
+    </plurals>
+</resources>
