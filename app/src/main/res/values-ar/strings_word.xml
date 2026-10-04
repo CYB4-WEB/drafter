@@ -5,8 +5,6 @@
     <string name="word_error">تعذّر فتح هذا المستند. قد يكون تالفًا.</string>
     <string name="word_legacy">لا يمكن عرض ملفات ‎.doc‎ القديمة أو المستندات المحمية هنا. افتحه في تطبيق آخر، أو احفظه بصيغة ‎.docx‎.</string>
     <string name="word_empty">هذا المستند فارغ</string>
-    <string name="word_text_smaller">تصغير النص</string>
-    <string name="word_text_larger">تكبير النص</string>
     <string name="word_find">البحث في المستند</string>
     <string name="word_find_hint">بحث</string>
     <string name="word_find_count">%1$d من %2$d</string>
@@ -18,8 +16,15 @@
     <string name="word_outline_empty">لا يحتوي هذا المستند على عناوين</string>
     <string name="word_copy_all">نسخ كل النص</string>
     <string name="word_copied">تم نسخ النص</string>
+    <string name="word_view">العرض</string>
+    <string name="word_layout_print">تخطيط الطباعة</string>
+    <string name="word_layout_read">تخطيط القراءة</string>
+    <string name="word_page_of">الصفحة %1$d من %2$d</string>
+    <string name="word_page_of_more">الصفحة %1$d من %2$d+</string>
+    <string name="word_paginating">جارٍ ترتيب الصفحات…</string>
+    <string name="word_doc_notice">ملف Word قديم (‎.doc‎): يُعرض النص فقط للقراءة. افتحه في تطبيق آخر لرؤية التنسيق الكامل.</string>
+    <string name="word_truncated">ملف كبير: يُعرض أول %1$s فقط.</string>
     <string name="word_image">صورة</string>
-    <string name="word_text_size">حجم النص %1$d%%</string>
 
     <!-- Image viewer -->
     <string name="word_img_error">تعذّر فتح هذه الصورة</string>

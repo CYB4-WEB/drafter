@@ -1,33 +1,47 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="slides_panel">Slide panel</string>
+    <!-- Viewer layout -->
+    <string name="slides_rail">Slide thumbnails</string>
+    <string name="slides_notes_pane">Notes pane</string>
+    <string name="slides_slides_and_notes">Slides and notes</string>
     <string name="slides_tab_slides">Slides</string>
-    <string name="slides_tab_notes">Notes</string>
     <string name="slides_tab_comments">Comments</string>
     <string name="slides_tab_mynotes">My notes</string>
+    <string name="slides_speaker_notes">Speaker notes</string>
+    <string name="slides_file_menu">Share and export</string>
     <string name="slides_opening">Opening presentation…</string>
+    <string name="slides_hidden">Hidden slide</string>
+    <!-- Errors -->
     <string name="slides_err_title">Can\'t open this presentation</string>
     <string name="slides_err_legacy">This is an older PowerPoint file (.ppt) or a password-protected file. Open it in another app, or save it as .pptx.</string>
     <string name="slides_err_corrupt">The file is damaged or isn\'t a valid PowerPoint presentation.</string>
     <string name="slides_err_empty">This presentation has no slides.</string>
     <string name="slides_err_missing">The file could not be found.</string>
+    <!-- Notes pane -->
     <string name="slides_no_notes">No speaker notes on this slide</string>
     <string name="slides_no_comments">No comments on this slide</string>
     <string name="slides_mynotes_hint">Write your own notes for slide %1$d…</string>
     <string name="slides_mynotes_saved">Saved automatically</string>
+    <string name="slides_unknown_author">Unknown author</string>
+    <string name="slides_resolved">Resolved</string>
+    <!-- Export notes -->
     <string name="slides_export_notes">Export slide notes</string>
     <string name="slides_export_file">%1$s - notes</string>
     <string name="slides_slide_n">Slide %1$d</string>
     <string name="slides_slide_n_title">Slide %1$d · %2$s</string>
-    <string name="slides_speaker_notes">Speaker notes</string>
     <string name="slides_comments_header">Comments</string>
-    <string name="slides_unknown_author">Unknown author</string>
-    <string name="slides_resolved">Resolved</string>
-    <string name="slides_replies">%1$d replies</string>
+    <!-- Placeholders drawn on slides for content that is not rendered -->
     <string name="slides_chart">Chart</string>
     <string name="slides_diagram">Diagram</string>
     <string name="slides_object">Object</string>
     <string name="slides_image">Image</string>
-    <string name="slides_more">More options</string>
-    <string name="slides_hidden">Hidden slide</string>
+    <!-- Present mode -->
+    <string name="slides_present">Present</string>
+    <string name="slides_present_from_current">Present from the current slide</string>
+    <string name="slides_exit_present">End slide show</string>
+    <string name="slides_prev">Previous slide</string>
+    <string name="slides_next">Next slide</string>
+    <string name="slides_counter">%1$d / %2$d</string>
+    <string name="slides_end_of_show">End of slide show. Tap to exit.</string>
+    <string name="slides_laser_hint">Laser pointer: draw with the S Pen, or touch and hold, then drag</string>
 </resources>

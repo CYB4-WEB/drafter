@@ -82,3 +82,72 @@ ImageItem filling it, bitmap <= 2000px, save, Storage.touch, Nav.replace(Screen.
 4. **100+ page docs without freezing: PASS.** Parsing is a single streaming pass on `Dispatchers.IO` (120-page test file: 90 ms on the JVM). The view is a LazyColumn, and images decode lazily on IO with sampling and an LRU.
 5. **Image viewer: PASS.** Pinch 1×–8× around the fingers, bounded pan, and double-tap that animates to 2.5× at the tap point. EXIF orientation is applied, all 8 values. Annotate-in-note works end to end. Convert to PDF is wired to the PdfTools contract and works once pdf-agent's implementation lands; it currently shows the failure toast because the stub returns null.
 6. **Corrupt files, strings, compile: PASS.** Corrupt and missing files go to the error state with "Open in another app". .doc and OLE-encrypted files get the legacy message plus the open-externally button. Every Throwable is caught, including OOM. All user-visible strings are in `strings_word.xml` in en and ar. The project compiles with zero errors in my files, and the full tree compiles.
+
+# Round 2
+
+## Understanding
+The user asked for wider Word acceptance, a native-feeling viewer per file type in Daftar's design, sharing from where the file is
+open, and zoom by pen, finger or button (SPEC R2.6, R2.7, R2.11). For me (word/** + strings_word.xml) that means:
+
+1. **Word viewer feels like Word.** Default **Print layout**: real pages at the document's page size (A4 for text formats) with its
+   margins, honoured page breaks, white sheets with a 1dp line border on the bg colour, and a "Page 3 of 12" counter while scrolling.
+   A **Read (web) layout** toggle keeps the flowing view. Header: title, Find, View menu (print / read layout, outline),
+   `ConvertButton(actions)`, overflow = `ViewerMenuItems(actions, close)` + Copy all. Zoom: the shared `ZoomControls` pill
+   bottom-start (− % + / fit width), two-finger pinch that does not break one-finger scrolling or text selection, and Ctrl+wheel.
+2. **Wider acceptance**, all routed to `WordScreen` by extension: .txt, .md (headings, bold/italic, lists, code blocks, links, quotes),
+   .rtf (text + bold/italic, control words stripped, \uN, \'hh with \ansicpg incl. 1256 Arabic), .csv/.tsv (grid with a sticky header
+   row and horizontal scroll), .log, and legacy .doc (OLE2 → WordDocument + table stream → Clx piece table, else printable runs)
+   shown read-only with a notice banner and "Open in another app"; if extraction is unreliable, the old message. Big files stay
+   smooth: lazy lists, parsing and pagination off the main thread.
+3. **DocxExport** (signatures kept): `toPdf(src, out)` = paginated PDF with real text (PdfDocument + StaticLayout): headings, run
+   formatting, lists, bordered tables, sampled images, RTL/Arabic, and the same for txt/md/rtf/csv (one shared model and one shared
+   paginator). `writeDocx(paragraphs, out, title)` = minimal valid .docx (content types, rels, document, styles with Title/Heading1,
+   core props), w:bidi + w:rtl for mostly-Arabic paragraphs, "\u000C" = page break; structure checked with python3.
+4. **Image viewer**: hoisted zoom state so the pill (+/−/fit), pinch, double-tap and Ctrl+wheel all drive one zoom; header with
+   `ConvertButton` + overflow (`ViewerMenuItems`, rotate, annotate, to PDF); memory bounded (base decode ≈ screen-sized, not 4096²),
+   region decoding (BitmapRegionDecoder) for detail when zoomed into huge photos.
+5. **Memory**: DocxImages LRU ≤ 1/8 maxMemory.
+
+Acceptance (what I check myself): R1 print layout pages + counter + page breaks; R2 read layout toggle; R3 header per brief;
+R4 zoom pill + pinch + Ctrl+wheel without breaking scroll/selection; R5 txt/md/rtf/csv/tsv/log readers; R6 legacy .doc text or old
+message; R7 large files smooth; R8 toPdf for docx + text formats with real text; R9 writeDocx valid (python check); R10 image viewer
+zoom/header/memory/region decode; R11 caches bounded; R12 en + ar strings; R13 compiles clean.
+
+## Plan
+- `DocxModel.kt`: switch geometry to **points** (indents, image sizes, table grid) so one model drives the screen (dp/sp per pt) and
+  the PDF (1 unit = 1pt). Add `PageBreak`, paragraph box (code / quote), table header rows, `PageSpec` (size + margins from the
+  docx `sectPr`), doc kind, notice, CSV `Sheet`.
+- `DocxParser.kt`: pt units, page breaks as `PageBreak`, body `sectPr` page size/margins, `tblHeader`, encrypted-package detection.
+- `TextFormats.kt`: encoding sniffing (BOM / strict UTF-8 / 1256 vs 1252 heuristic), txt/log (chunked paragraphs, size cap),
+  Markdown block + inline parser, RTF tokenizer with destinations, codepages and \uN, CSV/TSV parser (quotes, multiline fields).
+- `LegacyDoc.kt`: OLE2 compound-file reader (header, FAT, DIFAT, mini stream, directory) + Word 97 FIB → Clx → PlcPcd text,
+  field codes stripped, fallback printable-run scanner, encrypted check.
+- `DocLoader.kt`: picks the parser by extension and signature (zip / OLE / {\rtf).
+- `Paginator.kt`: StaticLayout-based layout in points on a background thread → pages of slices (paragraph char ranges, images,
+  table row ranges, rules). Widow/orphan + keep-heading-with-next. Shared by print layout and PDF.
+- `WordViews.kt`: block renderers parameterised by metrics (read layout: sp/dp per pt × zoom; print: px per pt), page sheets,
+  CSV grid (LazyColumn + stickyHeader inside a horizontal scroll).
+- `Zoom.kt`: `Modifier.pinchToZoom` (Initial pass, only with ≥ 2 pointers, consumes only then; graphicsLayer preview, commit at end)
+  and `Modifier.ctrlWheelZoom`.
+- `WordScreen.kt`: loader states, header per brief, View menu, page counter, find (scrolls to page in print layout), outline, banner.
+- `DocxExport.kt`: toPdf via Paginator + StaticLayout drawing on PdfDocument; writeDocx via ZipOutputStream.
+- `ImageScreen.kt`: hoisted zoom state, canvas rendering with base bitmap + region tile, actions per brief.
+- Strings en + ar. Test files with LibreOffice/python into docs/testdata; JVM run of the pure parsers where possible.
+
+## Progress
+- 2026-10-04 (resumed, Linux box) — Read round2b, AGENT_RULES, DESIGN, SPEC R2.6/R2.7/R2.11, round2 brief, my log, ViewerActions,
+  Common (ZoomControls), Nav (`screenFor`), Storage (`kindOf`). Re-read all of word/.
+- Model moved to points (`DocxModel.kt`): PageSpec, PageBreak, paragraph boxes (code/quote), table header rows, DocKind, Sheet.
+- `DocxParser.kt`: pt units, `w:br type=page` / pageBreakBefore / section breaks → PageBreak, body sectPr → page size + margins,
+  `w:tblHeader` rows. Exception class moved to LegacyDoc.kt.
+- New readers: `TextFormats.kt` (encoding sniffing, txt/log chunking, Markdown, CSV/TSV), `RtfReader.kt`, `LegacyDoc.kt`
+  (OLE2 + Word 97 piece table + Word 6/95 + fallback), `DocLoader.kt` (signature then extension).
+- `Paginator.kt`: StaticLayout pagination in points shared by print view and PDF (fixed line pitch, widow/orphan,
+  keep-heading-with-next, tables split by rows with repeated header rows, safety width so drawn slices never exceed predictions).
+- `DocxExport.kt`: toPdf (paginator + PdfPainter) and writeDocx. `Zoom.kt`: pinch (≥ 2 pointers only) + Ctrl+wheel.
+- `WordViews.kt`: read-layout blocks, print-layout sheets (TextMotion.Animated + LineBreak.Simple + fixed line height to match the
+  paginator), CSV grid, DocxImages (LRU ≤ min(48 MB, maxMemory/8)).
+- `WordScreen.kt`: header (Find, View menu, Convert, overflow with ViewerMenuItems + Copy all), print/read/sheet modes, progressive
+  background pagination, page counter, zoom pill + pinch + Ctrl+wheel, find (scrolls to page), outline, .doc / truncation banners.
+- `ImageScreen.kt`: hoisted zoom (pill / pinch / double-tap / Ctrl+wheel), base decode ≤ 2× view pixels (≤ heap/16), region tiles.
+- First `tools/compile.sh`: BUILD OK (verified the word/ classes were rebuilt).

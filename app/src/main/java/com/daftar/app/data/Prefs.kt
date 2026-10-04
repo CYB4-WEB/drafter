@@ -3,6 +3,7 @@ package com.daftar.app.data
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -29,6 +30,18 @@ object Prefs {
         private set
     var sortMode by mutableIntStateOf(0)           // 0 name, 1 date, 2 type
         private set
+    /** Global UI text size multiplier (applied to every sp in the app). */
+    var textScale by mutableFloatStateOf(1f)
+        private set
+    /** Bigger top bars, toolbar buttons and icons. */
+    var largeControls by mutableStateOf(false)
+        private set
+    /** Open web/video links inside Daftar (in-app browser) instead of another app. */
+    var linksInApp by mutableStateOf(true)
+        private set
+    /** Keep the screen on while a note, document or presentation is open. */
+    var keepScreenOn by mutableStateOf(false)
+        private set
 
     fun init(ctx: Context) {
         sp = ctx.getSharedPreferences("prefs", Context.MODE_PRIVATE)
@@ -41,6 +54,10 @@ object Prefs {
         dailySummary = sp.getBoolean("daily", true)
         gridView = sp.getBoolean("grid", true)
         sortMode = sp.getInt("sort", 0)
+        textScale = sp.getFloat("textScale", 1f)
+        largeControls = sp.getBoolean("largeControls", false)
+        linksInApp = sp.getBoolean("linksInApp", true)
+        keepScreenOn = sp.getBoolean("keepScreenOn", false)
     }
 
     fun putTheme(v: Int) { themeMode = v; sp.edit().putInt("theme", v).apply() }
@@ -52,4 +69,8 @@ object Prefs {
     fun putDaily(v: Boolean) { dailySummary = v; sp.edit().putBoolean("daily", v).apply() }
     fun putGrid(v: Boolean) { gridView = v; sp.edit().putBoolean("grid", v).apply() }
     fun putSort(v: Int) { sortMode = v; sp.edit().putInt("sort", v).apply() }
+    fun putTextScale(v: Float) { textScale = v; sp.edit().putFloat("textScale", v).apply() }
+    fun putLargeControls(v: Boolean) { largeControls = v; sp.edit().putBoolean("largeControls", v).apply() }
+    fun putLinksInApp(v: Boolean) { linksInApp = v; sp.edit().putBoolean("linksInApp", v).apply() }
+    fun putKeepScreenOn(v: Boolean) { keepScreenOn = v; sp.edit().putBoolean("keepScreenOn", v).apply() }
 }

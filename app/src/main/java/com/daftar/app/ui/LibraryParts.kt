@@ -5,11 +5,9 @@ import android.text.format.DateUtils
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -35,6 +33,8 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -49,6 +49,11 @@ import com.daftar.app.pdf.PdfTools
 import com.daftar.app.ui.theme.D
 import com.daftar.app.ui.theme.FolderPalette
 import com.daftar.app.ui.theme.folderColor
+import com.daftar.app.ui.workspace.ImportSource
+import com.daftar.app.ui.workspace.Importer
+import com.daftar.app.ui.workspace.Workspace
+import com.daftar.app.ui.workspace.fileItemGestures
+import com.daftar.app.ui.workspace.rememberSplitPicker
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -85,11 +90,71 @@ fun FolderGlyph(colorIdx: Int, icon: String, size: Dp = 48.dp) {
     }
 }
 
+/** Short type label shown on file badges (PDF, DOCX, PPTX, TXT, MD, NOTE…). */
+fun typeLabel(kind: Kind, ext: String?): String {
+    val e = ext?.lowercase().orEmpty()
+    return when {
+        kind == Kind.NOTE -> "NOTE"
+        kind == Kind.PDF -> "PDF"
+        kind == Kind.PPTX -> "PPTX"
+        e == "doc" -> "DOC"
+        kind == Kind.DOCX -> "DOCX"
+        e == "markdown" -> "MD"
+        e.isNotEmpty() && e.length <= 4 -> e.uppercase()
+        kind == Kind.TEXT -> "TXT"
+        kind == Kind.IMAGE -> "IMG"
+        kind == Kind.AUDIO -> "AUDIO"
+        else -> "FILE"
+    }
+}
+
+/**
+ * File type badge from the icon sheet: tinted rounded square, outlined document glyph with a folded corner and a small
+ * coloured type label (PDF / DOCX / PPTX / TXT / MD / NOTE) over its lower part. Colours from [kindColor].
+ */
 @Composable
-fun FileBadge(kind: Kind, size: Dp = 36.dp) {
+fun FileBadge(kind: Kind, size: Dp = 36.dp, ext: String? = null) {
     val col = kindColor(kind)
-    Box(Modifier.size(size).clip(RoundedCornerShape(size * 0.28f)).background(col.copy(alpha = 0.13f)), contentAlignment = Alignment.Center) {
-        Icon(kindIcon(kind), null, tint = col, modifier = Modifier.size(size * 0.56f))
+    val label = typeLabel(kind, ext)
+    val measurer = rememberTextMeasurer()
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    // label size follows the badge (icon), not the UI text-size setting
+    val labelStyle = remember(size, density) {
+        androidx.compose.ui.text.TextStyle(
+            fontSize = with(density) { (size * (if (label.length > 3) 0.17f else 0.2f)).toSp() },
+            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = Color.White,
+            letterSpacing = androidx.compose.ui.unit.TextUnit.Unspecified,
+        )
+    }
+    val paper = D.c.surface
+    Box(Modifier.size(size).clip(RoundedCornerShape(size * 0.26f)).background(col.copy(alpha = 0.12f))) {
+        androidx.compose.foundation.Canvas(Modifier.matchParentSize()) {
+            val s = this.size.minDimension
+            val stroke = (s * 0.055f).coerceAtLeast(1.2f)
+            // document outline with a folded top corner
+            val l = s * 0.27f; val r = s * 0.73f; val t = s * 0.16f; val b = s * 0.80f
+            val fold = s * 0.15f; val rad = s * 0.05f
+            val doc = Path().apply {
+                moveTo(l + rad, t); lineTo(r - fold, t); lineTo(r, t + fold); lineTo(r, b - rad)
+                quadraticTo(r, b, r - rad, b); lineTo(l + rad, b); quadraticTo(l, b, l, b - rad)
+                lineTo(l, t + rad); quadraticTo(l, t, l + rad, t); close()
+            }
+            drawPath(doc, paper)
+            drawPath(doc, col, style = androidx.compose.ui.graphics.drawscope.Stroke(width = stroke, join = androidx.compose.ui.graphics.StrokeJoin.Round))
+            val foldPath = Path().apply { moveTo(r - fold, t); lineTo(r - fold, t + fold - rad); quadraticTo(r - fold, t + fold, r - fold + rad, t + fold); lineTo(r, t + fold) }
+            drawPath(foldPath, col, style = androidx.compose.ui.graphics.drawscope.Stroke(width = stroke, join = androidx.compose.ui.graphics.StrokeJoin.Round))
+            // two text lines on the page
+            val lx0 = l + s * 0.08f
+            drawLine(col.copy(alpha = 0.55f), Offset(lx0, t + s * 0.2f), Offset(r - s * 0.1f, t + s * 0.2f), stroke * 0.8f, androidx.compose.ui.graphics.StrokeCap.Round)
+            drawLine(col.copy(alpha = 0.55f), Offset(lx0, t + s * 0.29f), Offset(r - s * 0.16f, t + s * 0.29f), stroke * 0.8f, androidx.compose.ui.graphics.StrokeCap.Round)
+            // type label
+            val tl = measurer.measure(label, labelStyle, maxLines = 1, softWrap = false)
+            val lw = (tl.size.width + s * 0.12f).coerceAtMost(s * 0.92f)
+            val lh = tl.size.height + s * 0.03f
+            val lx = (s - lw) / 2f; val ly = b - lh * 0.72f
+            drawRoundRect(col, Offset(lx, ly), Size(lw, lh), CornerRadius(lh * 0.3f, lh * 0.3f))
+            drawText(tl, topLeft = Offset(lx + (lw - tl.size.width) / 2f, ly + (lh - tl.size.height) / 2f))
+        }
     }
 }
 
@@ -103,6 +168,7 @@ fun kindLabel(k: Kind): String = when (k) {
     Kind.PDF -> "PDF"
     Kind.PPTX -> stringResource(R.string.kind_slides)
     Kind.DOCX -> stringResource(R.string.kind_word)
+    Kind.TEXT -> stringResource(R.string.kind_text)
     Kind.IMAGE -> stringResource(R.string.kind_image)
     Kind.AUDIO -> stringResource(R.string.kind_audio)
     Kind.OTHER -> stringResource(R.string.kind_file)
@@ -114,7 +180,6 @@ fun parentLabel(f: File): String {
     return if (Storage.isRoot(p)) stringResource(R.string.files) else p.name
 }
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun FolderTile(e: Entry, onClick: () -> Unit, onLong: () -> Unit) {
     val c = D.c
@@ -122,7 +187,7 @@ fun FolderTile(e: Entry, onClick: () -> Unit, onLong: () -> Unit) {
     val count = remember(e.file, Storage.version) { Storage.countItems(e.file) }
     Column(
         Modifier.fillMaxWidth().card(c).clip(RoundedCornerShape(16.dp))
-            .combinedClickable(onClick = onClick, onLongClick = onLong).padding(16.dp),
+            .fileItemGestures(e.file, onClick, onLong).padding(16.dp),
     ) {
         Row(verticalAlignment = Alignment.Top) {
             FolderGlyph(m.color, m.icon, 48.dp)
@@ -135,16 +200,15 @@ fun FolderTile(e: Entry, onClick: () -> Unit, onLong: () -> Unit) {
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun EntryRow(e: Entry, onClick: () -> Unit, onLong: () -> Unit, showParent: Boolean = true) {
     val c = D.c
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).combinedClickable(onClick = onClick, onLongClick = onLong)
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).fileItemGestures(e.file, onClick, onLong)
             .padding(horizontal = 8.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (e.kind == Kind.FOLDER) FolderGlyph(e.meta?.color ?: 6, e.meta?.icon ?: "folder", 36.dp) else FileBadge(e.kind)
+        if (e.kind == Kind.FOLDER) FolderGlyph(e.meta?.color ?: 6, e.meta?.icon ?: "folder", 36.dp) else FileBadge(e.kind, 36.dp, e.ext)
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
             Text(e.name, style = MaterialTheme.typography.bodyLarge, color = c.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -157,17 +221,25 @@ fun EntryRow(e: Entry, onClick: () -> Unit, onLong: () -> Unit, showParent: Bool
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
+/** Grid tile for a file: card with the type badge, pin mark, name and "type · size · time". Long-press-and-move drags it. */
 @Composable
 fun FileTile(e: Entry, onClick: () -> Unit, onLong: () -> Unit) {
     val c = D.c
+    val ctx = LocalContext.current
+    val size = remember(e.file, Storage.version) { android.text.format.Formatter.formatShortFileSize(ctx, e.file.length()) }
     Column(
-        Modifier.fillMaxWidth().card(c).clip(RoundedCornerShape(16.dp)).combinedClickable(onClick = onClick, onLongClick = onLong).padding(16.dp),
+        Modifier.fillMaxWidth().card(c).clip(RoundedCornerShape(16.dp)).fileItemGestures(e.file, onClick, onLong).padding(16.dp),
     ) {
-        Row { FileBadge(e.kind, 44.dp); Spacer(Modifier.weight(1f)); if (e.file.absolutePath in Storage.pins) Icon(Icons.Rounded.PushPin, null, tint = c.muted, modifier = Modifier.size(16.dp)) }
+        Row(verticalAlignment = Alignment.Top) {
+            FileBadge(e.kind, 56.dp, e.ext)
+            Spacer(Modifier.weight(1f))
+            if (e.file.absolutePath in Storage.pins) Icon(Icons.Rounded.PushPin, null, tint = c.muted, modifier = Modifier.size(16.dp))
+        }
         Spacer(Modifier.height(14.dp))
-        Text(e.name, style = MaterialTheme.typography.titleMedium, color = c.ink, maxLines = 2, overflow = TextOverflow.Ellipsis)
-        Text(kindLabel(e.kind) + " · " + relTime(e.file.lastModified()), style = MaterialTheme.typography.bodySmall, color = c.muted, maxLines = 1)
+        Text(e.name, style = MaterialTheme.typography.titleMedium, color = c.ink, maxLines = 2, overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.heightIn(min = 44.dp))
+        Text(kindLabel(e.kind) + " · " + size + " · " + relTime(e.file.lastModified()), style = MaterialTheme.typography.bodySmall, color = c.muted,
+            maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -190,6 +262,7 @@ class Actions internal constructor() {
     internal var moveFor by mutableStateOf<Entry?>(null)
     internal var editFolder by mutableStateOf<Pair<File, Entry?>?>(null)  // parent, existing
     internal var createIn by mutableStateOf<File?>(null)                  // shows "New…" sheet
+    internal var importIn by mutableStateOf<File?>(null)                  // shows the Files / Folder import choice
     internal var pickTarget by mutableStateOf<String?>(null)              // action awaiting a destination folder
     internal var target: File? = null
     internal var busy by mutableStateOf(false)
@@ -197,7 +270,10 @@ class Actions internal constructor() {
     fun menu(e: Entry) { menuFor = e }
     fun create(dir: File) { createIn = dir }
     fun newFolder(parent: File) { editFolder = parent to null }
-    /** Run [action] (note/import/pdf) in [dir], or ask for a folder first when null. */
+    /**
+     * Run a quick action in [dir], or ask for a folder first when null. Keys: "note", "whiteboard", "folder",
+     * "import" (Files / Folder choice), "import_files", "import_folder", "pdf" (images → PDF).
+     */
     fun quick(action: String, dir: File?) { if (dir == null) pickTarget = action else { target = dir; pending = action } }
     internal var pending by mutableStateOf<String?>(null)
 }
@@ -217,22 +293,34 @@ fun newNote(ctx: android.content.Context, dir: File): File {
     return f
 }
 
+/** Creates an infinite-canvas whiteboard note in [dir] (saved like [newNote]) and returns its file. */
+fun newWhiteboard(ctx: android.content.Context, dir: File): File {
+    val label = ctx.getString(R.string.whiteboard) + " " + SimpleDateFormat("d MMM", Locale.getDefault()).format(Date())
+    val f = Storage.uniqueFile(dir, label, Storage.NOTE_EXT)
+    InkDoc.newWhiteboard().save(f)
+    Storage.touch()
+    return f
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ActionsHost(a: Actions) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     val c = D.c
+    // results open in the pane / window this screen lives in, even if focus moved meanwhile
+    val nav = LocalPaneNav.current
+    val pickSplit = rememberSplitPicker()
 
     val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris: List<Uri> ->
         val dir = a.target ?: return@rememberLauncherForActivityResult
         if (uris.isEmpty()) return@rememberLauncherForActivityResult
-        scope.launch {
-            a.busy = true
-            val files = withContext(Dispatchers.IO) { uris.mapNotNull { Storage.import(ctx, it, dir) } }
-            a.busy = false
-            if (files.size == 1) pane.open(ctx, files[0]) else toast(ctx, ctx.getString(R.string.imported_n, files.size))
-        }
+        Importer.ask(ImportSource.Docs(uris), dir, nav)
+    }
+    val folderImporter = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { tree: Uri? ->
+        val dir = a.target ?: return@rememberLauncherForActivityResult
+        if (tree == null) return@rememberLauncherForActivityResult
+        Importer.ask(ImportSource.Tree(tree), dir, nav)
     }
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(60)) { uris: List<Uri> ->
         val dir = a.target ?: return@rememberLauncherForActivityResult
@@ -244,7 +332,7 @@ private fun ActionsHost(a: Actions) {
             val res = withContext(Dispatchers.IO) { runCatching { PdfTools.imagesToPdf(ctx, uris, out) }.getOrNull() }
             a.busy = false
             Storage.touch()
-            if (res != null) pane.open(ctx, res) else toast(ctx, ctx.getString(R.string.error_generic))
+            if (res != null) nav.open(ctx, res) else toast(ctx, ctx.getString(R.string.error_generic))
         }
     }
 
@@ -254,8 +342,11 @@ private fun ActionsHost(a: Actions) {
         val dir = a.target ?: return@LaunchedEffect
         a.pending = null
         when (act) {
-            "note" -> pane.open(ctx, newNote(ctx, dir))
-            "import" -> importer.launch(arrayOf("*/*"))
+            "note" -> nav.open(ctx, newNote(ctx, dir))
+            "whiteboard" -> nav.open(ctx, newWhiteboard(ctx, dir))
+            "import" -> a.importIn = dir
+            "import_files" -> runCatching { importer.launch(arrayOf("*/*")) }.onFailure { toast(ctx, ctx.getString(R.string.no_app_found)) }
+            "import_folder" -> runCatching { folderImporter.launch(null) }.onFailure { toast(ctx, ctx.getString(R.string.no_app_found)) }
             "pdf" -> imagePicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
             "folder" -> a.editFolder = dir to null
         }
@@ -263,12 +354,28 @@ private fun ActionsHost(a: Actions) {
 
     a.createIn?.let { dir ->
         ModalBottomSheet(onDismissRequest = { a.createIn = null }, containerColor = c.surface) {
-            Column(Modifier.padding(horizontal = 16.dp).padding(bottom = 24.dp)) {
+            Column(Modifier.padding(horizontal = 16.dp).padding(bottom = 24.dp).verticalScroll(rememberScrollState())) {
                 Text(stringResource(R.string.new_item), style = MaterialTheme.typography.titleLarge, color = c.ink, modifier = Modifier.padding(8.dp))
                 SheetItem(Icons.Rounded.Draw, stringResource(R.string.new_note)) { a.createIn = null; a.quick("note", dir) }
+                SheetItem(Icons.Rounded.Dashboard, stringResource(R.string.new_whiteboard)) { a.createIn = null; a.quick("whiteboard", dir) }
                 SheetItem(Icons.Rounded.CreateNewFolder, stringResource(R.string.new_folder)) { a.createIn = null; a.editFolder = dir to null }
-                SheetItem(Icons.Rounded.FileUpload, stringResource(R.string.import_files)) { a.createIn = null; a.quick("import", dir) }
+                SheetItem(Icons.Rounded.FileUpload, stringResource(R.string.import_files)) { a.createIn = null; a.quick("import_files", dir) }
+                SheetItem(Icons.Rounded.DriveFolderUpload, stringResource(R.string.ws_import_folder_action)) { a.createIn = null; a.quick("import_folder", dir) }
                 SheetItem(Icons.Rounded.PictureAsPdf, stringResource(R.string.images_to_pdf)) { a.createIn = null; a.quick("pdf", dir) }
+            }
+        }
+    }
+
+    a.importIn?.let { dir ->
+        ModalBottomSheet(onDismissRequest = { a.importIn = null }, containerColor = c.surface) {
+            Column(Modifier.padding(horizontal = 16.dp).padding(bottom = 24.dp)) {
+                Text(stringResource(R.string.ws_import_title), style = MaterialTheme.typography.titleLarge, color = c.ink, modifier = Modifier.padding(8.dp))
+                SheetItem(Icons.Rounded.FileUpload, stringResource(R.string.ws_import_files), stringResource(R.string.ws_import_files_desc)) {
+                    a.importIn = null; a.quick("import_files", dir)
+                }
+                SheetItem(Icons.Rounded.DriveFolderUpload, stringResource(R.string.ws_import_folder), stringResource(R.string.ws_import_folder_desc)) {
+                    a.importIn = null; a.quick("import_folder", dir)
+                }
             }
         }
     }
@@ -282,14 +389,19 @@ private fun ActionsHost(a: Actions) {
 
     a.menuFor?.let { e ->
         val pinned = e.file.absolutePath in Storage.pins
+        val viewable = screenFor(e.file) != null
         ModalBottomSheet(onDismissRequest = { a.menuFor = null }, containerColor = c.surface) {
-            Column(Modifier.padding(horizontal = 16.dp).padding(bottom = 24.dp)) {
+            Column(Modifier.padding(horizontal = 16.dp).padding(bottom = 24.dp).verticalScroll(rememberScrollState())) {
                 Row(Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    if (e.kind == Kind.FOLDER) FolderGlyph(e.meta?.color ?: 6, e.meta?.icon ?: "folder", 40.dp) else FileBadge(e.kind, 40.dp)
+                    if (e.kind == Kind.FOLDER) FolderGlyph(e.meta?.color ?: 6, e.meta?.icon ?: "folder", 40.dp) else FileBadge(e.kind, 40.dp, e.ext)
                     Spacer(Modifier.width(12.dp))
                     Text(e.name, style = MaterialTheme.typography.titleMedium, color = c.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
-                SheetItem(Icons.Rounded.FolderOpen, stringResource(R.string.open)) { a.menuFor = null; pane.open(ctx, e.file) }
+                SheetItem(Icons.Rounded.FolderOpen, stringResource(R.string.open)) { a.menuFor = null; nav.open(ctx, e.file) }
+                if (viewable) {
+                    SheetItem(Icons.Rounded.VerticalSplit, stringResource(R.string.open_side_by_side)) { a.menuFor = null; pickSplit(e.file) }
+                    SheetItem(Icons.Rounded.OpenInBrowser, stringResource(R.string.open_new_window)) { a.menuFor = null; Workspace.openInNewWindow(ctx, e.file) }
+                }
                 SheetItem(Icons.Rounded.DriveFileRenameOutline, stringResource(R.string.rename)) { a.menuFor = null; a.renameFor = e }
                 if (e.kind == Kind.FOLDER) SheetItem(Icons.Rounded.Palette, stringResource(R.string.appearance)) { a.menuFor = null; a.editFolder = e.file.parentFile!! to e }
                 SheetItem(Icons.AutoMirrored.Rounded.DriveFileMove, stringResource(R.string.move)) { a.menuFor = null; a.moveFor = e }
@@ -298,7 +410,7 @@ private fun ActionsHost(a: Actions) {
                     SheetItem(Icons.Rounded.Share, stringResource(R.string.share)) { a.menuFor = null; shareFiles(ctx, listOf(e.file)) }
                     if (e.kind != Kind.NOTE) SheetItem(Icons.AutoMirrored.Rounded.OpenInNew, stringResource(R.string.open_externally)) { a.menuFor = null; openExternally(ctx, e.file) }
                 }
-                SheetItem(if (pinned) Icons.Rounded.PushPin else Icons.Rounded.PushPin, stringResource(if (pinned) R.string.unpin else R.string.pin)) { a.menuFor = null; Storage.togglePin(e.file) }
+                SheetItem(Icons.Rounded.PushPin, stringResource(if (pinned) R.string.unpin else R.string.pin)) { a.menuFor = null; Storage.togglePin(e.file) }
                 SheetItem(Icons.Rounded.DeleteOutline, stringResource(R.string.delete), danger = true) { a.menuFor = null; a.deleteFor = e }
             }
         }
@@ -338,13 +450,21 @@ private fun Dialog(content: @Composable () -> Unit) {
 }
 
 @Composable
-fun SheetItem(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, danger: Boolean = false, onClick: () -> Unit) {
+fun SheetItem(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, danger: Boolean = false, onClick: () -> Unit) =
+    SheetItem(icon, label, null, danger, onClick)
+
+/** Bottom-sheet row with an optional second line. */
+@Composable
+fun SheetItem(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, desc: String?, danger: Boolean = false, onClick: () -> Unit) {
     val c = D.c
     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically) {
         Icon(icon, null, tint = if (danger) c.danger else c.muted)
         Spacer(Modifier.width(16.dp))
-        Text(label, color = if (danger) c.danger else c.ink, style = MaterialTheme.typography.bodyLarge)
+        Column {
+            Text(label, color = if (danger) c.danger else c.ink, style = MaterialTheme.typography.bodyLarge)
+            if (desc != null) Text(desc, color = c.muted, style = MaterialTheme.typography.bodySmall)
+        }
     }
 }
 

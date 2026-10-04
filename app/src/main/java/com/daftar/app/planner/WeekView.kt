@@ -38,7 +38,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.daftar.app.R
 import com.daftar.app.ui.LocalWidthClass
-import com.daftar.app.ui.Nav
+import com.daftar.app.ui.pane
 import com.daftar.app.ui.Screen
 import com.daftar.app.ui.WidthClass
 import com.daftar.app.ui.theme.D
@@ -193,7 +193,7 @@ private fun WeekPage(start: LocalDate, n: Int, today: LocalDate, gutter: Dp) {
                             Text(
                                 o.event.title, style = MaterialTheme.typography.labelMedium, color = D.c.ink, maxLines = 1, overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.fillMaxWidth().background(c.copy(alpha = 0.22f), RoundedCornerShape(6.dp))
-                                    .clickable { Nav.push(Screen.EditEvent(o.event.id)) }.padding(horizontal = 6.dp, vertical = 4.dp),
+                                    .clickable { pane.push(Screen.EditEvent(o.event.id)) }.padding(horizontal = 6.dp, vertical = 4.dp),
                             )
                         }
                         if (list.size > 2) Text(stringResource(R.string.planner_more_count, list.size - 2), style = MaterialTheme.typography.bodySmall, color = D.c.muted,
@@ -251,7 +251,7 @@ private fun DayColumn(d: LocalDate, blocks: List<Block>, minH: Int, hourH: Dp, n
                 detectTapGestures { pos ->
                     val minutes = (minH * 60 + (pos.y / hourPx * 60).toInt()) / 30 * 30
                     Planner.draftStart = d.atStartOfDay(zone).plusMinutes(minutes.toLong()).toInstant().toEpochMilli()
-                    Nav.push(Screen.EditEvent(null))
+                    pane.push(Screen.EditEvent(null))
                 }
             },
     ) {
@@ -266,7 +266,7 @@ private fun DayColumn(d: LocalDate, blocks: List<Block>, minH: Int, hourH: Dp, n
             Row(
                 Modifier.offset(x = w * b.lane, y = top).width(w).height(h).padding(1.dp)
                     .background(c.copy(alpha = if (D.c.dark) 0.30f else 0.20f), RoundedCornerShape(6.dp))
-                    .clickable { Nav.push(Screen.EditEvent(e.id)) }
+                    .clickable { pane.push(Screen.EditEvent(e.id)) }
                     .alpha(if (done) 0.5f else 1f),
             ) {
                 Box(Modifier.width(3.dp).fillMaxHeight().background(c, RoundedCornerShape(topStart = 6.dp, bottomStart = 6.dp)))

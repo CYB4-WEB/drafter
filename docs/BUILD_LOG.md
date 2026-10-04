@@ -13,3 +13,16 @@
   slides-agent (PPTX), pdf-agent (PDF + tools), planner-agent (planner, reminders, notifications, widgets), docs-agent (DOCX + images).
 - Lead builds in parallel: ink engine (InkView), editor (tools, S Pen, lasso, shapes, text, images, audio record/replay, dictation, handwriting→text),
   Home, Files, Notes, Search, Settings, folder dialogs.
+
+## 2026-10-04 (round 2, resumed in the cloud)
+- Round 2 was cut off by the usage limit before any agent wrote code (verified from the uploaded agent transcripts: only stubs + the
+  note data model existed). Code moved to GitHub (`cyb4-web/drafter`); build output and placeholder files removed, `.gitignore` added.
+- Linux build box: Android SDK 36 installed at /opt/android-sdk; `tools/compile.sh` serializes Gradle between parallel agents
+  (4 CPU / 15 GB); Kotlin compiles in-process to save RAM.
+- Lead contracts before relaunch: PaneNav.replace + screenFor() + observable active pane; Kind.TEXT (txt/md/rtf/csv/log) and .doc → Word viewer;
+  EditorController zoom API + addImage; editor start/bottom panels + floating zoom pill; ViewerActions (share/convert/side-by-side/new window/
+  open with); LibraryFilePickerDialog; Workspace contract; Prefs text scale / larger buttons / links in app / keep screen on (theme scales all sp);
+  calendar permissions + text mime types; brand logo (DaftarLogo + adaptive launcher icon from the user's SVG) and icon-sheet file colours.
+- Agents relaunched with `docs/briefs/round2b.md`: notes, workspace, convert, slides, docs, pdf, planner.
+- Lead: Settings (text size, larger buttons, keep screen on, links in app, clear cache), Home quick actions (whiteboard, convert),
+  Notes screen (whiteboard entry, cached summaries).

@@ -12,7 +12,9 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -79,7 +81,8 @@ fun DaftarTheme(content: @Composable () -> Unit) {
         surfaceContainerHighest = c.surfaceAlt, surfaceContainerLowest = c.surface, surfaceTint = Color.Transparent,
         error = c.danger,
     )
-    CompositionLocalProvider(LocalColors provides c) {
+    val d = LocalDensity.current
+    CompositionLocalProvider(LocalColors provides c, LocalDensity provides Density(d.density, d.fontScale * Prefs.textScale)) {
         MaterialTheme(
             colorScheme = scheme, typography = type,
             shapes = Shapes(small = RoundedCornerShape(12.dp), medium = RoundedCornerShape(16.dp), large = RoundedCornerShape(24.dp)),

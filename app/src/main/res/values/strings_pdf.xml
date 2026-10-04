@@ -41,4 +41,84 @@
     <string name="pdf_file_pages">%1$s (pages %2$s)</string>
     <string name="pdf_folder_images">%1$s images</string>
     <string name="pdf_image_name">Page %1$s</string>
+
+    <!-- Round 2: header, panel -->
+    <string name="pdf_search">Search</string>
+    <string name="pdf_panel">Pages and outline</string>
+    <string name="pdf_outline">Outline</string>
+    <string name="pdf_no_outline">This PDF has no outline</string>
+    <string name="pdf_expand">Expand</string>
+    <string name="pdf_collapse">Collapse</string>
+    <string name="pdf_untitled_bookmark">Untitled</string>
+
+    <!-- Round 2: search -->
+    <string name="pdf_search_hint">Search in document</string>
+    <string name="pdf_search_close">Close search</string>
+    <string name="pdf_search_clear">Clear</string>
+    <string name="pdf_search_prev">Previous match</string>
+    <string name="pdf_search_next">Next match</string>
+    <string name="pdf_search_results">Results list</string>
+    <string name="pdf_searching">Searching… page %1$d of %2$d</string>
+    <string name="pdf_search_no_text">This PDF has no searchable text (scanned pages)</string>
+    <string name="pdf_search_none">No matches</string>
+    <string name="pdf_search_capped">Showing the first %1$d matches</string>
+    <string name="pdf_search_count_running">Found %1$d · page %2$d of %3$d</string>
+    <plurals name="pdf_search_count">
+        <item quantity="one">%1$d match</item>
+        <item quantity="other">%1$d matches</item>
+    </plurals>
+
+    <!-- Round 2: pages -->
+    <string name="pdf_pages_menu">Pages</string>
+    <string name="pdf_insert_blank">Insert blank page after</string>
+    <string name="pdf_insert_blank_short">Blank page</string>
+    <string name="pdf_rotate_right">Rotate right</string>
+    <string name="pdf_rotate_left">Rotate left</string>
+    <string name="pdf_move_up">Move up</string>
+    <string name="pdf_move_down">Move down</string>
+    <string name="pdf_move_earlier">Earlier</string>
+    <string name="pdf_move_later">Later</string>
+    <string name="pdf_delete_page">Delete page…</string>
+    <string name="pdf_delete_page_title">Delete page %1$d?</string>
+    <string name="pdf_delete_page_text">The page and your notes on it are removed from this PDF. This can\'t be undone.</string>
+    <string name="pdf_delete_pages_title">Delete pages?</string>
+    <plurals name="pdf_delete_pages_text">
+        <item quantity="one">%1$d page and your notes on it will be removed from this PDF. This can\'t be undone.</item>
+        <item quantity="other">%1$d pages and your notes on them will be removed from this PDF. This can\'t be undone.</item>
+    </plurals>
+    <string name="pdf_organize_pages">Organize pages</string>
+    <string name="pdf_organize_hint">Tap pages to select them</string>
+    <plurals name="pdf_selected_pages">
+        <item quantity="one">%1$d page selected</item>
+        <item quantity="other">%1$d pages selected</item>
+    </plurals>
+    <string name="pdf_select_all">Select all</string>
+    <string name="pdf_select_none">Clear selection</string>
+    <string name="pdf_apply">Apply</string>
+    <string name="pdf_blank_page">Blank</string>
+    <string name="pdf_page_moved">%1$d (was %2$d)</string>
+    <string name="pdf_updating_pages">Updating pages…</string>
+    <string name="pdf_page_edit_failed">The pages couldn\'t be changed. The file is unchanged.</string>
+
+    <!-- Round 2: merge -->
+    <string name="pdf_merge">Merge with PDFs…</string>
+    <string name="pdf_merge_pick">Choose PDFs to add</string>
+    <string name="pdf_merge_order">Order of the pages in the new PDF</string>
+    <string name="pdf_merge_action">Merge</string>
+    <string name="pdf_merging">Merging PDFs…</string>
+    <string name="pdf_remove">Remove</string>
+    <string name="pdf_file_name">File name</string>
+    <string name="pdf_file_merged">%1$s (merged)</string>
+    <string name="pdf_saved_title">Saved</string>
+
+    <!-- Round 2: signature -->
+    <string name="pdf_sign">Sign…</string>
+    <string name="pdf_signature">Your signature</string>
+    <string name="pdf_sign_place">Place on page</string>
+    <string name="pdf_sign_redraw">Draw new</string>
+    <string name="pdf_sign_delete">Delete</string>
+    <string name="pdf_sign_draw_title">Draw your signature</string>
+    <string name="pdf_sign_here">Sign here</string>
+    <string name="pdf_sign_clear">Clear</string>
+    <string name="pdf_sign_save_place">Save and place</string>
 </resources>

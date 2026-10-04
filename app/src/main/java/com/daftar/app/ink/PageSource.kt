@@ -30,4 +30,12 @@ interface EditorController {
     fun goToPage(i: Int)
     fun saveNow()
     fun doc(): InkDoc
+    /** Zoom relative to "fit width", in percent (100 = fit). Observable. */
+    val zoomPercent: Int
+    fun zoomIn()
+    fun zoomOut()
+    /** Back to fit-width. */
+    fun zoomFit()
+    /** Insert a picture on the current page; it floats selected so the user can move/resize it (e.g. a signature). */
+    fun addImage(b: Bitmap)
 }

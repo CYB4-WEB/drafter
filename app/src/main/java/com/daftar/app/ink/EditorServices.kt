@@ -172,16 +172,28 @@ fun audioDuration(f: File): Long = runCatching {
     val p = MediaPlayer(); p.setDataSource(f.absolutePath); p.prepare(); val d = p.duration.toLong(); p.release(); d
 }.getOrDefault(0L)
 
-/** Notebook → vector PDF (paper pattern + content), one PDF page per note page. */
+/**
+ * Notebook → vector PDF (paper pattern + content), one PDF page per note page.
+ * A whiteboard becomes one page cropped to its content plus a margin (scaled down if it exceeds the 14 400 pt PDF limit).
+ * Tapes are drawn hidden.
+ */
 fun exportNoteToPdf(doc: InkDoc, out: File, withPaper: Boolean = true) {
     val pdf = PdfDocument()
     try {
         doc.pages.forEachIndexed { i, p ->
-            val page = pdf.startPage(PdfDocument.PageInfo.Builder(p.w.toInt(), p.h.toInt(), i + 1).create())
+            val r = doc.exportRect(i)
+            val k = minOf(1f, 14400f / maxOf(r.width(), r.height(), 1f))
+            val pw = (r.width() * k).toInt().coerceAtLeast(1)
+            val ph = (r.height() * k).toInt().coerceAtLeast(1)
+            val page = pdf.startPage(PdfDocument.PageInfo.Builder(pw, ph, i + 1).create())
             val c: Canvas = page.canvas
             c.drawColor(doc.paperColor)
-            if (withPaper) InkRender.drawPaper(c, p)
+            c.save()
+            c.scale(k, k)
+            c.translate(-r.left, -r.top)
+            if (withPaper) InkRender.drawPaper(c, p, clip = r, bounded = !doc.infinite)
             InkRender.drawPageContent(c, p)
+            c.restore()
             pdf.finishPage(page)
         }
         out.outputStream().use { pdf.writeTo(it) }
