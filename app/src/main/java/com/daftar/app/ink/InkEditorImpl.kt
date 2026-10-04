@@ -80,6 +80,9 @@ private class EditorStateImpl(val view: InkView) : EditorController {
     /** Called after [addImage] so the toolbar can switch to the lasso (image floats selected). */
     var onImageAdded: (() -> Unit)? = null
     override fun addImage(b: Bitmap) { view.addImage(b); onImageAdded?.invoke() }
+    override fun addImage(b: Bitmap, widthPt: Float) { view.addImage(b, widthPt); onImageAdded?.invoke() }
+    override fun goToPage(i: Int, yPt: Float) = view.goToPage(i, yPt)
+    override fun refreshPages() = view.refreshBackground()
     var saver: (() -> Unit)? = null
     override fun saveNow() { saver?.invoke() }
     override fun doc(): InkDoc = view.doc
@@ -93,6 +96,8 @@ internal fun InkEditorImpl(
     sidePanel: (@Composable (EditorController) -> Unit)?, sidePanelLabel: String,
     sidePanelAtStart: Boolean, sidePanelOpen: Boolean,
     bottomPanel: (@Composable (EditorController) -> Unit)?, bottomPanelLabel: String,
+    bottomPanelOpen: Boolean = false,
+    onPageChipClick: (() -> Unit)? = null,
 ) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -120,13 +125,15 @@ internal fun InkEditorImpl(
     var showRename by remember { mutableStateOf(false) }
     val wideAtStart = LocalWidthClass.current == WidthClass.Expanded
     var showPanel by remember { mutableStateOf(sidePanelOpen && wideAtStart) }
-    var showBottom by remember { mutableStateOf(false) }
+    var showBottom by remember { mutableStateOf(bottomPanelOpen) }
     var showDictation by remember { mutableStateOf(false) }
     var showRecordings by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf<String?>(null) }
     var recognized by remember { mutableStateOf<String?>(null) }
     var dirty by remember { mutableStateOf(false) }
     val wide = LocalWidthClass.current == WidthClass.Expanded
+    // Window got narrow (split / pop-up): close the side panel rather than turning it into a sheet nobody asked for.
+    LaunchedEffect(wide) { if (!wide) showPanel = false else if (sidePanelOpen) showPanel = true }
 
     // ---- persistence ----
     fun saveBlocking() {
@@ -270,7 +277,8 @@ internal fun InkEditorImpl(
     view.tapeColor = ts.tapeColor; view.tapeWidth = ts.tapeWidth
     view.shapeColor = ts.penColor
     view.keepScreenOn = Prefs.keepScreenOn
-    view.penOnly = Prefs.penOnly
+    // "Pen only" is enforced only once this device has shown it has a stylus; otherwise fingers must be able to write.
+    view.penOnly = Prefs.penOnly && Prefs.stylusSeen
     view.stylusButtonTool = if (Prefs.stylusButton == 1) Tool.LASSO else Tool.ERASER
     view.bgColor = c.bg.toArgb()
 
@@ -310,7 +318,7 @@ internal fun InkEditorImpl(
     val actions = if (isNote) rememberViewerActions(hostFile) else null
 
     // =========================== UI ===========================
-    Column(Modifier.fillMaxSize().background(c.bg)) {
+    Column(Modifier.fillMaxSize().background(c.bg).imePadding()) {
         ViewerTopBar(title, onBack = { view.commitSelection(); saveBlocking(); onBack() },
             onTitleClick = if (onRename != null) ({ showRename = true }) else null) {
             IconButton(onClick = { view.undo() }, enabled = canUndo) { Icon(Icons.AutoMirrored.Rounded.Undo, stringResource(R.string.ink_undo), tint = if (canUndo) c.ink else c.line) }
@@ -447,7 +455,9 @@ internal fun InkEditorImpl(
                     stringResource(R.string.page_of, ctl.currentPage + 1, ctl.pageCount),
                     style = MaterialTheme.typography.labelMedium, color = c.muted,
                     modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp)
+                        .clip(RoundedCornerShape(10.dp))
                         .background(c.surface, RoundedCornerShape(10.dp)).border(1.dp, c.line, RoundedCornerShape(10.dp))
+                        .then(if (onPageChipClick != null) Modifier.clickable(onClick = onPageChipClick) else Modifier)
                         .padding(horizontal = 10.dp, vertical = 4.dp),
                 )
                 busy?.let { msg ->

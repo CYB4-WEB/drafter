@@ -31,7 +31,10 @@ fun InkEditorScaffold(
     sidePanelOpen: Boolean = false,
     bottomPanel: (@Composable (EditorController) -> Unit)? = null,
     bottomPanelLabel: String = "",
+    bottomPanelOpen: Boolean = false,
+    /** Tap on the "page x / y" chip (e.g. the PDF viewer opens Go to page). */
+    onPageChipClick: (() -> Unit)? = null,
 ) {
     InkEditorImpl(title, inkFile, source, isNote, onBack, onRename, extraActions, sidePanel, sidePanelLabel,
-        sidePanelAtStart, sidePanelOpen, bottomPanel, bottomPanelLabel)
+        sidePanelAtStart, sidePanelOpen, bottomPanel, bottomPanelLabel, bottomPanelOpen, onPageChipClick)
 }

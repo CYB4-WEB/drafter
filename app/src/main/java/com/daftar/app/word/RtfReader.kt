@@ -36,8 +36,9 @@ internal object RtfReader {
     private class ParaState(
         var align: Char = 'l', var rtl: Boolean = false, var li: Int = 0, var ri: Int = 0, var fi: Int = 0,
         var sb: Int = 0, var sa: Int = 0, var style: Int = 0, var outline: Int = -1, var inTable: Boolean = false, var sl: Int = 0,
+        var alignSet: Boolean = false,
     ) {
-        fun reset() { align = 'l'; rtl = false; li = 0; ri = 0; fi = 0; sb = 0; sa = 0; style = 0; outline = -1; inTable = false; sl = 0 }
+        fun reset() { align = 'l'; rtl = false; li = 0; ri = 0; fi = 0; sb = 0; sa = 0; style = 0; outline = -1; inTable = false; sl = 0; alignSet = false }
     }
 
     fun parse(f: File): DocxDoc {
@@ -209,10 +210,10 @@ internal object RtfReader {
                 "v" -> cs.hidden = p != 0
                 // paragraph formatting
                 "pard" -> ps.reset()
-                "ql" -> ps.align = 'l'
-                "qr" -> ps.align = 'r'
-                "qc" -> ps.align = 'c'
-                "qj", "qd" -> ps.align = 'j'
+                "ql" -> { ps.align = 'l'; ps.alignSet = true }
+                "qr" -> { ps.align = 'r'; ps.alignSet = true }
+                "qc" -> { ps.align = 'c'; ps.alignSet = true }
+                "qj", "qd" -> { ps.align = 'j'; ps.alignSet = true }
                 "rtlpar" -> ps.rtl = true
                 "ltrpar" -> ps.rtl = false
                 "li", "lin" -> ps.li = p ?: 0
@@ -282,12 +283,14 @@ internal object RtfReader {
             val heading = styleHeading[ps.style] ?: if (ps.outline in 0..5) ps.outline + 1 else 0
             val base = spans.groupBy { it.fmt.sizePt }.maxByOrNull { e -> e.value.sumOf { it.end - it.start } }?.key ?: 12f
             val rtl = ps.rtl || DocxParser.firstStrongRtl(text)
-            // \ql / \qr are physical sides; map to start / end for the paragraph direction.
-            val align = when (ps.align) {
-                'c' -> 1; 'j' -> 3
-                'r' -> if (rtl) 0 else 2
+            // \ql / \qr are physical sides; map to start / end for the paragraph direction. No explicit alignment = start.
+            val align = when {
+                !ps.alignSet -> 0
+                ps.align == 'c' -> 1
+                ps.align == 'j' -> 3
+                ps.align == 'r' -> if (rtl) 0 else 2
                 else -> if (rtl) 2 else 0
-            }.let { if (ps.align == 'l' && rtl && !ps.rtl) 0 else it }
+            }
             val li = ps.li / 20f; val fi = ps.fi / 20f
             val line = when {
                 ps.sl > 0 -> (ps.sl / 20f) / (base * LINE_FACTOR)
@@ -412,10 +415,11 @@ internal object RtfReader {
 
         private fun parseStyleSheet() {
             val s = String(groupBytes(), Charsets.ISO_8859_1)
-            Regex("\\{[^{}]*?\\\\s(\\d+)\\b([^{}]*?)([^\\\\;{}]+);\\s*}").findAll(s).forEach { m ->
-                val idx = m.groupValues[1].toInt()
-                // the name follows the last control word; drop a numeric parameter that the regex may have captured
-                val name = m.groupValues[3].trim().lowercase().replace(Regex("^-?\\d+\\s*"), "")
+            val controlWord = Regex("\\\\[a-zA-Z]+-?\\d* ?|\\\\'[0-9a-fA-F]{2}|\\\\.")
+            Regex("\\{([^{}]*)}").findAll(s).forEach { m ->
+                val body = m.groupValues[1]
+                val idx = Regex("\\\\s(\\d+)").find(body)?.groupValues?.get(1)?.toIntOrNull() ?: return@forEach
+                val name = body.replace(controlWord, "").substringBefore(';').trim().lowercase()
                 val level = Regex("^heading\\s*(\\d)$").find(name)?.groupValues?.get(1)?.toIntOrNull()
                     ?: if (name == "title") 1 else null
                 if (level != null) styleHeading[idx] = level.coerceIn(1, 6)

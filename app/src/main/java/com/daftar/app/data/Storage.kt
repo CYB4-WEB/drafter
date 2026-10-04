@@ -39,7 +39,9 @@ object Storage {
     lateinit var root: File
         private set
     private lateinit var stateFile: File
-    private lateinit var appCtx: Context
+    /** Application context (set in init); for engines that run without a screen. */
+    lateinit var appCtx: Context
+        private set
 
     /** Bumped on every change so Compose screens re-read the file system. */
     var version by mutableIntStateOf(0)
