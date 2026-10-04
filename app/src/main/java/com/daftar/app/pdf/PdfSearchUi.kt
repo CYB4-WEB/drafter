@@ -95,17 +95,9 @@ internal class PdfSearchState {
  * when the editor provides it (requested from the lead — see pdf-agent log); returns false otherwise, and then
  * no highlights are drawn at all (never stale ones).
  */
-internal fun EditorController.refreshPagesCompat(): Boolean {
-    val m = refreshMethod ?: return false
-    return runCatching { m.invoke(this) }.isSuccess
-}
+internal fun EditorController.refreshPagesCompat(): Boolean { refreshPages(); return true }
 
-internal fun EditorController.canRefreshPages(): Boolean = refreshMethod != null
-
-/** Looked up on the public interface (not the editor's private class) so invoking it needs no special access. */
-private val refreshMethod: java.lang.reflect.Method? by lazy {
-    runCatching { EditorController::class.java.getMethod("refreshPages") }.getOrNull()
-}
+internal fun EditorController.canRefreshPages(): Boolean = true
 
 private fun Modifier.blockTouches() = this.pointerInput(Unit) { detectTapGestures { } }
 
@@ -146,8 +138,8 @@ internal fun PdfSearchOverlay(
         val startPage = ctl.currentPage
         fun select(k: Int) {
             state.active = k
-            val p = state.hits[k].page
-            if (p != ctl.currentPage) ctl.goToPage(p)
+            val h = state.hits[k]
+            h.rects.firstOrNull()?.let { ctl.goToPage(h.page, it.top) } ?: ctl.goToPage(h.page)
         }
         try {
             session.textIndex.search(q).collect { ev ->
@@ -196,8 +188,8 @@ internal fun PdfSearchOverlay(
         if (state.hits.isEmpty()) return
         val i = ((k % state.hits.size) + state.hits.size) % state.hits.size
         state.active = i
-        val p = state.hits[i].page
-        if (p != ctl.currentPage) ctl.goToPage(p)
+        val h = state.hits[i]
+        h.rects.firstOrNull()?.let { ctl.goToPage(h.page, it.top) } ?: ctl.goToPage(h.page)
     }
 
     Column(Modifier.fillMaxWidth()) {

@@ -108,6 +108,8 @@ private class PdfHost {
     var pendingPage = -1
     /** Completed when the editor has left composition (it saves its ink on dispose). */
     var editorGone: CompletableDeferred<Unit>? = null
+    /** Bumped when the page chip is tapped → header opens Go to page. */
+    var gotoRequest by androidx.compose.runtime.mutableIntStateOf(0)
 }
 
 @Composable
@@ -261,11 +263,12 @@ private fun PdfReader(
                         ctl.goToPage(p.coerceIn(0, ctl.pageCount - 1))
                     }
                 }
-                PdfHeaderActions(ctl, file, session, actions, narrow, search, ::pageAction, editPages)
+                PdfHeaderActions(ctl, file, session, actions, narrow, search, ::pageAction, editPages, host.gotoRequest)
             },
             sidePanel = { ctl -> PdfSidePanel(ctl, session, tab, { tab = it }, ::pageAction) },
             sidePanelLabel = stringResource(R.string.pdf_panel),
             sidePanelAtStart = true,
+            onPageChipClick = { host.gotoRequest++ },
         )
         val ctl = ctlRef
         if (search.open && ctl != null) PdfSearchOverlay(search, session, source, ctl, narrow, maxHeight)
@@ -323,12 +326,14 @@ private fun PdfHeaderActions(
     search: PdfSearchState,
     onPageAction: (PageAction, Int) -> Unit,
     editPages: (List<PageSpec>, Int) -> Unit,
+    gotoRequest: Int = 0,
 ) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var menu by remember { mutableStateOf(false) }
     var level by remember { mutableStateOf(MenuLevel.MAIN) }
     var dlg by remember { mutableStateOf(Dlg.NONE) }
+    LaunchedEffect(gotoRequest) { if (gotoRequest > 0) dlg = Dlg.GOTO }
     var busy by remember { mutableStateOf<BusyState?>(null) }
     var mergeFiles by remember { mutableStateOf<List<File>>(emptyList()) }
     var saved by remember { mutableStateOf<File?>(null) }
@@ -442,7 +447,7 @@ private fun PdfHeaderActions(
         Dlg.NONE -> {}
         Dlg.GOTO -> GoToPageDialog(pageCount, cur, onDismiss = { dlg = Dlg.NONE }) { ctl.goToPage(it); dlg = Dlg.NONE }
         Dlg.TEXT -> CopyTextDialog(file, pageCount, cur, onDismiss = { dlg = Dlg.NONE })
-        Dlg.SIGN -> SignatureDialog(onDismiss = { dlg = Dlg.NONE }) { bmp -> dlg = Dlg.NONE; ctl.addImage(bmp) }
+        Dlg.SIGN -> SignatureDialog(onDismiss = { dlg = Dlg.NONE }) { bmp -> dlg = Dlg.NONE; ctl.addImage(bmp, 160f) }
         Dlg.ORGANIZE -> OrganizePagesDialog(
             session, runCatching { ctl.doc().pages.toList() }.getOrDefault(emptyList()), cur,
             onDismiss = { dlg = Dlg.NONE },
