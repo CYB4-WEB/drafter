@@ -1,0 +1,43 @@
+{
+    "logs": [
+        {
+            "outputFile": "com.daftar.app-mergeDebugResources-52:/values-night-v8/values-night-v8.xml",
+            "map": [
+                {
+                    "source": "C:\\Users\\am204\\.gradle\\caches\\8.13\\transforms\\a03fa969a8da16f4a504de03d61a653f\\transformed\\appcompat-1.7.1\\res\\values-night-v8\\values-night-v8.xml",
+                    "from": {
+                        "startLines": "2,3,4,5,6,7,8,9",
+                        "startColumns": "4,4,4,4,4,4,4,4",
+                        "startOffsets": "55,125,209,293,389,491,593,687",
+                        "endColumns": "69,83,83,95,101,101,93,88",
+                        "endOffsets": "120,204,288,384,486,588,682,771"
+                    },
+                    "to": {
+                        "startLines": "9,10,11,12,13,14,15,16",
+                        "startColumns": "4,4,4,4,4,4,4,4",
+                        "startOffsets": "338,408,492,576,672,774,876,970",
+                        "endColumns": "69,83,83,95,101,101,93,88",
+                        "endOffsets": "403,487,571,667,769,871,965,1054"
+                    }
+                },
+                {
+                    "source": "C:\\Users\\am204\\AndroidStudioProjects\\Daftar\\app\\src\\main\\res\\values-night\\colors.xml",
+                    "from": {
+                        "startLines": "6,2,4,8,7,5,3",
+                        "startColumns": "4,4,4,4,4,4,4",
+                        "startOffsets": "218,57,138,300,260,177,95",
+                        "endColumns": "40,36,37,45,38,39,41",
+                        "endOffsets": "254,89,171,341,294,212,132"
+                    },
+                    "to": {
+                        "startLines": "2,3,4,5,6,7,8",
+                        "startColumns": "4,4,4,4,4,4,4",
+                        "startOffsets": "55,96,133,171,217,256,296",
+                        "endColumns": "40,36,37,45,38,39,41",
+                        "endOffsets": "91,128,166,212,251,291,333"
+                    }
+                }
+            ]
+        }
+    ]
+}
