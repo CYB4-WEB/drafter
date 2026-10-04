@@ -74,7 +74,7 @@ object Engines {
     private const val MAX_PIXELS = 20_000_000f
 
     /** PDFTextStripper paragraph marker (never present in real text). */
-    private const val PARA = " "
+    private const val PARA = "\u2029"
 
     /** Paragraph understood by [DocxExport.writeDocx] as a page break. */
     const val PAGE_BREAK = "\u000C"
@@ -683,7 +683,9 @@ object Engines {
             progress(0, doc.pages.size)
             for ((i, p) in doc.pages.withIndex()) {
                 checkActive()
-                val pw = p.w.coerceAtLeast(1f); val ph = p.h.coerceAtLeast(1f)
+                // Paged notes: the whole page. Whiteboards: content bounds + margin (not the whole board).
+                val r = doc.exportRect(i)
+                val pw = r.width().coerceAtLeast(1f); val ph = r.height().coerceAtLeast(1f)
                 var s = min(2f, 4096f / max(pw, ph))
                 if (pw * s * ph * s > MAX_PIXELS) s *= sqrt(MAX_PIXELS / (pw * s * ph * s))
                 val bmp = Bitmap.createBitmap((pw * s).roundToInt().coerceAtLeast(1), (ph * s).roundToInt().coerceAtLeast(1), Bitmap.Config.ARGB_8888)
@@ -691,7 +693,8 @@ object Engines {
                     bmp.eraseColor(doc.paperColor or 0xFF000000.toInt())
                     val c = Canvas(bmp)
                     c.scale(bmp.width / pw, bmp.height / ph)
-                    InkRender.drawPaper(c, p, dark)
+                    c.translate(-r.left, -r.top)
+                    InkRender.drawPaper(c, p, dark, clip = r, bounded = !doc.infinite)
                     InkRender.drawPageContent(c, p)
                     val out = Storage.uniqueFile(dir, ctx.getString(R.string.convert_name_page, pad(i + 1, doc.pages.size)), fmt.ext)
                     writeBitmap(bmp, out, fmt, opt.quality)

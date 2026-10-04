@@ -304,7 +304,8 @@ internal fun NotesPane(
                     )
                     Chip(stringResource(R.string.slides_tab_mynotes), shown == PaneTab.MINE, { onTab(PaneTab.MINE) }, Icons.Rounded.EditNote)
                 }
-                if (shown != PaneTab.SLIDES) {
+                // Narrow screens keep the room for the tabs (the canvas already shows "3 / 12").
+                if (!withSlides && shown != PaneTab.SLIDES) {
                     Text(
                         if (shown == PaneTab.MINE) stringResource(R.string.slides_mynotes_saved) else stringResource(R.string.slides_slide_n, page + 1),
                         style = MaterialTheme.typography.bodySmall, color = c.muted, maxLines = 1, overflow = TextOverflow.Ellipsis,

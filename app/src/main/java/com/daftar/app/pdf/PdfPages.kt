@@ -125,6 +125,16 @@ object PdfPages {
         }
     }
 
+    /** Removes temp files a crash may have left next to [file] (older than 10 minutes, so a running edit is never touched). */
+    fun cleanStaleTemps(file: File) {
+        val dir = file.parentFile ?: return
+        val limit = System.currentTimeMillis() - 10 * 60_000L
+        for (n in listOf(".${file.name}.rebuild.tmp", ".${file.name}.ink.rebuild.tmp")) {
+            val f = File(dir, n)
+            if (f.exists() && f.lastModified() < limit) f.delete()
+        }
+    }
+
     /** Displayed size (points) of a page, rotation applied — the space the ink layer uses. */
     private fun displayedSize(p: PDPage): Pair<Float, Float> {
         val c = p.cropBox

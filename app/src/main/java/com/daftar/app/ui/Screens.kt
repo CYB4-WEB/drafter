@@ -53,6 +53,7 @@ import com.daftar.app.planner.EventType
 import com.daftar.app.planner.Occurrence
 import com.daftar.app.planner.Planner
 import com.daftar.app.ui.theme.D
+import com.daftar.app.ui.workspace.fileItemGestures
 import com.daftar.app.ui.theme.folderColor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -334,7 +335,7 @@ fun LibraryScreen(dir: String) {
                         color = if (last) c.ink else c.accent,
                         modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(enabled = !last) {
                             if (Storage.isRoot(f)) Nav.tab(Screen.Library(Storage.root.absolutePath))
-                            else { while (Nav.stack.size > 1 && (Nav.current as? Screen.Library)?.dir != f.absolutePath) pane.back() }
+                            else pane.popTo(Screen.Library(f.absolutePath))
                         }.padding(horizontal = 6.dp, vertical = 4.dp))
                     if (!last) Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, null, tint = c.muted, modifier = Modifier.size(16.dp))
                 }
@@ -425,7 +426,7 @@ fun NotesScreen() {
                 items(shown, key = { it.e.file.absolutePath }) { n ->
                     val m = n.subject?.let { Storage.meta(it) }
                     Row(Modifier.fillMaxWidth().card(c).clip(RoundedCornerShape(16.dp))
-                        .combinedClickableCompat({ pane.open(ctx, n.e.file) }, { actions.menu(n.e) }).padding(16.dp)) {
+                        .fileItemGestures(n.e.file, { pane.open(ctx, n.e.file) }, { actions.menu(n.e) }).padding(16.dp)) {
                         Box(Modifier.width(4.dp).height(52.dp).clip(RoundedCornerShape(2.dp)).background(if (m != null) folderColor(m.color) else c.line))
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {

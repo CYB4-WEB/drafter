@@ -197,7 +197,7 @@ object TextPdf {
                             hex.toIntOrNull(16)?.let { emit(String(byteArrayOf(it.toByte()), charset)) }
                         }
                         c2 == '*' -> { st.skip = true; i++ }
-                        c2 == '~' -> { emit(" "); i++ }
+                        c2 == '~' -> { emit("\u00A0"); i++ }
                         c2 == '_' -> { emit("-"); i++ }
                         c2 == '-' -> i++
                         c2 == '\n' || c2 == '\r' -> { emit("\n"); i++ }
@@ -214,7 +214,7 @@ object TextPdf {
                                 "tab", "cell" -> emit("\t")
                                 "emdash" -> emit("—")
                                 "endash" -> emit("–")
-                                "bullet" -> emit("•")
+                                "bullet" -> emit("\u2022")
                                 "lquote" -> emit("‘")
                                 "rquote" -> emit("’")
                                 "ldblquote" -> emit("“")
@@ -353,7 +353,7 @@ object TextPdf {
         }
     }
 
-    /** One Markdown line → plain text (for Text → Word): markers removed, bullets kept as "•", links as "text (url)". */
+    /** One Markdown line → plain text (for Text → Word): markers removed, bullets kept as "\u2022", links as "text (url)". */
     fun markdownToPlain(line: String): String {
         HEADING.find(line)?.let { return inlinePlain(it.groupValues[2]) }
         if (RULE.matches(line)) return ""
@@ -361,7 +361,7 @@ object TextPdf {
         QUOTE.find(line)?.let { return inlinePlain(it.groupValues[1]) }
         BULLET.find(line)?.let { m ->
             val task = m.groupValues[2].trim()
-            val mark = when { task.isEmpty() -> "• "; task.contains('x', true) -> "☑ "; else -> "☐ " }
+            val mark = when { task.isEmpty() -> "\u2022 "; task.contains('x', true) -> "\u2611 "; else -> "\u2610 " }
             return m.groupValues[1] + mark + inlinePlain(m.groupValues[3])
         }
         return inlinePlain(line)

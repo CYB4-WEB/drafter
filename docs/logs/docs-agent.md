@@ -133,3 +133,21 @@ zoom/header/memory/region decode; R11 caches bounded; R12 en + ar strings; R13 c
 - `DocxExport.kt`: toPdf via Paginator + StaticLayout drawing on PdfDocument; writeDocx via ZipOutputStream.
 - `ImageScreen.kt`: hoisted zoom state, canvas rendering with base bitmap + region tile, actions per brief.
 - Strings en + ar. Test files with LibreOffice/python into docs/testdata; JVM run of the pure parsers where possible.
+
+## Progress
+- 2026-10-04 (resumed, Linux box) — Read round2b, AGENT_RULES, DESIGN, SPEC R2.6/R2.7/R2.11, round2 brief, my log, ViewerActions,
+  Common (ZoomControls), Nav (`screenFor`), Storage (`kindOf`). Re-read all of word/.
+- Model moved to points (`DocxModel.kt`): PageSpec, PageBreak, paragraph boxes (code/quote), table header rows, DocKind, Sheet.
+- `DocxParser.kt`: pt units, `w:br type=page` / pageBreakBefore / section breaks → PageBreak, body sectPr → page size + margins,
+  `w:tblHeader` rows. Exception class moved to LegacyDoc.kt.
+- New readers: `TextFormats.kt` (encoding sniffing, txt/log chunking, Markdown, CSV/TSV), `RtfReader.kt`, `LegacyDoc.kt`
+  (OLE2 + Word 97 piece table + Word 6/95 + fallback), `DocLoader.kt` (signature then extension).
+- `Paginator.kt`: StaticLayout pagination in points shared by print view and PDF (fixed line pitch, widow/orphan,
+  keep-heading-with-next, tables split by rows with repeated header rows, safety width so drawn slices never exceed predictions).
+- `DocxExport.kt`: toPdf (paginator + PdfPainter) and writeDocx. `Zoom.kt`: pinch (≥ 2 pointers only) + Ctrl+wheel.
+- `WordViews.kt`: read-layout blocks, print-layout sheets (TextMotion.Animated + LineBreak.Simple + fixed line height to match the
+  paginator), CSV grid, DocxImages (LRU ≤ min(48 MB, maxMemory/8)).
+- `WordScreen.kt`: header (Find, View menu, Convert, overflow with ViewerMenuItems + Copy all), print/read/sheet modes, progressive
+  background pagination, page counter, zoom pill + pinch + Ctrl+wheel, find (scrolls to page), outline, .doc / truncation banners.
+- `ImageScreen.kt`: hoisted zoom (pill / pinch / double-tap / Ctrl+wheel), base decode ≤ 2× view pixels (≤ heap/16), region tiles.
+- First `tools/compile.sh`: BUILD OK (verified the word/ classes were rebuilt).
