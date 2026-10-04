@@ -60,6 +60,8 @@ object Storage {
             recents.addAll(s.recents.filter { File(it).exists() })
             pins.addAll(s.pins.filter { File(it).exists() })
         }
+        // recycle bin: drop entries older than 30 days, once per start, off the main thread (files-agent)
+        Thread({ runCatching { Trash.purge() } }, "trash-purge").apply { isDaemon = true; priority = Thread.MIN_PRIORITY }.start()
     }
 
     fun touch() { version++ }
@@ -148,6 +150,7 @@ object Storage {
         val cars = sidecars(f)
         if (!f.renameTo(target)) return null
         for (c in cars) c.renameTo(File(c.parentFile, ".${target.name}." + c.name.removePrefix(".${f.name}.")))
+        runCatching { Versions.moved(f, target) }
         relink(f, target)
         touch(); return target
     }
@@ -166,6 +169,7 @@ object Storage {
             val nc = File(destDir, ".${target.name}." + c.name.removePrefix(".${f.name}."))
             if (!c.renameTo(nc)) { c.copyTo(nc, true); c.delete() }
         }
+        runCatching { Versions.moved(f, target) }
         relink(f, target)
         touch(); return target
     }
@@ -179,13 +183,40 @@ object Storage {
         touch(); return target
     }
 
-    fun delete(f: File) {
+    /**
+     * Moves [f] (with sidecars and note versions) to the recycle bin ([Trash]); it is deleted for good after 30 days.
+     * Returns the bin entry (for Undo), or null when it could not be moved — then it is not deleted either.
+     */
+    fun delete(f: File): TrashItem? {
+        val a = f.absolutePath
+        fun inside(p: String) = p == a || p.startsWith("$a/")
+        val item = Trash.put(f, kindOf(f), pins.filter(::inside)) ?: return null
+        recents.removeAll(::inside)
+        pins.removeAll(::inside)
+        saveState(); touch()
+        return item
+    }
+
+    /** Deletes [f] and its sidecars immediately, bypassing the recycle bin (temporary / replaced files). */
+    fun deleteNow(f: File) {
+        val a = f.absolutePath
         sidecars(f).forEach { it.delete() }
         f.deleteRecursively()
-        recents.removeAll { it.startsWith(f.absolutePath) }
-        pins.removeAll { it.startsWith(f.absolutePath) }
+        Versions.dirFor(f)?.deleteRecursively()
+        recents.removeAll { it == a || it.startsWith("$a/") }
+        pins.removeAll { it == a || it.startsWith("$a/") }
         saveState(); touch()
     }
+
+    /** Pins [paths] again (restore from the bin). Main thread. */
+    fun repin(paths: List<String>) {
+        var changed = false
+        for (p in paths) if (p !in pins && File(p).exists()) { pins.add(p); changed = true }
+        if (changed) saveState()
+    }
+
+    /** Path of the folder picture of [dir] (may not exist). */
+    fun coverFile(dir: File) = File(dir, ".cover.jpg")
 
     private fun relink(from: File, to: File) {
         val a = from.absolutePath
