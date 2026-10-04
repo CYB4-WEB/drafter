@@ -163,4 +163,10 @@
     <string name="pages_tpl_day">Day planner</string>
     <string name="pages_tpl_month">Month calendar</string>
     <string name="pages_tpl_notes">Notes</string>
+    <string name="ink4_tidy">Tidy</string>
+    <string name="ink4_solve">Solve</string>
+    <string name="ink4_flashcard">Flashcard</string>
+    <string name="ink4_math_helper">Math helper</string>
+    <string name="ink4_no_math">No calculation found in the selection</string>
+    <string name="ink4_nothing_to_tidy">Select handwriting to tidy</string>
 </resources>

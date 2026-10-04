@@ -71,8 +71,6 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
-private val Papers = listOf("blank", "lined", "grid", "dots", "cornell")
-
 /**
  * Serialized background saver shared by every open editor: JSON encoding + writing never runs on the main thread, saves
  * of the same file are coalesced (only the newest snapshot is written) and never overlap.
@@ -162,6 +160,9 @@ internal fun InkEditorImpl(
     var colorForText by remember { mutableStateOf(false) }
     var showExport by remember { mutableStateOf(false) }
     var showPrint by remember { mutableStateOf(false) }
+    var card by remember { mutableStateOf<Triple<android.graphics.Bitmap, String?, Int>?>(null) }   // flashcard front, text, page
+    var mathJob by remember { mutableStateOf<Job?>(null) }
+    var mathOn by remember { mutableStateOf(run { InkPrefs.init(ctx); InkPrefs.mathHelper }) }
     var exported by remember { mutableStateOf<List<File>?>(null) }
     var workJob by remember { mutableStateOf<Job?>(null) }
     val wide = LocalWidthClass.current == WidthClass.Expanded
@@ -182,10 +183,13 @@ internal fun InkEditorImpl(
         val main = android.os.Handler(android.os.Looper.getMainLooper())
         InkSaver.submit(file.absolutePath) {
             if (isNote && !file.exists()) return@submit   // renamed/moved away while open
-            runCatching {
+            val ok = runCatching {
                 if (source != null && snap.pages.all { it.isEmpty() } && snap.recordings.isEmpty()) file.delete() else snap.save(file)
+            }.isSuccess
+            if (isNote && ok) {
+                runCatching { com.daftar.app.data.Versions.capture(file) }
+                main.post { Storage.touch() }
             }
-            if (isNote) main.post { Storage.touch() }
         }
     }
     /** Saves and waits until the file is written (rename, host screens that read the file right away). */
@@ -200,10 +204,8 @@ internal fun InkEditorImpl(
     // ---- recording / playback ----
     val recorder = remember { Recorder(ctx) }
     var recording by remember { mutableStateOf(false) }
-    var recElapsed by remember { mutableLongStateOf(0L) }
     var player by remember { mutableStateOf<MediaPlayer?>(null) }
     var playing by remember { mutableStateOf<Recording?>(null) }
-    var playPos by remember { mutableLongStateOf(0L) }
     var isPlaying by remember { mutableStateOf(false) }
 
     fun stopPlayback() {
@@ -250,15 +252,6 @@ internal fun InkEditorImpl(
     }
     fun hasMic() = ContextCompat.checkSelfPermission(ctx, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
 
-    LaunchedEffect(recording) {
-        while (recording && isActive) { recElapsed = SystemClock.elapsedRealtime() - view.recClockStart; delay(250) }
-    }
-    LaunchedEffect(player, isPlaying) {
-        while (isPlaying && isActive) {
-            player?.let { playPos = it.currentPosition.toLong(); view.playPos = playPos }
-            delay(80)
-        }
-    }
 
     // ---- image insert ----
     val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri: Uri? ->
@@ -273,9 +266,10 @@ internal fun InkEditorImpl(
         val d = withContext(Dispatchers.IO) {
             val existing = InkDoc.load(inkFile)
             if (source != null) InkDoc.forSource(existing, (0 until source.pageCount).map { source.pageSize(it) })
-            else existing ?: InkDoc.newNote(Prefs.defaultPaper)
+            else existing ?: InkDoc.newNote(PaperTemplates.stamp(Prefs.defaultPaper))
         }
         view.setDocument(d, source)
+        com.daftar.app.study.StudyLinks.consumePage(hostFile)?.let { pg -> view.post { view.goToPage(pg) } }
         whiteboard = d.infinite
         hasTapes = view.hasTapes()
         ctl.pageCount = d.pages.size
@@ -301,30 +295,35 @@ internal fun InkEditorImpl(
             override fun onZoomChanged(percent: Int) { ctl.zoomPercent = percent }
             override fun onTextBox(ui: TextBoxUi?) { textUi = ui; if (ui == null) textMenu = null }
             override fun onTextMenu(page: Int, item: TextItem, x: Float, y: Float) { textMenu = x to y }
+            override fun onMathCandidate(page: Int, line: MathAssist.Line) {
+                mathJob?.cancel()
+                mathJob = scope.launch {
+                    // offline only: never downloads a model for the automatic helper
+                    val ans = runCatching { solveInk(line.strokes, requireEquals = true, download = false)?.first }.getOrNull() ?: return@launch
+                    view.insertMathAnswer(page, line, ans)
+                }
+            }
         }
     }
     ctl.onImageAdded = { ts.selectTool(Tool.LASSO); view.tool = Tool.LASSO }
 
-    // keep the view in sync with toolbar & settings
-    view.tool = ts.tool; view.penColor = ts.penColor; view.penWidth = ts.penWidth; view.penStyle = ts.penStyle
-    view.hlColor = ts.hlColor; view.hlWidth = ts.hlWidth; view.eraserRadiusDp = ts.eraserRadius
-    view.tapeColor = ts.tapeColor; view.tapeWidth = ts.tapeWidth
-    view.shapeColor = ts.penColor
-    view.keepScreenOn = Prefs.keepScreenOn
-    // "Pen only" is enforced only once this device has shown it has a stylus; otherwise fingers must be able to write.
-    view.penOnly = Prefs.penOnly && Prefs.stylusSeen
-    view.stylusButtonTool = if (Prefs.stylusButton == 1) Tool.LASSO else Tool.ERASER
-    view.bgColor = c.bg.toArgb()
-    view.textColor = ts.penColor
-    view.textHint = stringResource(R.string.ink_text_hint)
-    remember(view) { view.textFont = InkPrefs.textFont; view.textSize = InkPrefs.textSize; view.textBold = InkPrefs.textBold; true }
+    // keep the view in sync with toolbar & settings (in its own scope: a tool change does not recompose the editor)
+    ToolSync(view, ts, c.bg.toArgb())
+    remember(view) { view.mathHelper = InkPrefs.mathHelper; view.textFont = InkPrefs.textFont; view.textSize = InkPrefs.textSize; view.textBold = InkPrefs.textBold; true }
 
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     DisposableEffect(inkFile) {
-        val obs = LifecycleEventObserver { _, e -> if (e == Lifecycle.Event.ON_PAUSE) { view.finishEditing(); saveAsync() } }
+        val obs = LifecycleEventObserver { _, e ->
+            when (e) {
+                Lifecycle.Event.ON_PAUSE -> { view.finishEditing(); saveAsync(); mathJob?.cancel(); view.onPause() }
+                Lifecycle.Event.ON_RESUME -> view.onResume()
+                else -> {}
+            }
+        }
         lifecycle.addObserver(obs)
         onDispose {
             lifecycle.removeObserver(obs)
+            mathJob?.cancel()
             if (recorder.active) stopRecording()
             stopPlayback()
             view.finishEditing()
@@ -349,6 +348,53 @@ internal fun InkEditorImpl(
                 busy = null
                 toast(ctx, ctx.getString(R.string.ink_model_failed))
             }
+        }
+    }
+
+    /**
+     * Recognizes [strokes] as a calculation and solves it: (answer, the user wrote "="). Tries the handwriting language,
+     * then English digits; candidates beyond the first are tried too. [download] = may fetch the model (explicit Solve).
+     */
+    suspend fun solveInk(strokes: List<Stroke>, requireEquals: Boolean, download: Boolean): Pair<String, Boolean>? {
+        if (strokes.isEmpty()) return null
+        val langs = listOf(Prefs.inkLang, "en-US").distinct()
+        for ((k, lang) in langs.withIndex()) {
+            if (!Handwriting.isReady(lang)) {
+                if (!download || k > 0) continue
+                busy = ctx.getString(R.string.ink_downloading_model)
+                try { Handwriting.download(lang) } finally { busy = null }
+            }
+            for (t in Handwriting.candidates(lang, strokes)) {
+                val a = MathEval.answerFor(t, requireEquals) ?: continue
+                return a to t.contains('=')
+            }
+        }
+        return null
+    }
+
+    fun solveSelection() {
+        val strokes = view.selectedStrokes()
+        if (strokes.isEmpty()) { toast(ctx, ctx.getString(R.string.ink4_no_math)); return }
+        scope.launch {
+            busy = ctx.getString(R.string.ink_recognizing)
+            val r = try { solveInk(strokes, requireEquals = false, download = true) } catch (e: Exception) { null } finally { busy = null }
+            if (r == null) toast(ctx, ctx.getString(R.string.ink4_no_math)) else view.insertSolveAnswer(r.first, r.second)
+        }
+    }
+
+    /** Lasso → flashcard: image of the selection + (optional, quick, offline) recognized text, then the study dialog. */
+    fun makeFlashcard() {
+        val bmp = view.selectionBitmap() ?: return
+        val page = view.selectionPage.coerceAtLeast(0)
+        val typed = view.selectedTexts()
+        val strokes = view.selectedStrokes()
+        scope.launch {
+            val lang = Prefs.inkLang
+            val hw = if (strokes.isEmpty()) null else runCatching {
+                kotlinx.coroutines.withTimeoutOrNull(900) { if (Handwriting.isReady(lang)) Handwriting.recognize(lang, strokes) else null }
+            }.getOrNull()
+            val text = (typed + listOfNotNull(hw?.takeIf { it.isNotBlank() })).joinToString("\n").ifBlank { null }
+            card = Triple(bmp, text, page)
         }
     }
 
@@ -454,7 +500,7 @@ internal fun InkEditorImpl(
                 IconButton(onClick = { showMore = true; hasTapes = view.hasTapes() }) { Icon(Icons.Rounded.MoreVert, stringResource(R.string.more), tint = c.ink) }
                 DropdownMenu(showMore, { showMore = false }) {
                     if (isNote && !whiteboard) {
-                        DropdownMenuItem({ Text(stringResource(R.string.ink_add_page)) }, { showMore = false; view.addPage(ctl.currentPage, view.doc.pages.getOrNull(ctl.currentPage)?.paper ?: Prefs.defaultPaper) }, leadingIcon = { Icon(Icons.Rounded.NoteAdd, null) })
+                        DropdownMenuItem({ Text(stringResource(R.string.ink_add_page)) }, { showMore = false; view.addPage(ctl.currentPage, view.doc.pages.getOrNull(ctl.currentPage)?.paper?.let { PaperTemplates.nextKey(it) } ?: PaperTemplates.stamp(Prefs.defaultPaper)) }, leadingIcon = { Icon(Icons.Rounded.NoteAdd, null) })
                     }
                     if (isNote) DropdownMenuItem({ Text(stringResource(R.string.ink_paper)) }, { showMore = false; showPaper = true }, leadingIcon = { Icon(Icons.Rounded.GridOn, null) })
                     if (isNote && !whiteboard) DropdownMenuItem({ Text(stringResource(R.string.pages_title)) }, { showMore = false; view.finishEditing(); showPages = true }, leadingIcon = { Icon(Icons.Rounded.AutoAwesomeMosaic, null) })
@@ -475,6 +521,12 @@ internal fun InkEditorImpl(
                             if (whiteboard || ctl.pageCount <= 1) printPages(listOf(0)) else showPrint = true
                         }, leadingIcon = { Icon(Icons.Rounded.Print, null) })
                     }
+                    DropdownMenuItem(
+                        { Text(stringResource(R.string.ink4_math_helper)) },
+                        { mathOn = !mathOn; InkPrefs.mathHelper = mathOn; view.mathHelper = mathOn; showMore = false },
+                        leadingIcon = { Icon(Icons.Rounded.Calculate, null) },
+                        trailingIcon = { Checkbox(checked = mathOn, onCheckedChange = null) },
+                    )
                     DropdownMenuItem(
                         { Text(stringResource(if (Prefs.penOnly) R.string.ink_finger_draw_off else R.string.ink_finger_draw_on)) },
                         { showMore = false; Prefs.putPenOnly(!Prefs.penOnly) },
@@ -523,33 +575,14 @@ internal fun InkEditorImpl(
             onImage = { pickImage.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
             onLink = { linkEdit = ctl.currentPage to null },
             onDictate = { if (hasMic()) showDictation = true else dictPermission.launch(Manifest.permission.RECORD_AUDIO) },
-            onAddPage = { view.addPage(ctl.currentPage, view.doc.pages.getOrNull(ctl.currentPage)?.paper ?: Prefs.defaultPaper) },
+            onAddPage = { view.addPage(ctl.currentPage, view.doc.pages.getOrNull(ctl.currentPage)?.paper?.let { PaperTemplates.nextKey(it) } ?: PaperTemplates.stamp(Prefs.defaultPaper)) },
         )
 
-        if (recording) {
-            Row(Modifier.fillMaxWidth().background(c.danger.copy(alpha = 0.10f)).padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(8.dp).clip(CircleShape).background(c.danger))
-                Spacer(Modifier.width(8.dp))
-                Text(stringResource(R.string.ink_recording_now, fmtTime(recElapsed)), color = c.ink, style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
-                TextButton(onClick = { stopRecording() }) { Text(stringResource(R.string.ink_stop)) }
-            }
-        }
+        if (recording) RecordingBar(view) { stopRecording() }
         playing?.let { r ->
-            Row(Modifier.fillMaxWidth().background(c.accent.copy(alpha = 0.08f)).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = {
-                    val p = player ?: return@IconButton
-                    if (isPlaying) { p.pause(); isPlaying = false } else { p.start(); isPlaying = true }
-                }) { Icon(if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, null, tint = c.accent) }
-                Text(fmtTime(playPos), style = MaterialTheme.typography.labelMedium, color = c.ink)
-                Slider(
-                    value = playPos.toFloat().coerceIn(0f, r.duration.coerceAtLeast(1).toFloat()),
-                    onValueChange = { v -> player?.seekTo(v.toInt()); playPos = v.toLong(); view.playPos = playPos },
-                    valueRange = 0f..r.duration.coerceAtLeast(1).toFloat(),
-                    modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
-                )
-                Text(fmtTime(r.duration), style = MaterialTheme.typography.labelMedium, color = c.muted)
-                IconButton(onClick = { stopPlayback() }) { Icon(Icons.Rounded.Close, stringResource(R.string.close), tint = c.muted) }
-            }
+            PlaybackBar(r, player, isPlaying, view,
+                onToggle = { val p = player; if (p != null) { if (isPlaying) { p.pause(); isPlaying = false } else { p.start(); isPlaying = true } } },
+                onClose = { stopPlayback() })
         }
 
         Row(Modifier.weight(1f).fillMaxWidth()) {
@@ -574,8 +607,11 @@ internal fun InkEditorImpl(
                 if (!loaded) CircularProgressIndicator(Modifier.align(Alignment.Center), color = c.accent)
 
                 if (hasSel) SelectionBar(
-                    Modifier.align(Alignment.TopCenter).padding(top = 12.dp),
+                    Modifier.align(Alignment.TopCenter).padding(top = 12.dp, start = 8.dp, end = 8.dp),
                     onText = { recognize(view.selectedStrokes(), true) },
+                    onTidy = { if (!view.tidySelection()) toast(ctx, ctx.getString(R.string.ink4_nothing_to_tidy)) },
+                    onSolve = { solveSelection() },
+                    onFlashcard = { makeFlashcard() },
                     onColor = { col -> view.recolorSelection(col) },
                     onDuplicate = { view.duplicateSelection() },
                     onDelete = { view.deleteSelection() },
@@ -712,6 +748,10 @@ internal fun InkEditorImpl(
         confirmButton = { TextButton(onClick = { showRecordings = false }) { Text(stringResource(R.string.close)) } },
     )
 
+    card?.let { (front, text, page) ->
+        com.daftar.app.study.MakeFlashcardDialog(source = hostFile, front = front, recognizedText = text, page = page, onDismiss = { card = null })
+    }
+
     linkEdit?.let { (page, existing) ->
         LinkDialog(existing, exclude = hostFile, onDismiss = { linkEdit = null }) { target, label ->
             linkEdit = null
@@ -733,6 +773,64 @@ internal fun InkEditorImpl(
                 TextButton(onClick = { view.addTextAtCenter(text, 16f, ts.penColor, "sans"); recognized = null }) { Text(stringResource(R.string.ink_insert_as_text)) }
             },
         )
+    }
+}
+
+/** Pushes toolbar state and settings into the canvas. Its own recomposition scope: tool / colour / width changes
+ *  re-run only this (no editor recomposition, no canvas work). */
+@Composable
+private fun ToolSync(view: InkView, ts: InkToolState, bg: Int) {
+    view.tool = ts.tool; view.penColor = ts.penColor; view.penWidth = ts.penWidth; view.penStyle = ts.penStyle
+    view.hlColor = ts.hlColor; view.hlWidth = ts.hlWidth; view.eraserRadiusDp = ts.eraserRadius
+    view.tapeColor = ts.tapeColor; view.tapeWidth = ts.tapeWidth
+    view.shapeColor = ts.penColor
+    view.keepScreenOn = Prefs.keepScreenOn
+    // "Pen only" is enforced only once this device has shown it has a stylus; otherwise fingers must be able to write.
+    view.penOnly = Prefs.penOnly && Prefs.stylusSeen
+    view.stylusButtonTool = if (Prefs.stylusButton == 1) Tool.LASSO else Tool.ERASER
+    view.bgColor = bg
+    view.textColor = ts.penColor
+    view.textHint = stringResource(R.string.ink_text_hint)
+}
+
+/** "Recording 1:23" bar; its 4 Hz ticker runs only while recording and recomposes only this bar. */
+@Composable
+private fun RecordingBar(view: InkView, onStop: () -> Unit) {
+    val c = D.c
+    var elapsed by remember { mutableLongStateOf(0L) }
+    LaunchedEffect(Unit) {
+        while (isActive) { elapsed = SystemClock.elapsedRealtime() - view.recClockStart; delay(250) }
+    }
+    Row(Modifier.fillMaxWidth().background(c.danger.copy(alpha = 0.10f)).padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(8.dp).clip(CircleShape).background(c.danger))
+        Spacer(Modifier.width(8.dp))
+        Text(stringResource(R.string.ink_recording_now, fmtTime(elapsed)), color = c.ink, style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
+        TextButton(onClick = onStop) { Text(stringResource(R.string.ink_stop)) }
+    }
+}
+
+/** Audio playback bar; its position ticker runs only while playing (paused / stopped = no polling). */
+@Composable
+private fun PlaybackBar(r: Recording, player: MediaPlayer?, isPlaying: Boolean, view: InkView, onToggle: () -> Unit, onClose: () -> Unit) {
+    val c = D.c
+    var pos by remember(r.id) { mutableLongStateOf(player?.currentPosition?.toLong() ?: 0L) }
+    LaunchedEffect(player, isPlaying) {
+        while (isPlaying && isActive) {
+            player?.let { pos = it.currentPosition.toLong(); view.playPos = pos }
+            delay(80)
+        }
+    }
+    Row(Modifier.fillMaxWidth().background(c.accent.copy(alpha = 0.08f)).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        IconButton(onClick = onToggle) { Icon(if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, null, tint = c.accent) }
+        Text(fmtTime(pos), style = MaterialTheme.typography.labelMedium, color = c.ink)
+        Slider(
+            value = pos.toFloat().coerceIn(0f, r.duration.coerceAtLeast(1).toFloat()),
+            onValueChange = { v -> player?.seekTo(v.toInt()); pos = v.toLong(); view.playPos = pos },
+            valueRange = 0f..r.duration.coerceAtLeast(1).toFloat(),
+            modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
+        )
+        Text(fmtTime(r.duration), style = MaterialTheme.typography.labelMedium, color = c.muted)
+        IconButton(onClick = onClose) { Icon(Icons.Rounded.Close, stringResource(R.string.close), tint = c.muted) }
     }
 }
 
@@ -762,14 +860,21 @@ fun loadBitmap(ctx: android.content.Context, uri: Uri, maxSide: Int): Bitmap? = 
 // =====================================================================================
 
 @Composable
-private fun SelectionBar(modifier: Modifier, onText: () -> Unit, onColor: (Int) -> Unit, onDuplicate: () -> Unit, onDelete: () -> Unit, onDone: () -> Unit) {
+private fun SelectionBar(
+    modifier: Modifier, onText: () -> Unit, onTidy: () -> Unit, onSolve: () -> Unit, onFlashcard: () -> Unit,
+    onColor: (Int) -> Unit, onDuplicate: () -> Unit, onDelete: () -> Unit, onDone: () -> Unit,
+) {
     val c = D.c
     var colors by remember { mutableStateOf(false) }
     Row(
-        modifier.background(c.surface, RoundedCornerShape(14.dp)).border(1.dp, c.line, RoundedCornerShape(14.dp)).padding(4.dp),
+        modifier.background(c.surface, RoundedCornerShape(14.dp)).border(1.dp, c.line, RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(14.dp)).horizontalScroll(rememberScrollState()).padding(4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         TextButton(onClick = onText) { Icon(Icons.Rounded.Spellcheck, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.ink_convert_to_text)) }
+        TextButton(onClick = onTidy) { Icon(Icons.Rounded.AutoFixHigh, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.ink4_tidy)) }
+        TextButton(onClick = onSolve) { Icon(Icons.Rounded.Calculate, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.ink4_solve)) }
+        TextButton(onClick = onFlashcard) { Icon(Icons.Rounded.Style, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.ink4_flashcard)) }
         Box {
             IconButton(onClick = { colors = true }) { Icon(Icons.Rounded.Palette, stringResource(R.string.color), tint = c.ink) }
             DropdownMenu(colors, { colors = false }) {
@@ -869,32 +974,6 @@ private fun TextBoxDialog(existing: TextItem?, defaultColor: Int, onDismiss: () 
                 TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
             }
         },
-    )
-}
-
-@Composable
-private fun PaperDialog(showAllPages: Boolean, onDismiss: () -> Unit, onPick: (String, Boolean) -> Unit) {
-    val c = D.c
-    var all by remember { mutableStateOf(false) }
-    val labels = mapOf("blank" to R.string.ink_paper_blank, "lined" to R.string.ink_paper_lined, "grid" to R.string.ink_paper_grid,
-        "dots" to R.string.ink_paper_dots, "cornell" to R.string.ink_paper_cornell)
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.ink_paper)) },
-        text = {
-            Column {
-                Papers.forEach { p ->
-                    Row(Modifier.fillMaxWidth().clickable { onPick(p, all) }.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(when (p) { "lined" -> Icons.Rounded.ViewHeadline; "grid" -> Icons.Rounded.GridOn; "dots" -> Icons.Rounded.MoreHoriz; "cornell" -> Icons.Rounded.ViewQuilt; else -> Icons.Rounded.CropPortrait }, null, tint = c.muted)
-                        Spacer(Modifier.width(12.dp)); Text(stringResource(labels[p]!!), color = c.ink)
-                    }
-                }
-                if (showAllPages) Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(all, { all = it }); Text(stringResource(R.string.ink_apply_all_pages), color = c.ink)
-                }
-            }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
     )
 }
 

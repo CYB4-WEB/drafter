@@ -338,7 +338,7 @@ fun LibraryScreen(dir: String) {
                 if (!isRoot) {
                     IconButton(onClick = { pane.back() }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, stringResource(R.string.back), tint = c.ink) }
                     Spacer(Modifier.width(4.dp))
-                    FolderGlyph(meta?.color ?: 6, meta?.icon ?: "folder", 40.dp)
+                    FolderThumb(Storage.entry(folder), 40.dp)
                     Spacer(Modifier.width(12.dp))
                 }
                 Column(Modifier.weight(1f)) {
@@ -579,8 +579,7 @@ fun SettingsScreen() {
                 ChoiceRow(Icons.Rounded.Mouse, stringResource(R.string.set_button),
                     listOf(0 to stringResource(R.string.ink_tool_eraser), 1 to stringResource(R.string.ink_tool_lasso)), Prefs.stylusButton) { Prefs.putStylusButton(it) }
                 ChoiceRow(Icons.Rounded.GridOn, stringResource(R.string.set_paper),
-                    listOf("blank" to stringResource(R.string.ink_paper_blank), "lined" to stringResource(R.string.ink_paper_lined), "grid" to stringResource(R.string.ink_paper_grid),
-                        "dots" to stringResource(R.string.ink_paper_dots), "cornell" to stringResource(R.string.ink_paper_cornell)), Prefs.defaultPaper) { Prefs.putPaper(it) }
+                    com.daftar.app.ink.PaperTemplates.choices(), com.daftar.app.ink.PaperTemplates.base(Prefs.defaultPaper)) { Prefs.putPaper(it) }
                 ChoiceRow(Icons.Rounded.Gesture, stringResource(R.string.set_ink_lang),
                     listOf("en-US" to "English", "ar" to "العربية"), Prefs.inkLang) { Prefs.putInkLang(it) }
                 ChoiceRow(Icons.Rounded.KeyboardVoice, stringResource(R.string.set_speech_lang),
@@ -588,6 +587,7 @@ fun SettingsScreen() {
                 SwitchRow(Icons.Rounded.Link, stringResource(R.string.set_links_in_app), stringResource(R.string.set_links_in_app_desc), Prefs.linksInApp) { Prefs.putLinksInApp(it) }
             }
             com.daftar.app.planner.PlannerSettingsSection()
+            com.daftar.app.study.StudySettingsSection()
             SettingsGroup(stringResource(R.string.set_storage)) {
                 Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Rounded.Storage, null, tint = c.muted)

@@ -45,6 +45,28 @@ object Handwriting {
     private fun model(lang: String): DigitalInkRecognitionModel? =
         runCatching { DigitalInkRecognitionModelIdentifier.fromLanguageTag(lang) }.getOrNull()?.let { DigitalInkRecognitionModel.builder(it).build() }
 
+    /**
+     * All recognition candidates for [strokes] taken as ONE line (math helper: the best-scoring text is often not the
+     * one that parses as a calculation).
+     */
+    suspend fun candidates(lang: String, strokes: List<Stroke>): List<String> {
+        val model = model(lang) ?: return emptyList()
+        val rec = DigitalInkRecognition.getClient(DigitalInkRecognizerOptions.builder(model).build())
+        try {
+            val ink = Ink.builder()
+            var t = 0L
+            for (s in strokes) {
+                val sb = Ink.Stroke.builder()
+                var i = 0
+                while (i < s.pts.size) { sb.addPoint(Ink.Point.create(s.pts[i], s.pts[i + 1], t)); t += 8; i += 3 }
+                ink.addStroke(sb.build())
+            }
+            return rec.recognize(ink.build()).await().candidates.map { it.text }
+        } finally {
+            rec.close()
+        }
+    }
+
     /** Groups strokes into lines (by vertical overlap) and recognizes each line. */
     suspend fun recognize(lang: String, strokes: List<Stroke>): String {
         val model = model(lang) ?: return ""

@@ -80,4 +80,4 @@ Decks = subject folders (first folder under the library root), "" = General.
 | – | en + ar strings, flat design, RTL (charts mirror), compiles | PASS (see Progress) |
 
 ## Progress
-- All files written; `FILTER=study/ tools/compile.sh` shows no errors in study/ (remaining build errors were in ink/, owned by another agent).
+- All files written. Full `tools/compile.sh` → BUILD OK (an earlier run failed only on ink/InkView.kt MathAssist visibility, owned by another agent; it is fixed now).

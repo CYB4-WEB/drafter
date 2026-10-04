@@ -60,8 +60,7 @@ history. Owned files: `data/Storage.kt`, `data/Versions.kt`, `data/Trash.kt` (ne
   refuses with a message. A note open in a separate window or a navigated pane is not detected. If that editor saves
   later, it overwrites the restored content, but nothing is lost because both states remain as versions.
 - If an ActionsHost screen leaves composition, the Undo bar goes with it. The item stays in the bin.
-- Not device-tested (no emulator). Kotlin frontend reports no errors in my files. The remaining build errors were in
-  `ink/InkView.kt` (notes-agent, in progress).
+- Not device-tested (no emulator). `:app:compileDebugKotlin` BUILD OK with all changes.
 
 ## Requests to lead
 1. **The note editor must call `Versions.capture`.** Nothing calls it yet. In `ink/InkEditorImpl.kt` `saveAsync()`, inside the

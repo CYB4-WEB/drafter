@@ -225,6 +225,8 @@ class InkView(context: Context) : View(context) {
     private var selGrabX = 0f
     private var selGrabY = 0f
     val hasSelection get() = sel != null
+    /** Page of the current lasso selection (-1 = none). */
+    val selectionPage: Int get() = sel?.page ?: -1
 
     // ---- undo ----
     private val undo = ArrayDeque<List<InkPage>>()
@@ -2057,6 +2059,8 @@ class InkView(context: Context) : View(context) {
         val p = doc.pages.getOrNull(page) ?: return
         val have = p.strokes.toHashSet()
         if (line.strokes.any { it !in have }) return
+        // automatic answers only while nothing new was written after the "=" (the user may have answered it already)
+        if (line.strokes.isNotEmpty() && p.strokes.lastOrNull { it.tool == Tool.PEN } !== line.strokes.last()) return
         if (sel != null || editItem != null) return
         val size = (line.charH * 0.85f).coerceIn(8f, 160f)
         val tf = InkRender.typeface("hand", false)

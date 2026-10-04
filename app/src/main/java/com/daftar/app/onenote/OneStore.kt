@@ -174,6 +174,9 @@ internal class OneStore private constructor(val file: File, private val buf: Byt
         private set
     var encrypted = false
         private set
+    /** Header says the file may be read by pre-2010 OneNote (2007 format variant). */
+    var legacyVersion = false
+        private set
     /** FileDataStoreObject GUID (upper case, with braces) → blob. */
     val fileData = HashMap<String, Blob>()
     /** Non-fatal problems met while reading (for logs / tests). */
@@ -224,6 +227,8 @@ internal class OneStore private constructor(val file: File, private val buf: Byt
             TYPE_TOC -> throw OneException(OneError.TOC)
             else -> throw OneException(OneError.NOT_ONENOTE, "type $fileType")
         }
+        h.pos = 76
+        legacyVersion = h.u32() < 0x2A   // ffvOldestCodeThatMayReadThisFile: 0x2A = OneNote 2010 and later
         h.pos = 96
         val cTransactions = h.u32()
         h.pos = 160
