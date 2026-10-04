@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Word reader -->
+    <string name="word_loading">Opening document…</string>
+    <string name="word_error">This document could not be opened. It may be damaged.</string>
+    <string name="word_legacy">Old .doc files and protected documents can\'t be shown here. Open it in another app, or save it as .docx.</string>
+    <string name="word_empty">This document is empty</string>
+    <string name="word_text_smaller">Smaller text</string>
+    <string name="word_text_larger">Larger text</string>
+    <string name="word_find">Find in document</string>
+    <string name="word_find_hint">Find</string>
+    <string name="word_find_count">%1$d of %2$d</string>
+    <string name="word_find_none">No matches</string>
+    <string name="word_find_prev">Previous match</string>
+    <string name="word_find_next">Next match</string>
+    <string name="word_find_close">Close find</string>
+    <string name="word_outline">Outline</string>
+    <string name="word_outline_empty">This document has no headings</string>
+    <string name="word_copy_all">Copy all text</string>
+    <string name="word_copied">Text copied</string>
+    <string name="word_image">Image</string>
+    <string name="word_text_size">Text size %1$d%%</string>
+
+    <!-- Image viewer -->
+    <string name="word_img_error">This image could not be opened</string>
+    <string name="word_img_rotate">Rotate</string>
+    <string name="word_img_rotate_failed">This image type can\'t be rotated</string>
+    <string name="word_img_to_pdf">Convert to PDF</string>
+    <string name="word_img_pdf_failed">Could not create the PDF</string>
+    <string name="word_img_annotate">Annotate in a new note</string>
+    <string name="word_img_note_failed">Could not create the note</string>
+</resources>

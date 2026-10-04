@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Word reader -->
+    <string name="word_loading">جارٍ فتح المستند…</string>
+    <string name="word_error">تعذّر فتح هذا المستند. قد يكون تالفًا.</string>
+    <string name="word_legacy">لا يمكن عرض ملفات ‎.doc‎ القديمة أو المستندات المحمية هنا. افتحه في تطبيق آخر، أو احفظه بصيغة ‎.docx‎.</string>
+    <string name="word_empty">هذا المستند فارغ</string>
+    <string name="word_text_smaller">تصغير النص</string>
+    <string name="word_text_larger">تكبير النص</string>
+    <string name="word_find">البحث في المستند</string>
+    <string name="word_find_hint">بحث</string>
+    <string name="word_find_count">%1$d من %2$d</string>
+    <string name="word_find_none">لا توجد نتائج</string>
+    <string name="word_find_prev">النتيجة السابقة</string>
+    <string name="word_find_next">النتيجة التالية</string>
+    <string name="word_find_close">إغلاق البحث</string>
+    <string name="word_outline">المخطط</string>
+    <string name="word_outline_empty">لا يحتوي هذا المستند على عناوين</string>
+    <string name="word_copy_all">نسخ كل النص</string>
+    <string name="word_copied">تم نسخ النص</string>
+    <string name="word_image">صورة</string>
+    <string name="word_text_size">حجم النص %1$d%%</string>
+
+    <!-- Image viewer -->
+    <string name="word_img_error">تعذّر فتح هذه الصورة</string>
+    <string name="word_img_rotate">تدوير</string>
+    <string name="word_img_rotate_failed">لا يمكن تدوير هذا النوع من الصور</string>
+    <string name="word_img_to_pdf">تحويل إلى PDF</string>
+    <string name="word_img_pdf_failed">تعذّر إنشاء ملف PDF</string>
+    <string name="word_img_annotate">التعليق في ملاحظة جديدة</string>
+    <string name="word_img_note_failed">تعذّر إنشاء الملاحظة</string>
+</resources>
