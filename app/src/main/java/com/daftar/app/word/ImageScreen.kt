@@ -140,7 +140,7 @@ fun ImageScreen(path: String) {
             if (out != null && out.exists()) {
                 Storage.touch()
                 Storage.opened(out)
-                Nav.replace(Screen.Note(out.absolutePath))
+                pane.replace(Screen.Note(out.absolutePath))
             } else toast(ctx, noteFailed)
         }
     }

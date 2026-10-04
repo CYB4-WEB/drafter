@@ -103,6 +103,7 @@ fun kindLabel(k: Kind): String = when (k) {
     Kind.PDF -> "PDF"
     Kind.PPTX -> stringResource(R.string.kind_slides)
     Kind.DOCX -> stringResource(R.string.kind_word)
+    Kind.TEXT -> stringResource(R.string.kind_text)
     Kind.IMAGE -> stringResource(R.string.kind_image)
     Kind.AUDIO -> stringResource(R.string.kind_audio)
     Kind.OTHER -> stringResource(R.string.kind_file)

@@ -575,6 +575,6 @@ fun NoteScreen(path: String) {
     InkEditorScaffold(
         title = f.nameWithoutExtension, inkFile = f, source = null, isNote = true,
         onBack = { pane.back() },
-        onRename = { n -> Storage.rename(f, n)?.let { Nav.replace(Screen.Note(it.absolutePath)) } },
+        onRename = { n -> Storage.rename(f, n)?.let { pane.replace(Screen.Note(it.absolutePath)) } },
     )
 }

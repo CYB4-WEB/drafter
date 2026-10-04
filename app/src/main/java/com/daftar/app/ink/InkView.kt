@@ -43,6 +43,7 @@ class InkView(context: Context) : View(context) {
         fun onSelectionChanged(active: Boolean) {}
         fun onSeek(rec: Int, t: Long) {}
         fun onUndoStateChanged(canUndo: Boolean, canRedo: Boolean) {}
+        fun onZoomChanged(percent: Int) {}
     }
 
     var listener: Listener? = null
@@ -256,10 +257,18 @@ class InkView(context: Context) : View(context) {
         // keep doc point under the focus
         sx = margin + dx * scale + offX() - fx
         sy = margin + dy * scale - fy
-        clamp(); updateCurrentPage(); invalidate()
+        clamp(); updateCurrentPage(); notifyZoom(); invalidate()
     }
 
-    fun zoomToFit() { val cy = toDocY(0f); scale = fitScale; sy = cy * scale; clamp(); settleSoon(); invalidate() }
+    fun zoomToFit() { val cy = toDocY(0f); scale = fitScale; sy = cy * scale; clamp(); settleSoon(); notifyZoom(); invalidate() }
+
+    /** Zoom around the view centre (toolbar buttons). */
+    fun zoomBy(factor: Float) { zoomAt(width / 2f, height / 2f, factor); settleSoon() }
+
+    val zoomPercent: Int get() = if (fitScale > 0f) (scale / fitScale * 100f).toInt() else 100
+
+    private var lastZoom = -1
+    private fun notifyZoom() { val z = zoomPercent; if (z != lastZoom) { lastZoom = z; listener?.onZoomChanged(z) } }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
@@ -269,7 +278,7 @@ class InkView(context: Context) : View(context) {
         scale = fitScale * zoom
         sy = max(0f, topDoc * scale)
         laidOut = true
-        clamp(); tiles.clear(); settleSoon(); invalidate()
+        clamp(); tiles.clear(); settleSoon(); notifyZoom(); invalidate()
     }
 
     // =====================================================================================

@@ -80,7 +80,14 @@ private val Papers = listOf("blank", "lined", "grid", "dots", "cornell")
 private class EditorStateImpl(val view: InkView) : EditorController {
     override var currentPage by mutableIntStateOf(0)
     override var pageCount by mutableIntStateOf(0)
+    override var zoomPercent by mutableIntStateOf(100)
     override fun goToPage(i: Int) = view.goToPage(i)
+    override fun zoomIn() = view.zoomBy(1.25f)
+    override fun zoomOut() = view.zoomBy(0.8f)
+    override fun zoomFit() = view.zoomToFit()
+    /** Called after [addImage] so the toolbar can switch to the lasso (image floats selected). */
+    var onImageAdded: (() -> Unit)? = null
+    override fun addImage(b: Bitmap) { view.addImage(b); onImageAdded?.invoke() }
     var saver: (() -> Unit)? = null
     override fun saveNow() { saver?.invoke() }
     override fun doc(): InkDoc = view.doc
@@ -92,6 +99,8 @@ internal fun InkEditorImpl(
     title: String, inkFile: File, source: PageSource?, isNote: Boolean, onBack: () -> Unit,
     onRename: ((String) -> Unit)?, extraActions: @Composable RowScope.(EditorController) -> Unit,
     sidePanel: (@Composable (EditorController) -> Unit)?, sidePanelLabel: String,
+    sidePanelAtStart: Boolean, sidePanelOpen: Boolean,
+    bottomPanel: (@Composable (EditorController) -> Unit)?, bottomPanelLabel: String,
 ) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -113,7 +122,9 @@ internal fun InkEditorImpl(
     var showPaper by remember { mutableStateOf(false) }
     var showColors by remember { mutableStateOf(false) }
     var showRename by remember { mutableStateOf(false) }
-    var showPanel by remember { mutableStateOf(false) }
+    val wideAtStart = LocalWidthClass.current == WidthClass.Expanded
+    var showPanel by remember { mutableStateOf(sidePanelOpen && wideAtStart) }
+    var showBottom by remember { mutableStateOf(false) }
     var showDictation by remember { mutableStateOf(false) }
     var showRecordings by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf<String?>(null) }
@@ -247,8 +258,10 @@ internal fun InkEditorImpl(
                 }
             }
             override fun onUndoStateChanged(u: Boolean, r: Boolean) { canUndo = u; canRedo = r }
+            override fun onZoomChanged(percent: Int) { ctl.zoomPercent = percent }
         }
     }
+    ctl.onImageAdded = { tool = Tool.LASSO; view.tool = Tool.LASSO }
 
     // keep the view in sync with toolbar & settings
     view.tool = tool; view.penColor = penColor; view.penWidth = penWidth; view.hlColor = hlColor; view.hlWidth = hlWidth
@@ -307,6 +320,9 @@ internal fun InkEditorImpl(
                 }
             }
             extraActions(ctl)
+            if (bottomPanel != null) IconButton(onClick = { showBottom = !showBottom }) {
+                Icon(Icons.Rounded.ViewAgenda, bottomPanelLabel, tint = if (showBottom) c.accent else c.ink)
+            }
             if (sidePanel != null) IconButton(onClick = { showPanel = !showPanel }) {
                 Icon(Icons.AutoMirrored.Rounded.ViewSidebar, sidePanelLabel, tint = if (showPanel) c.accent else c.ink)
             }
@@ -388,8 +404,19 @@ internal fun InkEditorImpl(
         }
 
         Row(Modifier.weight(1f).fillMaxWidth()) {
-            Box(Modifier.weight(1f).fillMaxHeight()) {
+            if (sidePanel != null && showPanel && wide && sidePanelAtStart) {
+                Box(Modifier.width(260.dp).fillMaxHeight().background(c.surface)) {
+                    Box(Modifier.padding(end = 1.dp)) { sidePanel(ctl) }
+                    Box(Modifier.align(Alignment.CenterEnd).width(1.dp).fillMaxHeight().background(c.line))
+                }
+            }
+            Column(Modifier.weight(1f).fillMaxHeight()) {
+            Box(Modifier.weight(1f).fillMaxWidth()) {
                 AndroidView({ view }, Modifier.fillMaxSize().clipToBounds())
+                if (loaded) com.daftar.app.ui.ZoomControls(
+                    ctl.zoomPercent, onOut = { ctl.zoomOut() }, onIn = { ctl.zoomIn() }, onFit = { ctl.zoomFit() },
+                    modifier = Modifier.align(Alignment.BottomStart).padding(16.dp),
+                )
                 if (!loaded) CircularProgressIndicator(Modifier.align(Alignment.Center), color = c.accent)
 
                 if (hasSel) SelectionBar(
@@ -415,7 +442,12 @@ internal fun InkEditorImpl(
                     }
                 }
             }
-            if (sidePanel != null && showPanel && wide) {
+            if (bottomPanel != null && showBottom) {
+                Box(Modifier.fillMaxWidth().height(1.dp).background(c.line))
+                Box(Modifier.fillMaxWidth().fillMaxHeight(0.34f).background(c.surface)) { bottomPanel(ctl) }
+            }
+            }
+            if (sidePanel != null && showPanel && wide && !sidePanelAtStart) {
                 Box(Modifier.width(320.dp).fillMaxHeight().background(c.surface)) {
                     Box(Modifier.width(1.dp).fillMaxHeight().background(c.line))
                     Box(Modifier.padding(start = 1.dp)) { sidePanel(ctl) }
