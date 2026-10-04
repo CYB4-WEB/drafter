@@ -38,7 +38,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.rounded.TextSnippet
 import androidx.compose.material.icons.automirrored.rounded.ViewList
+import androidx.compose.material.icons.automirrored.rounded.ViewSidebar
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Draw
@@ -49,8 +51,6 @@ import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.PictureAsPdf
 import androidx.compose.material.icons.rounded.Search
-import androidx.compose.material.icons.rounded.TextSnippet
-import androidx.compose.material.icons.rounded.ViewSidebar
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -120,7 +120,6 @@ import com.daftar.app.word.pinchToZoom
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -263,7 +262,7 @@ fun OneNoteScreen(path: String) {
     // ------------------------------------------------------------------ background jobs
     val outDir = remember(path) { file.parentFile?.takeIf { it.absolutePath.startsWith(Storage.root.absolutePath) && it.canWrite() } ?: Storage.inbox() }
     val fileLabel = stringResource(R.string.one_attachment)
-    fun run(label: Int, work: suspend (Busy) -> File) {
+    fun launchJob(label: Int, work: suspend (Busy) -> File) {
         val b = Busy(label)
         busy = b
         b.job = scope.launch {
@@ -284,7 +283,7 @@ fun OneNoteScreen(path: String) {
     fun bookName() = ready?.book?.name ?: file.nameWithoutExtension
     fun exportPdf() {
         val all = ready?.pages ?: return
-        run(R.string.one_exporting) { b ->
+        launchJob(R.string.one_exporting) { b ->
             val out = Storage.uniqueFile(outDir, bookName(), "pdf")
             OneExport.pdf(all, out, fileLabel, { b.progress = it }, cancelledOf(b))
             out
@@ -292,7 +291,7 @@ fun OneNoteScreen(path: String) {
     }
     fun exportText() {
         val all = ready?.pages ?: return
-        run(R.string.one_exporting) { _ ->
+        launchJob(R.string.one_exporting) { _ ->
             val out = Storage.uniqueFile(outDir, bookName(), "txt")
             out.writeText(OneExport.text(all))
             out
@@ -303,7 +302,7 @@ fun OneNoteScreen(path: String) {
         val list = if (allPages) r.pages else listOfNotNull(r.pages.getOrNull(selected))
         if (list.isEmpty()) return
         val base = if (allPages) bookName() else (bookName() + " - " + list[0].page.title.ifBlank { ctx.getString(R.string.one_untitled) }).take(80)
-        run(R.string.one_importing) { b ->
+        launchJob(R.string.one_importing) { b ->
             val out = Storage.uniqueFile(outDir, base, Storage.NOTE_EXT)
             OneExport.note(list, out, cancelledOf(b))
             out
@@ -339,7 +338,7 @@ fun OneNoteScreen(path: String) {
                         Icon(Icons.Rounded.Search, stringResource(R.string.one_search), tint = if (finding) D.c.accent else D.c.ink)
                     }
                     if (railMode) IconButton(onClick = { railOpen = !railOpen }) {
-                        Icon(Icons.Rounded.ViewSidebar, stringResource(R.string.one_toggle_pages), tint = if (railOpen) D.c.accent else D.c.ink)
+                        Icon(Icons.AutoMirrored.Rounded.ViewSidebar, stringResource(R.string.one_toggle_pages), tint = if (railOpen) D.c.accent else D.c.ink)
                     } else IconButton(onClick = { sheet = true }) {
                         Icon(Icons.AutoMirrored.Rounded.ViewList, stringResource(R.string.one_pages), tint = D.c.ink)
                     }
@@ -356,7 +355,7 @@ fun OneNoteScreen(path: String) {
                             DropdownMenuItem({ Text(stringResource(R.string.one_export_pdf)) }, { menu = false; exportPdf() },
                                 leadingIcon = { Icon(Icons.Rounded.PictureAsPdf, null, tint = D.c.muted) })
                             DropdownMenuItem({ Text(stringResource(R.string.one_export_text)) }, { menu = false; exportText() },
-                                leadingIcon = { Icon(Icons.Rounded.TextSnippet, null, tint = D.c.muted) })
+                                leadingIcon = { Icon(Icons.AutoMirrored.Rounded.TextSnippet, null, tint = D.c.muted) })
                             val copied = stringResource(R.string.one_copied)
                             DropdownMenuItem({ Text(stringResource(R.string.one_copy_page)) }, {
                                 menu = false

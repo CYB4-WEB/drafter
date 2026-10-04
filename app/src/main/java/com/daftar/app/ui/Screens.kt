@@ -130,6 +130,7 @@ fun HomeScreen() {
                     QuickAction(Icons.Rounded.Dashboard, stringResource(R.string.new_whiteboard), Color(0xFF6366F1)) { actions.quick("whiteboard", null) }
                     QuickAction(Icons.Rounded.CreateNewFolder, stringResource(R.string.new_folder), Color(0xFF10B981)) { actions.newFolder(Storage.root) }
                     QuickAction(Icons.Rounded.FileUpload, stringResource(R.string.import_file), Color(0xFFF59E0B)) { actions.quick("import", null) }
+                    QuickAction(Icons.Rounded.DocumentScanner, stringResource(R.string.files_scan), Color(0xFF0EA5E9)) { actions.quick("scan", null) }  // files-agent hook
                     QuickAction(Icons.Rounded.Transform, stringResource(R.string.convert), Color(0xFFEF4444)) { Nav.tab(Screen.Convert()) }
                     QuickAction(Icons.Rounded.EventAvailable, stringResource(R.string.add_event), Color(0xFF8B5CF6)) { pane.push(Screen.EditEvent(null)) }
                 }
@@ -142,11 +143,13 @@ fun HomeScreen() {
                         }
                         Column(Modifier.weight(1f)) {
                             UpcomingSection(upcoming)
+                            com.daftar.app.study.StudyHomeCard()
                             if (pins.isNotEmpty()) PinnedSection(pins, actions)
                         }
                     }
                 } else {
                     UpcomingSection(upcoming)
+                    com.daftar.app.study.StudyHomeCard()
                     SubjectsSection(subjects, actions, columns = if (compact) 0 else 3)
                     if (pins.isNotEmpty()) PinnedSection(pins, actions)
                     RecentSection(recents, actions)
@@ -342,6 +345,7 @@ fun LibraryScreen(dir: String) {
                     Text(if (isRoot) stringResource(R.string.files) else folder.name, style = MaterialTheme.typography.displaySmall, color = c.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     if (!meta?.desc.isNullOrBlank()) Text(meta!!.desc, style = MaterialTheme.typography.bodyMedium, color = c.muted, maxLines = 1)
                 }
+                IconButton(onClick = { actions.quick("scan", folder) }) { Icon(Icons.Rounded.DocumentScanner, stringResource(R.string.files_scan), tint = c.ink) }  // files-agent hook
                 if (!isRoot) IconButton(onClick = { actions.menu(Storage.entry(folder)) }) { Icon(Icons.Rounded.MoreVert, stringResource(R.string.more), tint = c.ink) }
                 Box {
                     IconButton(onClick = { sortMenu = true }) { Icon(Icons.AutoMirrored.Rounded.Sort, stringResource(R.string.sort), tint = c.ink) }
@@ -593,6 +597,7 @@ fun SettingsScreen() {
                         Text(Storage.root.absolutePath, color = c.muted, style = MaterialTheme.typography.bodySmall)
                     }
                 }
+                TrashSettingsRow()  // files-agent hook: Recycle bin → Screen.Trash
                 Row(Modifier.fillMaxWidth().clickable {
                     scope.launch {
                         withContext(Dispatchers.IO) { ctx.cacheDir.listFiles()?.forEach { it.deleteRecursively() } }

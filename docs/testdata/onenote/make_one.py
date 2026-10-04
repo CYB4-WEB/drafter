@@ -192,6 +192,7 @@ PictureWidth, PictureHeight = 0x140034CD, 0x140034CE
 InkStrokeProperties, InkDimensions, InkPath = 0x20003409, 0x1C00340A, 0x1C00340B
 InkHeight, InkWidth, InkColor, InkTransparency = 0x1400340C, 0x1400340D, 0x1400340F, 0x0C003414
 InkData, InkStrokes, InkScalingX, InkScalingY = 0x20003415, 0x24003416, 0x14001C46, 0x14001C47
+InkBoundingBox = 0x1C003418
 
 # JCIDs
 jcidSectionNode, jcidPageSeriesNode, jcidPageNode = 0x00060007, 0x00060008, 0x0006000B
@@ -441,9 +442,12 @@ def page_lecture(sp, blobs):
                                                    pid(InkColor, colorref(color)), pid(InkDimensions, dims)])
         return sp.new(jcidInkStrokeNode, [pid(InkPath, isf_signed(xs + ys)), pid(InkStrokeProperties, OidRef([props]))])
     circle = [(int(1500 + 1200 * __import__('math').cos(t / 12 * 6.283)), int(1500 + 900 * __import__('math').sin(t / 12 * 6.283))) for t in range(13)]
-    s1 = stroke(circle, 0x1D4ED8, 70.0)
-    s2 = stroke([(200, 3200), (1500, 3500), (2800, 3100)], 0xDC2626, 50.0)
-    ink_data = sp.new(jcidInkDataNode, [pid(InkStrokes, OidRef([s1, s2]))])
+    # coordinates are stored relative to the InkDataNode bounding box origin (100, 200)
+    shift = lambda pts: [(x + 100, y + 200) for x, y in pts]
+    s1 = stroke(shift(circle), 0x1D4ED8, 70.0)
+    s2 = stroke(shift([(200, 3200), (1500, 3500), (2800, 3100)]), 0xDC2626, 50.0)
+    ink_data = sp.new(jcidInkDataNode, [pid(InkStrokes, OidRef([s1, s2])),
+                                        pid(InkBoundingBox, struct.pack('<iiii', 100, 200, 3000, 3800))])
     ink = sp.new(jcidInkContainer, [pid(OffH, f32(15.0)), pid(OffV, f32(7.0)), pid(InkData, OidRef([ink_data])),
                                     pid(InkScalingX, f32(1.0)), pid(InkScalingY, f32(1.0))])
 

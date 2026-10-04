@@ -104,6 +104,7 @@ fun kindIcon(k: Kind): ImageVector = when (k) {
     Kind.TEXT -> Icons.AutoMirrored.Rounded.Article
     Kind.IMAGE -> Icons.Rounded.Image
     Kind.AUDIO -> Icons.Rounded.Mic
+    Kind.ONENOTE -> Icons.AutoMirrored.Rounded.MenuBook
     Kind.OTHER -> Icons.Rounded.InsertDriveFile
 }
 
@@ -116,6 +117,7 @@ fun kindColor(k: Kind): Color = when (k) {
     Kind.TEXT -> Color(0xFF10B981)
     Kind.IMAGE -> Color(0xFF3F8F5B)
     Kind.AUDIO -> Color(0xFF8B5CF6)
+    Kind.ONENOTE -> Color(0xFF7719AA)
     else -> Color(0xFF5E6B78)
 }
 

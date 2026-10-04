@@ -30,6 +30,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -97,6 +98,7 @@ fun typeLabel(kind: Kind, ext: String?): String {
         kind == Kind.NOTE -> "NOTE"
         kind == Kind.PDF -> "PDF"
         kind == Kind.PPTX -> "PPTX"
+        kind == Kind.ONENOTE -> "ONE"
         e == "doc" -> "DOC"
         kind == Kind.DOCX -> "DOCX"
         e == "markdown" -> "MD"
@@ -171,6 +173,7 @@ fun kindLabel(k: Kind): String = when (k) {
     Kind.TEXT -> stringResource(R.string.kind_text)
     Kind.IMAGE -> stringResource(R.string.kind_image)
     Kind.AUDIO -> stringResource(R.string.kind_audio)
+    Kind.ONENOTE -> stringResource(R.string.kind_onenote)
     Kind.OTHER -> stringResource(R.string.kind_file)
 }
 
@@ -185,6 +188,31 @@ fun FolderTile(e: Entry, onClick: () -> Unit, onLong: () -> Unit) {
     val c = D.c
     val m = e.meta ?: FolderMeta()
     val count = remember(e.file, Storage.version) { Storage.countItems(e.file) }
+    val cover = com.daftar.app.ui.files.rememberCover(e.file)
+    if (cover != null) {
+        // picture header (16:9) with a folder-colour accent line and the icon chip overlapping its lower edge
+        val col = folderColor(m.color)
+        Column(Modifier.fillMaxWidth().card(c).clip(RoundedCornerShape(16.dp)).fileItemGestures(e.file, onClick, onLong)) {
+            Box(Modifier.fillMaxWidth()) {
+                Column {
+                    com.daftar.app.ui.files.CoverImage(cover, Modifier.fillMaxWidth().aspectRatio(16f / 9f))
+                    Box(Modifier.fillMaxWidth().height(3.dp).background(col))
+                }
+                if (e.file.absolutePath in Storage.pins) Box(Modifier.align(Alignment.TopEnd).padding(8.dp).size(26.dp).background(c.surface, CircleShape),
+                    contentAlignment = Alignment.Center) { Icon(Icons.Rounded.PushPin, null, tint = c.muted, modifier = Modifier.size(14.dp)) }
+                Box(Modifier.align(Alignment.BottomStart).padding(start = 14.dp).offset(y = 18.dp).size(38.dp)
+                    .border(2.dp, c.surface, RoundedCornerShape(11.dp)).padding(2.dp).background(col, RoundedCornerShape(9.dp)),
+                    contentAlignment = Alignment.Center) {
+                    Icon(studyIcon(m.icon), null, tint = Color.White, modifier = Modifier.size(20.dp))
+                }
+            }
+            Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 14.dp, top = 24.dp)) {
+                Text(e.name, style = MaterialTheme.typography.titleMedium, color = c.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(stringResource(R.string.items_count, count), style = MaterialTheme.typography.bodySmall, color = c.muted)
+            }
+        }
+        return
+    }
     Column(
         Modifier.fillMaxWidth().card(c).clip(RoundedCornerShape(16.dp))
             .fileItemGestures(e.file, onClick, onLong).padding(16.dp),
@@ -200,6 +228,17 @@ fun FolderTile(e: Entry, onClick: () -> Unit, onLong: () -> Unit) {
     }
 }
 
+/** Folder mark for rows: the folder picture as a small rounded thumbnail (folder-colour ring), else the [FolderGlyph]. */
+@Composable
+fun FolderThumb(e: Entry, size: Dp) {
+    val cover = com.daftar.app.ui.files.rememberCover(e.file)
+    val m = e.meta ?: FolderMeta()
+    if (cover == null) { FolderGlyph(m.color, m.icon, size); return }
+    Box(Modifier.size(size).clip(RoundedCornerShape(size * 0.28f)).border(1.5.dp, folderColor(m.color), RoundedCornerShape(size * 0.28f))) {
+        com.daftar.app.ui.files.CoverImage(cover, Modifier.matchParentSize())
+    }
+}
+
 @Composable
 fun EntryRow(e: Entry, onClick: () -> Unit, onLong: () -> Unit, showParent: Boolean = true) {
     val c = D.c
@@ -208,7 +247,7 @@ fun EntryRow(e: Entry, onClick: () -> Unit, onLong: () -> Unit, showParent: Bool
             .padding(horizontal = 8.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (e.kind == Kind.FOLDER) FolderGlyph(e.meta?.color ?: 6, e.meta?.icon ?: "folder", 36.dp) else FileBadge(e.kind, 36.dp, e.ext)
+        if (e.kind == Kind.FOLDER) FolderThumb(e, 36.dp) else FileBadge(e.kind, 36.dp, e.ext)
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
             Text(e.name, style = MaterialTheme.typography.bodyLarge, color = c.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -266,13 +305,15 @@ class Actions internal constructor() {
     internal var pickTarget by mutableStateOf<String?>(null)              // action awaiting a destination folder
     internal var target: File? = null
     internal var busy by mutableStateOf(false)
+    internal var historyFor by mutableStateOf<Entry?>(null)               // note version history dialog
+    internal var undo by mutableStateOf<com.daftar.app.data.TrashItem?>(null)  // "moved to bin" snackbar
 
     fun menu(e: Entry) { menuFor = e }
     fun create(dir: File) { createIn = dir }
     fun newFolder(parent: File) { editFolder = parent to null }
     /**
      * Run a quick action in [dir], or ask for a folder first when null. Keys: "note", "whiteboard", "folder",
-     * "import" (Files / Folder choice), "import_files", "import_folder", "pdf" (images → PDF).
+     * "import" (Files / Folder choice), "import_files", "import_folder", "pdf" (images → PDF), "scan" (document scanner).
      */
     fun quick(action: String, dir: File?) { if (dir == null) pickTarget = action else { target = dir; pending = action } }
     internal var pending by mutableStateOf<String?>(null)
@@ -336,6 +377,8 @@ private fun ActionsHost(a: Actions) {
         }
     }
 
+    val scanner = com.daftar.app.ui.files.rememberDocumentScanner(onBusy = { a.busy = it }) { f -> nav.open(ctx, f) }
+
     // run a pending quick action once its target is known
     LaunchedEffect(a.pending) {
         val act = a.pending ?: return@LaunchedEffect
@@ -349,6 +392,7 @@ private fun ActionsHost(a: Actions) {
             "import_folder" -> runCatching { folderImporter.launch(null) }.onFailure { toast(ctx, ctx.getString(R.string.no_app_found)) }
             "pdf" -> imagePicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
             "folder" -> a.editFolder = dir to null
+            "scan" -> scanner(dir)
         }
     }
 
@@ -362,6 +406,9 @@ private fun ActionsHost(a: Actions) {
                 SheetItem(Icons.Rounded.FileUpload, stringResource(R.string.import_files)) { a.createIn = null; a.quick("import_files", dir) }
                 SheetItem(Icons.Rounded.DriveFolderUpload, stringResource(R.string.ws_import_folder_action)) { a.createIn = null; a.quick("import_folder", dir) }
                 SheetItem(Icons.Rounded.PictureAsPdf, stringResource(R.string.images_to_pdf)) { a.createIn = null; a.quick("pdf", dir) }
+                SheetItem(Icons.Rounded.DocumentScanner, stringResource(R.string.files_scan_document), stringResource(R.string.files_scan_document_desc)) {
+                    a.createIn = null; a.quick("scan", dir)
+                }
             }
         }
     }
@@ -410,6 +457,7 @@ private fun ActionsHost(a: Actions) {
                     SheetItem(Icons.Rounded.Share, stringResource(R.string.share)) { a.menuFor = null; shareFiles(ctx, listOf(e.file)) }
                     if (e.kind != Kind.NOTE) SheetItem(Icons.AutoMirrored.Rounded.OpenInNew, stringResource(R.string.open_externally)) { a.menuFor = null; openExternally(ctx, e.file) }
                 }
+                if (e.kind == Kind.NOTE) SheetItem(Icons.Rounded.History, stringResource(R.string.files_version_history)) { a.menuFor = null; a.historyFor = e }
                 SheetItem(Icons.Rounded.PushPin, stringResource(if (pinned) R.string.unpin else R.string.pin)) { a.menuFor = null; Storage.togglePin(e.file) }
                 SheetItem(Icons.Rounded.DeleteOutline, stringResource(R.string.delete), danger = true) { a.menuFor = null; a.deleteFor = e }
             }
@@ -424,9 +472,25 @@ private fun ActionsHost(a: Actions) {
     }
 
     a.deleteFor?.let { e ->
-        ConfirmDialog(stringResource(R.string.delete), stringResource(R.string.delete_confirm, e.name), stringResource(R.string.delete), danger = true,
-            onDismiss = { a.deleteFor = null }) { a.deleteFor = null; Storage.delete(e.file) }
+        ConfirmDialog(stringResource(R.string.files_trash_move_title), stringResource(R.string.files_trash_move_text, e.name), stringResource(R.string.files_trash_move),
+            danger = true, onDismiss = { a.deleteFor = null }) {
+            a.deleteFor = null
+            val item = Storage.delete(e.file)
+            if (item == null) toast(ctx, ctx.getString(R.string.files_trash_failed)) else a.undo = item
+        }
     }
+
+    a.historyFor?.let { e ->
+        com.daftar.app.ui.files.VersionHistoryDialog(e.file, onDismiss = { a.historyFor = null }) { f -> nav.open(ctx, f) }
+    }
+
+    a.undo?.let { item -> UndoBar(item, onUndo = {
+        a.undo = null
+        scope.launch {
+            val f = withContext(Dispatchers.IO) { com.daftar.app.data.Trash.restore(item) }
+            if (f == null) toast(ctx, ctx.getString(R.string.files_restore_failed))
+        }
+    }) { if (a.undo === item) a.undo = null } }
 
     a.moveFor?.let { e ->
         FolderPickerDialog(stringResource(R.string.move_to), exclude = e.file, onDismiss = { a.moveFor = null }) { dir ->
@@ -446,6 +510,28 @@ private fun ActionsHost(a: Actions) {
 private fun Dialog(content: @Composable () -> Unit) {
     androidx.compose.ui.window.Dialog(onDismissRequest = {}) {
         Box(Modifier.size(96.dp).background(D.c.surface, RoundedCornerShape(20.dp)), contentAlignment = Alignment.Center) { content() }
+    }
+}
+
+/** Snackbar-style bar "“X” moved to the recycle bin · Undo", bottom centre, gone after 6 s. Not focusable. */
+@Composable
+private fun UndoBar(item: com.daftar.app.data.TrashItem, onUndo: () -> Unit, onTimeout: () -> Unit) {
+    val c = D.c
+    LaunchedEffect(item.id) { kotlinx.coroutines.delay(6000); onTimeout() }
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    androidx.compose.ui.window.Popup(
+        alignment = Alignment.BottomCenter,
+        offset = androidx.compose.ui.unit.IntOffset(0, -with(density) { 96.dp.roundToPx() }),
+        properties = androidx.compose.ui.window.PopupProperties(focusable = false),
+    ) {
+        Row(Modifier.padding(horizontal = 16.dp).widthIn(max = 560.dp).background(c.ink, RoundedCornerShape(12.dp))
+            .padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            val name = if (item.kindEnum == Kind.FOLDER) item.name else File(item.name).nameWithoutExtension
+            Text(stringResource(R.string.files_trash_moved, name), color = c.bg, style = MaterialTheme.typography.bodyMedium,
+                maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+            Spacer(Modifier.width(8.dp))
+            TextButton(onClick = onUndo) { Text(stringResource(R.string.files_undo), color = c.accent.let { lerp(it, c.bg, 0.35f) }) }
+        }
     }
 }
 
@@ -509,6 +595,21 @@ fun FolderDialog(parent: File, existing: Entry?, onDismiss: () -> Unit, onDone: 
     var color by remember { mutableIntStateOf(m0.color) }
     var icon by remember { mutableStateOf(m0.icon) }
     var course by remember { mutableStateOf(existing == null && Storage.isRoot(parent)) }
+    // folder picture: a newly prepared bitmap (written on save), or removal of the existing one
+    val existingCover = existing?.let { com.daftar.app.ui.files.rememberCover(it.file) }
+    var coverUri by remember { mutableStateOf<Uri?>(null) }
+    var coverWide by remember { mutableStateOf(true) }
+    var newCover by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+    var removeCover by remember { mutableStateOf(false) }
+    var saved by remember { mutableStateOf(false) }
+    LaunchedEffect(coverUri, coverWide) {
+        val u = coverUri ?: return@LaunchedEffect
+        val b = withContext(Dispatchers.IO) { com.daftar.app.ui.files.Covers.prepare(ctx, u, coverWide) }
+        if (b == null) { coverUri = null; toast(ctx, ctx.getString(R.string.files_cover_failed)) }
+        else { newCover?.recycle(); newCover = b; removeCover = false }
+    }
+    DisposableEffect(Unit) { onDispose { if (!saved) newCover?.recycle() } }
+    val coverPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { u: Uri? -> if (u != null) coverUri = u }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(if (existing == null) R.string.new_folder else R.string.edit_folder)) },
@@ -540,6 +641,37 @@ fun FolderDialog(parent: File, existing: Entry?, onDismiss: () -> Unit, onDone: 
                         }
                     }
                 }
+                Spacer(Modifier.height(16.dp))
+                Text(stringResource(R.string.files_cover), style = MaterialTheme.typography.labelMedium, color = c.muted)
+                val nb = newCover
+                val shown = if (nb != null) remember(nb) { nb.asImageBitmap() } else if (!removeCover) existingCover else null
+                Spacer(Modifier.height(8.dp))
+                if (shown != null) {
+                    val square = nb != null && !coverWide
+                    Box(Modifier.fillMaxWidth(if (square) 0.55f else 1f).clip(RoundedCornerShape(12.dp)).border(1.dp, c.line, RoundedCornerShape(12.dp))) {
+                        Column {
+                            androidx.compose.foundation.Image(shown, null, Modifier.fillMaxWidth().aspectRatio(if (square) 1f else 16f / 9f),
+                                contentScale = androidx.compose.ui.layout.ContentScale.Crop)
+                            Box(Modifier.fillMaxWidth().height(3.dp).background(folderColor(color)))
+                        }
+                        Box(Modifier.align(Alignment.BottomStart).padding(10.dp).size(34.dp).background(folderColor(color), RoundedCornerShape(9.dp)),
+                            contentAlignment = Alignment.Center) { Icon(studyIcon(icon), null, tint = Color.White, modifier = Modifier.size(18.dp)) }
+                    }
+                    if (coverUri != null) Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Chip(stringResource(R.string.files_cover_wide), coverWide, { coverWide = true })
+                        Chip(stringResource(R.string.files_cover_square), !coverWide, { coverWide = false })
+                    }
+                } else Text(stringResource(R.string.files_cover_none), style = MaterialTheme.typography.bodySmall, color = c.muted)
+                Row(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    TextButton(onClick = { coverPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }) {
+                        Icon(Icons.Rounded.AddPhotoAlternate, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp))
+                        Text(stringResource(if (shown != null) R.string.files_cover_change else R.string.files_cover_choose))
+                    }
+                    if (shown != null) TextButton(onClick = { newCover?.recycle(); newCover = null; coverUri = null; removeCover = true }) {
+                        Icon(Icons.Rounded.HideImage, null, Modifier.size(18.dp), tint = c.danger); Spacer(Modifier.width(6.dp))
+                        Text(stringResource(R.string.files_cover_remove), color = c.danger)
+                    }
+                }
                 if (existing == null) {
                     Spacer(Modifier.height(12.dp))
                     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable { course = !course }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -555,11 +687,16 @@ fun FolderDialog(parent: File, existing: Entry?, onDismiss: () -> Unit, onDone: 
                 val meta = FolderMeta(color, icon, desc.trim())
                 if (existing == null) {
                     val subs = if (course) listOf(ctx.getString(R.string.lectures) to "lecture", ctx.getString(R.string.seminars) to "seminar", ctx.getString(R.string.labs) to "lab") else emptyList()
-                    onDone(Storage.createFolder(parent, name.trim(), meta, subs))
+                    val d = Storage.createFolder(parent, name.trim(), meta, subs)
+                    newCover?.let { saved = true; com.daftar.app.ui.files.Covers.saveAsync(it, d) }
+                    onDone(d)
                 } else {
                     var f = existing.file
                     if (name.trim() != existing.name) f = Storage.rename(f, name.trim()) ?: f
                     Storage.setMeta(f, meta)
+                    val nc = newCover
+                    if (nc != null) { saved = true; com.daftar.app.ui.files.Covers.saveAsync(nc, f) }
+                    else if (removeCover) com.daftar.app.ui.files.Covers.remove(f)
                     onDone(f)
                 }
             }) { Text(stringResource(if (existing == null) R.string.create else R.string.save)) }

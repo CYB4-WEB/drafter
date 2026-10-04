@@ -286,6 +286,7 @@ fun Route(s: Screen) {
         is Screen.Slides -> SlidesScreen(s.path)
         is Screen.Word -> WordScreen(s.path)
         is Screen.Image -> ImageScreen(s.path)
+        is Screen.OneNote -> com.daftar.app.onenote.OneNoteScreen(s.path)
         is Screen.EditEvent -> EditEventScreen(s.id, s.presetType)
         is Screen.Web -> WebScreen(s.url)
         is Screen.Convert -> com.daftar.app.convert.ConvertScreen(s.path)

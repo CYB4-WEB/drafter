@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Study: flashcards, spaced repetition, focus timer (study-agent). -->
+<resources>
+    <string name="study_title">Study</string>
+    <string name="study_open">Open</string>
+    <string name="study_general">General</string>
+    <string name="study_decks">Decks</string>
+    <string name="study_deck">Deck</string>
+    <string name="study_front">Front</string>
+    <string name="study_back">Back</string>
+    <string name="study_make_card">Make flashcard</string>
+    <string name="study_new_card">New card</string>
+    <string name="study_edit_card">Edit card</string>
+    <string name="study_save">Save</string>
+    <string name="study_save_another">Save &amp; make another</string>
+    <string name="study_saved">Flashcard saved</string>
+    <string name="study_front_empty">Add something to the front first</string>
+    <string name="study_back_empty">Add an answer, draw it, or choose \"Lasso later\"</string>
+    <string name="study_mode_type">Type</string>
+    <string name="study_mode_draw">Draw</string>
+    <string name="study_mode_later">Lasso later</string>
+    <string name="study_include_image">Image</string>
+    <string name="study_later_hint">Save now and lasso the answer in your note later: select it with the lasso, tap \"Make flashcard\" and choose this card.</string>
+    <string name="study_remove_image">Remove image</string>
+    <string name="study_drawing_replaces">Your drawing replaces the image on this side.</string>
+    <string name="study_text">Text</string>
+    <string name="study_text_optional">Text (optional)</string>
+    <string name="study_draw_hint">Write the answer here</string>
+    <string name="study_undo">Undo</string>
+    <string name="study_clear">Clear</string>
+    <string name="study_use_as_answer">Use this selection as the answer for</string>
+    <string name="study_use">Use</string>
+    <string name="study_answer_added">Answer added to the card</string>
+    <string name="study_untitled_card">Card without text</string>
+    <string name="study_image_card">Image card</string>
+    <string name="study_drawn_answer">Drawn answer</string>
+    <string name="study_answer_needed">Answer needed</string>
+    <string name="study_new">New</string>
+    <string name="study_due_now">Due now</string>
+    <string name="study_due_in">Due in %1$s</string>
+    <string name="study_n_due">%1$d due</string>
+    <string name="study_iv_min">%1$dm</string>
+    <string name="study_iv_hour">%1$dh</string>
+    <string name="study_iv_day">%1$dd</string>
+    <string name="study_iv_month">%1$smo</string>
+    <string name="study_iv_year">%1$sy</string>
+    <string name="study_review">Review</string>
+    <string name="study_review_all">Review all due</string>
+    <string name="study_review_n">Review (%1$d)</string>
+    <string name="study_all_due">All due cards</string>
+    <string name="study_search_hint">Search flashcards</string>
+    <string name="study_no_results">No cards match</string>
+    <string name="study_no_cards">No flashcards yet. Lasso part of a note and tap \"Make flashcard\", or add one here.</string>
+    <string name="study_no_cards_deck">No cards in this deck yet</string>
+    <string name="study_reset">Reset progress</string>
+    <string name="study_delete">Delete</string>
+    <string name="study_delete_title">Delete this card?</string>
+    <string name="study_delete_text">The card and its review history will be removed.</string>
+    <string name="study_open_in_note">Open in note</string>
+    <string name="study_source_missing">The original file was moved or deleted</string>
+    <string name="study_streak">%1$d-day streak</string>
+    <string name="study_focus_today">%1$d min focus today</string>
+    <!-- review -->
+    <string name="study_show_answer">Show answer</string>
+    <string name="study_again">Again</string>
+    <string name="study_hard">Hard</string>
+    <string name="study_good">Good</string>
+    <string name="study_easy">Easy</string>
+    <string name="study_left">%1$d left</string>
+    <string name="study_review_hint">Tap or Space to flip · 1–4 to grade · swipe right = Good, left = Again</string>
+    <string name="study_no_answer_yet">No answer yet. Open the note and lasso it.</string>
+    <string name="study_caught_up">All caught up — nothing is due right now</string>
+    <string name="study_practice_all">Practise all cards</string>
+    <string name="study_done">Done</string>
+    <string name="study_session_done">Session complete</string>
+    <string name="study_minutes_short">%1$d min</string>
+    <string name="study_next_due">Next card due in %1$s</string>
+    <string name="study_more_due">More cards are due — come back after a short break</string>
+    <!-- focus timer -->
+    <string name="study_focus">Focus</string>
+    <string name="study_focus_timer">Focus timer</string>
+    <string name="study_timer_settings">Timer settings</string>
+    <string name="study_phase_focus">Focus</string>
+    <string name="study_phase_short">Short break</string>
+    <string name="study_phase_long">Long break</string>
+    <string name="study_ready">Ready</string>
+    <string name="study_paused">Paused</string>
+    <string name="study_start">Start</string>
+    <string name="study_start_focus">Start focus</string>
+    <string name="study_pause">Pause</string>
+    <string name="study_resume">Resume</string>
+    <string name="study_skip">Skip</string>
+    <string name="study_stop">Stop</string>
+    <string name="study_timer_summary">Focus %1$d min · break %2$d min · long break %3$d min every %4$d</string>
+    <string name="study_focus_len">Focus</string>
+    <string name="study_short_len">Short break</string>
+    <string name="study_long_len">Long break</string>
+    <string name="study_long_every">Long break after (focus blocks)</string>
+    <string name="study_defaults">Reset</string>
+    <string name="study_auto_start">Start the next phase automatically</string>
+    <string name="study_auto_start_desc">Breaks and focus blocks follow each other until you stop</string>
+    <string name="study_dnd">Do Not Disturb while focusing</string>
+    <string name="study_dnd_desc">Only priority notifications during focus blocks</string>
+    <string name="study_dnd_ask">Daftar needs \"Do Not Disturb access\" to silence notifications while you focus. Open the system settings and allow Daftar?</string>
+    <string name="study_open_settings">Open settings</string>
+    <string name="study_ch_timer">Focus timer</string>
+    <string name="study_ch_alert">Focus timer alerts</string>
+    <string name="study_ch_daily">Flashcard reminders</string>
+    <string name="study_notif_until">Until %1$s</string>
+    <string name="study_notif_paused">Paused · %1$s left</string>
+    <string name="study_notif_focus_done">Focus block done — well done!</string>
+    <string name="study_notif_break_done">Break is over</string>
+    <string name="study_notif_next_running">%1$s started (%2$s)</string>
+    <string name="study_notif_next_ready">Tap to start: %1$s</string>
+    <string name="study_notif_due_text">A few minutes of review keeps them fresh</string>
+    <!-- stats -->
+    <string name="study_stats">Study stats</string>
+    <string name="study_today">Today</string>
+    <string name="study_this_week">This week</string>
+    <string name="study_focused">Focused</string>
+    <string name="study_reviewed">Cards reviewed</string>
+    <string name="study_streak_label">Streak</string>
+    <string name="study_last_7_days">Last 7 days</string>
+    <string name="study_no_focus_yet">No focus time yet — start a timer and pick a subject</string>
+    <!-- settings -->
+    <string name="study_daily_reminder">Daily review reminder</string>
+    <string name="study_daily_reminder_desc">At %1$s, when flashcards are due</string>
+    <string name="study_reminder_time">Reminder time</string>
+
+    <plurals name="study_n_cards">
+        <item quantity="one">%d card</item>
+        <item quantity="other">%d cards</item>
+    </plurals>
+    <plurals name="study_n_cards_due">
+        <item quantity="one">%d card due</item>
+        <item quantity="other">%d cards due</item>
+    </plurals>
+    <plurals name="study_n_days">
+        <item quantity="one">%d day</item>
+        <item quantity="other">%d days</item>
+    </plurals>
+    <plurals name="study_n_reviewed">
+        <item quantity="one">%d card reviewed</item>
+        <item quantity="other">%d cards reviewed</item>
+    </plurals>
+</resources>

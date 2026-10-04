@@ -9,7 +9,7 @@ import java.util.zip.Inflater
 
 /**
  * Minimal Microsoft Cabinet reader for OneNote packages (.onepkg). Supports stored and MSZIP folders (raw deflate per
- * CFDATA block, the previous 32 KB of output as preset dictionary). LZX / Quantum folders raise
+ * CFDATA block, the previous 32 KB of output as preset dictionary) and LZX folders ([Lzx]). Quantum folders raise
  * [OneError.PACKAGE_COMPRESSION]. Pure JVM; never trusts sizes from the file.
  */
 object Cab {
@@ -102,7 +102,21 @@ object Cab {
                 val files = wanted.filter { it.folder == fi }.sortedBy { it.offset }
                 if (files.isEmpty()) continue
                 val type = folder.type and 0xF
-                if (type != 0 && type != 1) throw OneException(OneError.PACKAGE_COMPRESSION, "cab compression $type")
+                if (type != 0 && type != 1 && type != 3) throw OneException(OneError.PACKAGE_COMPRESSION, "cab compression $type")
+                // CFDATA blocks of the folder: payload offset, compressed and uncompressed size
+                val blocks = ArrayList<LongArray>()
+                r.seek(folder.dataStart)
+                for (b in 0 until folder.blocks) {
+                    r.u32()                              // checksum (not verified: optional in practice)
+                    val cbData = r.u16(); val cbUncomp = r.u16()
+                    r.seek(r.filePointer + arc.dataReserve)
+                    if (r.filePointer + cbData > r.length()) throw OneException(OneError.CORRUPT, "cab: block past end")
+                    blocks.add(longArrayOf(r.filePointer, cbData.toLong(), cbUncomp.toLong()))
+                    r.seek(r.filePointer + cbData)
+                }
+                fun payload(b: LongArray): ByteArray { val d = ByteArray(b[1].toInt()); r.seek(b[0]); r.readFully(d); return d }
+                var next = 0
+                val lzx = if (type == 3) Lzx((folder.type shr 8) and 0x1F) { blocks.getOrNull(next++)?.let { payload(it) } } else null
                 val targets = files.map { e -> e to File(outDir, safeName(e.name)) }
                 val streams = HashMap<Entry, OutputStream>()
                 try {
@@ -113,21 +127,17 @@ object Cab {
                     val endNeeded = files.maxOf { it.offset + it.size }
                     var pos = 0L
                     var hist = ByteArray(0)
-                    r.seek(folder.dataStart)
-                    for (b in 0 until folder.blocks) {
+                    for (b in blocks) {
                         if (pos >= endNeeded) break
                         if (cancelled()) throw InterruptedException()
-                        r.u32()                          // checksum (not verified: optional in practice)
-                        val cbData = r.u16(); val cbUncomp = r.u16()
-                        r.seek(r.filePointer + arc.dataReserve)
-                        if (r.filePointer + cbData > r.length()) throw OneException(OneError.CORRUPT, "cab: block past end")
-                        val data = ByteArray(cbData)
-                        r.readFully(data)
-                        val out = if (type == 0) data else mszip(data, cbUncomp, hist)
-                        if (type == 1) hist = tail(hist, out)
+                        val out = when (type) {
+                            0 -> payload(b)
+                            1 -> mszip(payload(b), b[2].toInt(), hist).also { hist = tail(hist, it) }
+                            else -> lzx!!.frame(b[2].toInt())
+                        }
                         for (e in files) {
-                            val s = maxOf(e.offset, pos); val t = minOf(e.offset + e.size, pos + out.size)
-                            if (s < t) streams[e]?.write(out, (s - pos).toInt(), (t - s).toInt())
+                            val s0 = maxOf(e.offset, pos); val t = minOf(e.offset + e.size, pos + out.size)
+                            if (s0 < t) streams[e]?.write(out, (s0 - pos).toInt(), (t - s0).toInt())
                         }
                         pos += out.size
                     }

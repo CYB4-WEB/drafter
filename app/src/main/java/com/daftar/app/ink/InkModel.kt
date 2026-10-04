@@ -54,6 +54,17 @@ class Stroke(
     @Transient var bbox: RectF? = null
     /** Tape only: shown see-through in the editor (self-quiz). Never saved, never exported. */
     @Transient var revealed: Boolean = false
+    /**
+     * Offset of [geom] relative to [pts]: a whiteboard growth shift shares the already built geometry instead of copying
+     * every Path; [InkRender] draws the geometry translated by (gdx, gdy).
+     */
+    @Transient var gdx: Float = 0f
+    @Transient var gdy: Float = 0f
+    /** Stable identity shared by shifted copies of this stroke (render caches survive whiteboard growth). */
+    @Transient private var ident: Any? = null
+
+    /** Identity token: the same for this stroke and every [shifted] copy of it. Main thread only. */
+    fun identity(): Any = ident ?: Any().also { ident = it }
 
     val isTape get() = tool == Tool.TAPE
 
@@ -78,16 +89,20 @@ class Stroke(
         val n = pts.copyOf()
         var i = 0
         while (i < n.size) { n[i] += dx; n[i + 1] += dy; i += 3 }
+        val id = identity()
         return Stroke(tool, color, width, n, rec, t, style).also { s ->
-            s.geom = geom?.offsetCopy(dx, dy)
+            val g = geom
+            if (g != null && g.finished) { s.geom = g; s.gdx = gdx + dx; s.gdy = gdy + dy }
             bbox?.let { b -> s.bbox = RectF(b).apply { offset(dx, dy) } }
             s.revealed = revealed
+            s.ident = id
         }
     }
 
-    fun withColor(c: Int) = Stroke(tool, c, width, pts, rec, t, style)
+    /** Same points in another colour (geometry does not depend on colour, so it is shared). */
+    fun withColor(c: Int) = Stroke(tool, c, width, pts, rec, t, style).also { it.geom = geom; it.gdx = gdx; it.gdy = gdy; it.bbox = bbox }
 
-    fun withTime(recId: Int, time: Long) = Stroke(tool, color, width, pts, recId, time, style).also { it.geom = geom; it.bbox = bbox }
+    fun withTime(recId: Int, time: Long) = Stroke(tool, color, width, pts, recId, time, style).also { it.geom = geom; it.gdx = gdx; it.gdy = gdy; it.bbox = bbox }
 }
 
 @Serializable

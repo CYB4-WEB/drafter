@@ -279,7 +279,7 @@ internal object StudyAlarms {
     }
 }
 
-/** Timer phase ends, notification actions, the daily "cards due" reminder and re-arming after reboot. */
+/** Timer phase ends, notification actions and the daily "cards due" reminder (not exported: only our PendingIntents reach it). */
 class StudyReceiver : BroadcastReceiver() {
     override fun onReceive(c: Context, i: Intent) {
         when (i.action) {
@@ -292,6 +292,14 @@ class StudyReceiver : BroadcastReceiver() {
                 if (StudyPrefs.dailyReminder) StudyNotify.due(c.applicationContext, Flashcards.dueCount())
                 StudyAlarms.scheduleDaily(c.applicationContext)
             }
+        }
+    }
+}
+
+/** System broadcasts only (boot, app update, clock / time-zone change): re-arm the timer alarm and the daily reminder. */
+class StudyBootReceiver : BroadcastReceiver() {
+    override fun onReceive(c: Context, i: Intent) {
+        when (i.action) {
             Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED, Intent.ACTION_TIME_CHANGED, Intent.ACTION_TIMEZONE_CHANGED -> {
                 FocusTimer.restore()
                 StudyAlarms.scheduleDaily(c.applicationContext)

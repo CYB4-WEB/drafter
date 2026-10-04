@@ -51,3 +51,21 @@ Outside edits (allowed list): `Kind.ONENOTE` in Storage.kt, kindIcon/kindColor/t
 `Screen.OneNote` + screenFor + Screen.file in Nav.kt, MainActivity.Route, manifest mime types.
 
 ## Progress
+- Research: confirmed my MS-ONESTORE / MS-ONE constants against two public implementations (Apache Tika's
+  `OneNotePropertyEnum` / `FndStructureConstants`, and the `onenote_parser` crate's ink property ids + MS-ISF multi-byte
+  decoding). Downloaded Apache Tika's public OneNote test documents (8 real files, OneNote 2013/2016 + one Office 365 cloud
+  file) into my scratchpad for verification only (not committed).
+- `OneModel.kt`, `OneStore.kt` (revision store), `OneDoc.kt` (MS-ONE), `Cab.kt`, `OneLoader.kt` written — pure JVM.
+  `docs/testdata/onenote/run_parser.sh` compiles them with the Kotlin compiler shipped in the Gradle distribution and runs
+  `OneDump.kt`; first run on the real files already produced correct titles, outlines and text.
+- Fixes from real files: image nodes carry OCR text in RichEditTextUnicode (now dispatched by JCID first); title offset is
+  relative to the title node.
+- `make_one.py` generator: sample.one (3 pages incl. sub-page + Arabic RTL page; runs, link field code, bullets, nested
+  numbered list, bordered table, PNG, ink, attachment), lab.one, encrypted.one, toc.onetoc2, corrupt.one, sample.onepkg
+  (MSZIP) and sample_stored.onepkg — all parse as expected (two bugs found & fixed: Entry identity across CAB reads,
+  stale extraction cache marker).
+- Android side: `OneImages.kt` (byte-bounded LruCache), `OneLayout.kt` (StaticLayout page layout + drawing for PDF /
+  note import), `OneExport.kt` (PDF, text, Daftar note, attachments), `OneCanvas.kt` (Compose page canvas, selectable),
+  `OneNoteScreen.kt` (rail/sheet, search, zoom, menus, dialogs, errors), strings en + ar.
+- Outside edits applied (see list below); compile shows no errors in my files (other agents' files currently fail:
+  study/*, ink/PaperTemplates.kt, LibraryParts FolderThumb — not mine).

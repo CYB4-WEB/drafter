@@ -77,6 +77,7 @@ internal object P {
     const val InkTransparency = 0x0C003414L
     const val InkData = 0x20003415L
     const val InkStrokes = 0x24003416L
+    const val InkBoundingBox = 0x1C003418L
 }
 
 /** JCID indexes ([MS-ONE] 2.1.13), low 16 bits. */
@@ -424,14 +425,18 @@ private class SectionBuilder(val store: OneStore) {
             val data = space.props(container.oid(P.InkData)) ?: return null
             val sx = container.f32(P.InkScalingX)?.takeIf { it > 0f && it < 1000f } ?: 1f
             val sy = container.f32(P.InkScalingY)?.takeIf { it > 0f && it < 1000f } ?: sx
+            // Stroke coordinates are relative to the ink data's bounding box origin (as OneNote and one2html place them).
+            val bb = data.bytes(P.InkBoundingBox)?.takeIf { it.size >= 16 }
+            val ox = bb?.let { PropSet.le32(it, 0).toInt() } ?: 0
+            val oy = bb?.let { PropSet.le32(it, 4).toInt() } ?: 0
             val strokes = ArrayList<OneStroke>()
             for (sid in data.oids(P.InkStrokes)) {
-                try { stroke(sid, sx, sy)?.let { strokes.add(it) } } catch (e: Exception) { }
+                try { stroke(sid, sx, sy, ox, oy)?.let { strokes.add(it) } } catch (e: Exception) { }
             }
             return if (strokes.isEmpty()) null else OneInk(strokes)
         }
 
-        private fun stroke(id: XG, sx: Float, sy: Float): OneStroke? {
+        private fun stroke(id: XG, sx: Float, sy: Float, ox: Int, oy: Int): OneStroke? {
             val sp = space.props(id) ?: return null
             val path = decodeIsfSigned(sp.bytes(P.InkPath) ?: return null)
             val props = space.props(sp.oid(P.InkStrokeProperties))
@@ -446,8 +451,8 @@ private class SectionBuilder(val store: OneStore) {
             var x = 0L; var y = 0L
             for (i in 0 until count) {
                 x += path[ix * count + i]; y += path[iy * count + i]
-                pts[i * 2] = x * sx * HIMETRIC
-                pts[i * 2 + 1] = y * sy * HIMETRIC
+                pts[i * 2] = (x - ox) * sx * HIMETRIC
+                pts[i * 2 + 1] = (y - oy) * sy * HIMETRIC
             }
             val w = (props?.f32(P.InkWidth) ?: props?.f32(P.InkHeight) ?: 53f) * HIMETRIC
             val colorRaw = props?.u32(P.InkColor)
