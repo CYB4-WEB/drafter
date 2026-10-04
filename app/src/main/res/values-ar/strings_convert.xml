@@ -136,4 +136,11 @@
     <string name="convert_err_engine_slides">تعذّر على محوّل PowerPoint معالجة هذا الملف.</string>
     <string name="convert_err_engine_word">تعذّر على محوّل Word معالجة هذا الملف.</string>
     <string name="convert_err_too_large">ملف النص هذا كبير جدًا (الحد الأقصى 20 ميغابايت).</string>
+    <string name="convert_one_pdf">OneNote إلى PDF</string>
+    <string name="convert_one_pdf_desc">كل صفحات القسم في ملف PDF واحد</string>
+    <string name="convert_one_txt">OneNote إلى نص</string>
+    <string name="convert_one_txt_desc">النص العادي لكل الصفحات</string>
+    <string name="convert_one_note">OneNote إلى ملاحظة دفتر</string>
+    <string name="convert_one_note_desc">النصوص والصور والحبر كملاحظة يمكنك متابعة الكتابة عليها</string>
+    <string name="convert_err_one_unsupported">لا يمكن تحويل هذا النوع من ملفات OneNote (سحابي أو فهرس دفتر أو قديم أو مضغوط بـ LZX). صدّره من OneNote كقسم ‎.one.</string>
 </resources>

@@ -105,6 +105,9 @@ internal class StrokeGrid(val list: List<Stroke>) {
 internal class InkTiles(private val pages: () -> List<InkPage>, private val onReady: () -> Unit) {
     private class Tile(val page: Int, val tx: Int, val ty: Int) {
         var bmp: Bitmap? = null
+        /** Rendered and nothing to draw: no bitmap kept (sparse whiteboards cost no memory). */
+        var empty = false
+        val ready get() = (bmp != null || empty) && !dirty
         var list: List<Stroke>? = null
         var count = 0
         var shX = 0f; var shY = 0f            // page shift of [list]
@@ -199,9 +202,8 @@ internal class InkTiles(private val pages: () -> List<InkPage>, private val onRe
         var needTail = false
         for (ty in ty0..ty1) for (tx in tx0..tx1) {
             val t = lvl.tiles[key(i, tx, ty)]
-            val b = t?.bmp
-            if (t != null && b != null && !t.dirty) {
-                c.drawBitmap(b, baseX + tx * TILE - ox, baseY + ty * TILE - oy, blit)
+            if (t != null && t.ready) {
+                t.bmp?.let { b -> c.drawBitmap(b, baseX + tx * TILE - ox, baseY + ty * TILE - oy, blit) }
                 t.used = frame
                 if (t.count < st.size) { needTail = true; if (foldDue) want(lvl, i, tx, ty, 2f + dist(tx, ty, cx, cy)) }
             } else {
@@ -213,7 +215,7 @@ internal class InkTiles(private val pages: () -> List<InkPage>, private val onRe
         for (ty in ty0..ty1) for (tx in tx0..tx1) {
             val t = lvl.tiles[key(i, tx, ty)]
             val l = shX + tx * u; val tp = shY + ty * u; val r = l + u; val bt = tp + u
-            if (t != null && t.bmp != null && !t.dirty) {
+            if (t != null && t.ready) {
                 if (needTail && t.count < st.size) tail(c, st, t.count, l, tp, r, bt)
                 continue
             }
@@ -227,7 +229,7 @@ internal class InkTiles(private val pages: () -> List<InkPage>, private val onRe
             for (ty in ty0 - 1..ty1 + 1) for (tx in tx0 - 1..tx1 + 1) {
                 if (ty in ty0..ty1 && tx in tx0..tx1) continue
                 val t = lvl.tiles[key(i, tx, ty)]
-                if (t != null && t.bmp != null && !t.dirty && t.count == st.size) { t.used = frame; continue }
+                if (t != null && t.ready && (t.count == st.size || !foldDue)) { t.used = frame; continue }
                 if (t == null && !inPage(page, tx, ty, u)) continue
                 want(lvl, i, tx, ty, 100f + dist(tx, ty, cx, cy))
             }
@@ -287,14 +289,15 @@ internal class InkTiles(private val pages: () -> List<InkPage>, private val onRe
         if ((x1 - x0 + 1) * (y1 - y0 + 1) > 16) return false
         for (y in y0..y1) for (x in x0..x1) {
             val tl = lv.tiles[key(i, x, y)] ?: return false
-            if (tl.bmp == null || tl.dirty || tl.count != st.size) return false
+            if (!tl.ready || tl.count != st.size) return false
         }
         c.save(); c.clipRect(l, t, r, b)
         for (y in y0..y1) for (x in x0..x1) {
             val tl = lv.tiles[key(i, x, y)]!!
             tl.used = frame
+            val bm = tl.bmp ?: continue
             rTmp.set(shX + x * u, shY + y * u, shX + (x + 1) * u, shY + (y + 1) * u)
-            c.drawBitmap(tl.bmp!!, null, rTmp, scaled)
+            c.drawBitmap(bm, null, rTmp, scaled)
         }
         c.restore()
         return true
@@ -309,10 +312,10 @@ internal class InkTiles(private val pages: () -> List<InkPage>, private val onRe
         for (y in y0..y1) for (x in x0..x1) {
             val tl = lv.tiles[key(i, x, y)]
             val l = shX + x * u; val t = shY + y * u
-            if (tl != null && tl.bmp != null && !tl.dirty) {
+            if (tl != null && tl.ready) {
                 tl.used = frame
                 rTmp.set(l, t, l + u, t + u)
-                c.drawBitmap(tl.bmp!!, null, rTmp, scaled)
+                tl.bmp?.let { c.drawBitmap(it, null, rTmp, scaled) }
                 if (tl.count < st.size) tail(c, st, tl.count, l, t, l + u, t + u)
             } else vectors(c, g, max(l, vis.left), max(t, vis.top), min(l + u, vis.right), min(t + u, vis.bottom), clip = true)
         }
@@ -399,7 +402,7 @@ internal class InkTiles(private val pages: () -> List<InkPage>, private val onRe
             val st = page.strokes
             val k = key(r.page, r.tx, r.ty)
             val t = r.level.tiles[k] ?: Tile(r.page, r.tx, r.ty).also { r.level.tiles.put(k, it); tileCount++ }
-            if (t.bmp != null && !t.dirty && t.list === st) continue
+            if (t.ready && t.list === st) continue
             if (t.rendering === st) continue
             t.rendering = st
             t.used = frame
@@ -409,6 +412,15 @@ internal class InkTiles(private val pages: () -> List<InkPage>, private val onRe
             val shX = page.shiftX; val shY = page.shiftY
             val sc = r.level.scale
             val l = shX + r.tx * u; val tp = shY + r.ty * u
+            // which strokes touch this tile (main thread: the grid is only read here)
+            idx.clear(); g.query(l, tp, l + u, tp + u, idx)
+            if (idx.size == 0) {
+                t.bmp?.let { give(it) }
+                t.bmp = null; t.empty = true; t.dirty = false; t.list = st; t.count = st.size; t.shX = shX; t.shY = shY
+                t.rendering = null; t.seq++
+                continue
+            }
+            val todo = idx.a.copyOf(idx.size)
             val reuse = pool.removeLastOrNull()
             val myGen = gen
             val level = r.level
@@ -416,14 +428,12 @@ internal class InkTiles(private val pages: () -> List<InkPage>, private val onRe
             inFlight++
             val ok = runCatching {
                 ex.execute {
-                    val out = IntList(64)
                     val bmp = runCatching {
                         val b = reuse ?: Bitmap.createBitmap(TILE, TILE, Bitmap.Config.ARGB_8888)
                         b.eraseColor(0)
                         val cv = Canvas(b)
                         cv.scale(sc, sc); cv.translate(-l, -tp)
-                        g.query(l, tp, l + u, tp + u, out)
-                        for (j in 0 until out.size) InkRender.drawStroke(cv, st[out[j]])
+                        for (j in todo) InkRender.drawStroke(cv, st[j])
                         b
                     }.getOrNull()
                     main.post {
@@ -432,7 +442,7 @@ internal class InkTiles(private val pages: () -> List<InkPage>, private val onRe
                         if (bmp == null) { dispatch(); return@post }
                         if (myGen != gen || (level !== cur && level !== prev) || t.seq != seq || level.tiles[k] !== t) { give(bmp); dispatch(); return@post }
                         t.bmp?.let { give(it) }
-                        t.bmp = bmp; t.list = st; t.count = st.size; t.shX = shX; t.shY = shY; t.dirty = false
+                        t.bmp = bmp; t.empty = false; t.list = st; t.count = st.size; t.shX = shX; t.shY = shY; t.dirty = false
                         // the page changed while this rendered: the next frame reconciles this tile against it
                         if (pages().getOrNull(r.page)?.strokes !== st) level.seen.remove(r.page)
                         onReady()

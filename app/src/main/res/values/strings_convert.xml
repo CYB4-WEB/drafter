@@ -136,4 +136,11 @@
     <string name="convert_err_engine_slides">The PowerPoint converter couldn\'t process this file.</string>
     <string name="convert_err_engine_word">The Word converter couldn\'t process this file.</string>
     <string name="convert_err_too_large">This text file is too large (20 MB maximum).</string>
+    <string name="convert_one_pdf">OneNote → PDF</string>
+    <string name="convert_one_pdf_desc">All pages of the section as one PDF</string>
+    <string name="convert_one_txt">OneNote → Text</string>
+    <string name="convert_one_txt_desc">Plain text of every page</string>
+    <string name="convert_one_note">OneNote → Daftar note</string>
+    <string name="convert_one_note_desc">Text, pictures and ink as a note you can keep writing on</string>
+    <string name="convert_err_one_unsupported">This OneNote file type can\'t be converted (cloud, table of contents, old or LZX-compressed). Export it from OneNote as a .one section.</string>
 </resources>

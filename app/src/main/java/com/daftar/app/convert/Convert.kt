@@ -421,6 +421,7 @@ private fun mimesFor(kind: Kind): Array<String> = when (kind) {
     Kind.DOCX -> arrayOf("application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/msword")
     Kind.TEXT -> arrayOf("text/*", "application/rtf", "application/x-rtf")
     Kind.IMAGE -> arrayOf("image/*")
+    Kind.ONENOTE -> arrayOf("application/onenote", "application/msonenote", "application/x-onenote", "application/vnd.ms-cab-compressed", "application/octet-stream")
     else -> arrayOf("*/*")
 }
 
