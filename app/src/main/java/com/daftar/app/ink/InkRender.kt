@@ -451,9 +451,15 @@ object InkRender {
             color = t.color; textSize = t.size; typeface = typeface(t.font, t.bold)
         }
         val l = StaticLayout.Builder.obtain(t.text, 0, t.text.length, tp, t.w.toInt().coerceAtLeast(20))
-            .setAlignment(Layout.Alignment.ALIGN_NORMAL).setIncludePad(false).build()
+            .setAlignment(alignmentOf(t.align)).setIncludePad(false).build()
         t.layout = l
         return l
+    }
+
+    fun alignmentOf(a: Int): Layout.Alignment = when (a) {
+        TextItem.ALIGN_CENTER -> Layout.Alignment.ALIGN_CENTER
+        TextItem.ALIGN_END -> Layout.Alignment.ALIGN_OPPOSITE
+        else -> Layout.Alignment.ALIGN_NORMAL
     }
 
     fun drawText(c: Canvas, t: TextItem) {

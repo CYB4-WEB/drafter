@@ -6,7 +6,7 @@ import java.nio.charset.Charset
 /** Largest prefix of a plain-text / Markdown / log file that is read (keeps memory and layout time bounded). */
 internal const val MAX_TEXT_BYTES = 8L * 1024 * 1024
 /** Largest prefix of a CSV / TSV file that is read, and the row cap. */
-internal const val MAX_CSV_BYTES = 24L * 1024 * 1024
+internal const val MAX_CSV_BYTES = 12L * 1024 * 1024
 internal const val MAX_CSV_ROWS = 200_000
 private const val MAX_CSV_COLS = 400
 

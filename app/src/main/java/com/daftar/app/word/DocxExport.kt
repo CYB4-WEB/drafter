@@ -24,7 +24,8 @@ object DocxExport {
 
     /**
      * Same as [toPdf]; [onPage] is called after each finished page with the number of pages written so far and returns
-     * false to cancel (the partial output is deleted).
+     * false to cancel (the partial output is deleted). Encrypted / unreadable legacy documents throw [LegacyDocException]
+     * so callers can show the right message; every other failure returns false.
      */
     fun toPdf(src: File, out: File, onPage: (pagesDone: Int) -> Boolean): Boolean {
         val tmp = File(out.parentFile, ".${out.name}.part")
@@ -49,6 +50,9 @@ object DocxExport {
             if (out.exists()) out.delete()
             if (!tmp.renameTo(out)) { tmp.copyTo(out, overwrite = true); tmp.delete() }
             true
+        } catch (e: LegacyDocException) {
+            tmp.delete()
+            throw e
         } catch (_: Throwable) {
             tmp.delete()
             false
