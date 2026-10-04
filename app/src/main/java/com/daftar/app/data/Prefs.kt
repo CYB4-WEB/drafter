@@ -42,6 +42,9 @@ object Prefs {
     /** Keep the screen on while a note, document or presentation is open. */
     var keepScreenOn by mutableStateOf(false)
         private set
+    /** True once an S Pen / stylus has touched the screen on this device. Until then "pen only" is not enforced. */
+    var stylusSeen by mutableStateOf(false)
+        private set
 
     fun init(ctx: Context) {
         sp = ctx.getSharedPreferences("prefs", Context.MODE_PRIVATE)
@@ -58,6 +61,7 @@ object Prefs {
         largeControls = sp.getBoolean("largeControls", false)
         linksInApp = sp.getBoolean("linksInApp", true)
         keepScreenOn = sp.getBoolean("keepScreenOn", false)
+        stylusSeen = sp.getBoolean("stylusSeen", false)
     }
 
     fun putTheme(v: Int) { themeMode = v; sp.edit().putInt("theme", v).apply() }
@@ -72,5 +76,6 @@ object Prefs {
     fun putTextScale(v: Float) { textScale = v; sp.edit().putFloat("textScale", v).apply() }
     fun putLargeControls(v: Boolean) { largeControls = v; sp.edit().putBoolean("largeControls", v).apply() }
     fun putLinksInApp(v: Boolean) { linksInApp = v; sp.edit().putBoolean("linksInApp", v).apply() }
+    fun markStylusSeen() { if (!stylusSeen) { stylusSeen = true; sp.edit().putBoolean("stylusSeen", true).apply() } }
     fun putKeepScreenOn(v: Boolean) { keepScreenOn = v; sp.edit().putBoolean("keepScreenOn", v).apply() }
 }

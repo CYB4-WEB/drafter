@@ -240,6 +240,8 @@ private fun UpcomingSection(items: List<Occurrence>) {
     SectionTitle(stringResource(R.string.upcoming)) {
         TextButton(onClick = { Nav.tab(Screen.Planner) }) { Text(stringResource(R.string.see_all)) }
     }
+    // Ticks every 20 s so the countdowns stay live (minutes resolution).
+    val now by produceState(System.currentTimeMillis()) { while (true) { kotlinx.coroutines.delay(20_000); value = System.currentTimeMillis() } }
     Column(Modifier.fillMaxWidth().card(c).padding(4.dp)) {
         if (items.isEmpty()) EmptyState(Icons.Rounded.EventAvailable, stringResource(R.string.nothing_upcoming)) {
             OutlinedButton(onClick = { pane.push(Screen.EditEvent(null)) }) { Text(stringResource(R.string.add_event)) }
@@ -253,8 +255,38 @@ private fun UpcomingSection(items: List<Occurrence>) {
                     Text(o.event.title, style = MaterialTheme.typography.bodyLarge, color = c.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text(whenLabel(o), style = MaterialTheme.typography.bodySmall, color = c.muted, maxLines = 1)
                 }
+                Spacer(Modifier.width(8.dp))
+                Countdown(o.start, o.end, now, eventColor(o.event.type))
             }
         }
+    }
+}
+
+/** "2d 4h", "3h 12m", "12m" until [start]; "Now" while it runs. Shown at the row's end (left side in Arabic). */
+@Composable
+private fun Countdown(start: Long, end: Long, now: Long, tint: Color) {
+    val c = D.c
+    val left = start - now
+    val text = when {
+        left <= 0 && now <= maxOf(end, start) -> stringResource(R.string.countdown_now)
+        left <= 0 -> stringResource(R.string.countdown_now)
+        else -> {
+            val mins = (left + 59_999) / 60_000
+            val d = mins / (24 * 60); val h = (mins / 60) % 24; val m = mins % 60
+            when {
+                d > 0 -> stringResource(R.string.countdown_dh, d, h)
+                h > 0 -> stringResource(R.string.countdown_hm, h, m)
+                else -> stringResource(R.string.countdown_m, m)
+            }
+        }
+    }
+    val urgent = left in 0..(24 * 3600_000L)
+    Column(horizontalAlignment = Alignment.End) {
+        Text(text, style = MaterialTheme.typography.labelLarge, color = if (urgent) tint else c.ink, maxLines = 1,
+            modifier = Modifier.background(if (urgent) tint.copy(alpha = 0.12f) else c.surfaceAlt, RoundedCornerShape(8.dp))
+                .padding(horizontal = 8.dp, vertical = 4.dp))
+        if (left > 0) Text(stringResource(R.string.countdown_left), style = MaterialTheme.typography.bodySmall, color = c.muted,
+            modifier = Modifier.padding(top = 2.dp))
     }
 }
 
@@ -538,7 +570,8 @@ fun SettingsScreen() {
                 SwitchRow(Icons.Rounded.LightMode, stringResource(R.string.set_keep_screen_on), stringResource(R.string.set_keep_screen_on_desc), Prefs.keepScreenOn) { Prefs.putKeepScreenOn(it) }
             }
             SettingsGroup(stringResource(R.string.set_pen)) {
-                SwitchRow(Icons.Rounded.Draw, stringResource(R.string.set_pen_only), stringResource(R.string.set_pen_only_desc), Prefs.penOnly) { Prefs.putPenOnly(it) }
+                SwitchRow(Icons.Rounded.Draw, stringResource(R.string.set_pen_only),
+                    stringResource(R.string.set_pen_only_desc) + if (!Prefs.stylusSeen) "\n" + stringResource(R.string.set_pen_only_no_stylus) else "", Prefs.penOnly) { Prefs.putPenOnly(it) }
                 ChoiceRow(Icons.Rounded.Mouse, stringResource(R.string.set_button),
                     listOf(0 to stringResource(R.string.ink_tool_eraser), 1 to stringResource(R.string.ink_tool_lasso)), Prefs.stylusButton) { Prefs.putStylusButton(it) }
                 ChoiceRow(Icons.Rounded.GridOn, stringResource(R.string.set_paper),

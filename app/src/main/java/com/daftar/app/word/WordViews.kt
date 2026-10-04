@@ -517,10 +517,17 @@ private fun PrintFlow(blocks: List<DocBlock>, width: Float, scale: PaperScale, i
 @Composable
 internal fun SheetView(sheet: Sheet, zoom: Float, listState: LazyListState, hScroll: ScrollState, hits: Map<Int, Map<Int, List<IntRange>>>, current: Match?) {
     val c = D.c
+    val density = LocalDensity.current.density
     val fontSp = (13f * zoom).sp
     val charDp = 7.6f * zoom
-    val colW = remember(sheet, zoom) { sheet.charWidths.map { (it.coerceIn(3, 40) * charDp + 20f * zoom).dp } }
     val numW = ((sheet.rows.size.toString().length * 8f + 20f) * zoom).dp
+    val colW = remember(sheet, zoom, density) {
+        val raw = sheet.charWidths.map { it.coerceIn(3, 40) * charDp + 20f * zoom }
+        // Compose constraints top out around 262k px: very wide sheets get proportionally narrower columns.
+        val maxTotal = 200_000f / density - numW.value
+        val k = if (raw.sum() > maxTotal) maxTotal / raw.sum() else 1f
+        raw.map { (it * k).dp }
+    }
     val total = colW.fold(numW) { a, b -> a + b }
     val cellPad = (8f * zoom).dp
     CompositionLocalProvider(LocalLayoutDirection provides if (sheet.rtl) LayoutDirection.Rtl else LayoutDirection.Ltr) {
