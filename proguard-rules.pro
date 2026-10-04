@@ -1,0 +1,8 @@
+-dontwarn com.gemalto.jp2.**
+-dontwarn org.bouncycastle.**
+-dontwarn javax.**
+-keep class com.tom_roush.pdfbox.** { *; }
+-keep class com.tom_roush.fontbox.** { *; }
+-keepattributes *Annotation*, InnerClasses
+-keepclassmembers class com.daftar.app.** { *** Companion; }
+-keepclasseswithmembers class com.daftar.app.** { kotlinx.serialization.KSerializer serializer(...); }
