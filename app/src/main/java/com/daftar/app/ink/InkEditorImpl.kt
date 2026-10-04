@@ -146,6 +146,7 @@ internal fun InkEditorImpl(
     var textReq by remember { mutableStateOf<Triple<Int, Pair<Float, Float>, TextItem?>?>(null) }
     var showMore by remember { mutableStateOf(false) }
     var showPaper by remember { mutableStateOf(false) }
+    var showPages by remember { mutableStateOf(false) }   // pages-agent: page manager
     var showColors by remember { mutableStateOf(false) }
     var showRename by remember { mutableStateOf(false) }
     val wideAtStart = LocalWidthClass.current == WidthClass.Expanded
@@ -456,6 +457,7 @@ internal fun InkEditorImpl(
                         DropdownMenuItem({ Text(stringResource(R.string.ink_add_page)) }, { showMore = false; view.addPage(ctl.currentPage, view.doc.pages.getOrNull(ctl.currentPage)?.paper ?: Prefs.defaultPaper) }, leadingIcon = { Icon(Icons.Rounded.NoteAdd, null) })
                     }
                     if (isNote) DropdownMenuItem({ Text(stringResource(R.string.ink_paper)) }, { showMore = false; showPaper = true }, leadingIcon = { Icon(Icons.Rounded.GridOn, null) })
+                    if (isNote && !whiteboard) DropdownMenuItem({ Text(stringResource(R.string.pages_title)) }, { showMore = false; view.finishEditing(); showPages = true }, leadingIcon = { Icon(Icons.Rounded.AutoAwesomeMosaic, null) })
                     if (isNote && !whiteboard && ctl.pageCount > 1) {
                         DropdownMenuItem({ Text(stringResource(R.string.ink_delete_page)) }, { showMore = false; view.deletePage(ctl.currentPage) }, leadingIcon = { Icon(Icons.Rounded.DeleteSweep, null) })
                     }
@@ -592,7 +594,7 @@ internal fun InkEditorImpl(
                         onDone = { view.finishEditing() },
                     )
                 }
-                if (!whiteboard) PageChip(ctl, onPageChipClick, Modifier.align(Alignment.BottomEnd).padding(16.dp))
+                if (!whiteboard) PageChip(ctl, onPageChipClick ?: (if (isNote) ({ view.finishEditing(); showPages = true }) else null), Modifier.align(Alignment.BottomEnd).padding(16.dp))
                 busy?.let { msg ->
                     Row(Modifier.align(Alignment.BottomCenter).padding(24.dp).background(c.surface, RoundedCornerShape(12.dp))
                         .border(1.dp, c.line, RoundedCornerShape(12.dp)).padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -658,9 +660,9 @@ internal fun InkEditorImpl(
             })
     }
 
-    if (showPaper) PaperDialog(showAllPages = !whiteboard, onDismiss = { showPaper = false }) { paper, all ->
-        view.setPaper(paper, all); if (!whiteboard) Prefs.putPaper(paper); showPaper = false
-    }
+    if (showPaper) PaperTemplates.PaperPickerDialog(view, whiteboard, onDismiss = { showPaper = false })
+    if (showPages && isNote && !whiteboard) PageManagerPanel(view, inkFile, title, onDismiss = { showPages = false },
+        onOpenFile = { f -> saveAsync(); com.daftar.app.ui.pane.open(ctx, f) })
 
     if (showColors) ColorGridDialog(onDismiss = { showColors = false; colorForText = false }) { col ->
         if (colorForText && textUi != null) view.formatText { it.copy(color = col) }

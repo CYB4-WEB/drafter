@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Document scanner -->
+    <string name="files_scan">Scan</string>
+    <string name="files_scan_document">Scan document</string>
+    <string name="files_scan_document_desc">Camera or gallery, saved as PDF</string>
+    <string name="files_scan_name">Scan</string>
+    <string name="files_scan_no_play">Document scanning needs Google Play services, which isn\'t available on this device.</string>
+    <string name="files_scan_downloading">Google Play services is still downloading the scanner. Try again in a minute.</string>
+    <string name="files_scan_failed">Couldn\'t start the scanner: %1$s</string>
+    <string name="files_scan_save_failed">Couldn\'t save the scan.</string>
+    <string name="files_scan_saved">Scan saved in %1$s</string>
+
+    <!-- Folder pictures -->
+    <string name="files_cover">Picture</string>
+    <string name="files_cover_choose">Choose picture</string>
+    <string name="files_cover_change">Change</string>
+    <string name="files_cover_remove">Remove picture</string>
+    <string name="files_cover_square">Square</string>
+    <string name="files_cover_wide">Wide 16:9</string>
+    <string name="files_cover_failed">Couldn\'t read this picture.</string>
+    <string name="files_cover_none">No picture. Folder tiles show the picture with the folder colour and icon.</string>
+
+    <!-- Recycle bin -->
+    <string name="files_trash">Recycle bin</string>
+    <string name="files_trash_desc">Deleted items are kept for 30 days, then removed for good.</string>
+    <string name="files_trash_empty_action">Empty bin</string>
+    <string name="files_trash_empty_title">Empty the recycle bin?</string>
+    <string name="files_trash_empty_text">Everything in the recycle bin will be deleted forever. This cannot be undone.</string>
+    <string name="files_trash_none">The recycle bin is empty</string>
+    <string name="files_trash_settings_desc">%1$d items · %2$s · kept for 30 days</string>
+    <string name="files_trash_settings_empty">Empty · deleted items are kept for 30 days</string>
+    <string name="files_restore">Restore</string>
+    <string name="files_restored">Restored to %1$s</string>
+    <string name="files_restore_failed">Couldn\'t restore this item.</string>
+    <string name="files_delete_forever">Delete forever</string>
+    <string name="files_delete_forever_text">Delete \"%1$s\" forever? This cannot be undone.</string>
+    <string name="files_trash_move_title">Move to recycle bin</string>
+    <string name="files_trash_move_text">Move \"%1$s\" to the recycle bin? You can restore it within 30 days.</string>
+    <string name="files_trash_move">Move to bin</string>
+    <string name="files_trash_moved">\"%1$s\" moved to the recycle bin</string>
+    <string name="files_trash_failed">Couldn\'t move this item to the recycle bin.</string>
+    <string name="files_undo">Undo</string>
+    <string name="files_deleted_today">Deleted today</string>
+    <plurals name="files_deleted_days">
+        <item quantity="one">Deleted %d day ago</item>
+        <item quantity="other">Deleted %d days ago</item>
+    </plurals>
+    <plurals name="files_days_left">
+        <item quantity="one">%d day left</item>
+        <item quantity="other">%d days left</item>
+    </plurals>
+
+    <!-- Version history -->
+    <string name="files_version_history">Version history</string>
+    <string name="files_versions_none">No earlier versions yet. While you edit, a version is kept every 10 minutes.</string>
+    <string name="files_version_pick">Select a version to preview it.</string>
+    <string name="files_version_restore_title">Restore this version?</string>
+    <string name="files_version_restore_text">The note goes back to how it was on %1$s. Its current content is kept as a version.</string>
+    <string name="files_version_restored">Version restored</string>
+    <string name="files_version_copy">Save as copy</string>
+    <string name="files_version_copy_name">%1$s (version %2$s)</string>
+    <string name="files_version_note_open">Close the note before restoring a version.</string>
+    <string name="files_version_latest">Latest</string>
+    <string name="files_version_failed">Couldn\'t read this version.</string>
+    <plurals name="files_pages">
+        <item quantity="one">%d page</item>
+        <item quantity="other">%d pages</item>
+    </plurals>
+</resources>

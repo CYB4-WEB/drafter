@@ -38,6 +38,58 @@ fun img(i: OneImage) = "${i.widthPt.toInt()}x${i.heightPt.toInt()}pt type=${i.da
 fun ink(k: OneInk) = "strokes=${k.strokes.size} bounds=${k.bounds.map { it.toInt() }} first=${k.strokes.first().let { s -> "w=%.2f c=%08X n=%d p0=(%.1f,%.1f)".format(s.width, s.color, s.pts.size / 2, s.pts[0], s.pts[1]) }}"
 
 fun main(args: Array<String>) {
+    if (args.firstOrNull() == "--cabprefix") {
+        // decodes the first N bytes of every folder and prints their MD5 (cross-checks MSZIP vs LZX output)
+        val f = File(args[1]); val max = args[2].toLong()
+        val arc = Cab.read(f)
+        java.io.RandomAccessFile(f, "r").use { r ->
+            for ((fi, folder) in arc.folders.withIndex()) {
+                val type = folder.type and 0xF
+                r.seek(folder.dataStart)
+                val blocks = ArrayList<LongArray>()
+                for (b in 0 until folder.blocks) {
+                    val hdr = ByteArray(8); r.readFully(hdr)
+                    val cb = (hdr[4].toInt() and 0xFF) or ((hdr[5].toInt() and 0xFF) shl 8)
+                    val cu = (hdr[6].toInt() and 0xFF) or ((hdr[7].toInt() and 0xFF) shl 8)
+                    r.seek(r.filePointer + arc.dataReserve)
+                    blocks.add(longArrayOf(r.filePointer, cb.toLong(), cu.toLong())); r.seek(r.filePointer + cb)
+                }
+                fun payload(b: LongArray): ByteArray { val d = ByteArray(b[1].toInt()); r.seek(b[0]); r.readFully(d); return d }
+                var next = 0
+                val lzx = if (type == 3) Lzx((folder.type shr 8) and 0x1F) { blocks.getOrNull(next++)?.let { payload(it) } } else null
+                val md = java.security.MessageDigest.getInstance("MD5")
+                var done = 0L; var hist = ByteArray(0)
+                val t0 = System.currentTimeMillis()
+                try {
+                    for (b in blocks) {
+                        if (done >= max) break
+                        val out = when (type) {
+                            0 -> payload(b)
+                            1 -> Cab.mszip(payload(b), b[2].toInt(), hist).also { o -> hist = (hist + o).takeLast(32768).toByteArray() }
+                            else -> lzx!!.frame(b[2].toInt())
+                        }
+                        val n = minOf(out.size.toLong(), max - done).toInt()
+                        md.update(out, 0, n); done += n
+                    }
+                    println("folder $fi type=0x${folder.type.toString(16)} blocks=${folder.blocks} decoded=$done md5=" + md.digest().joinToString("") { "%02x".format(it) } + " in ${System.currentTimeMillis() - t0} ms")
+                } catch (e: Exception) { println("folder $fi type=0x${folder.type.toString(16)} FAILED after $done bytes: $e") }
+            }
+        }
+        return
+    }
+    if (args.firstOrNull() == "--cab") {
+        val out = File(args[2]); out.mkdirs()
+        val arc = Cab.read(File(args[1]))
+        for ((i, e) in arc.entries.withIndex()) {
+            print("${e.name} size=${e.size} folder=${e.folder} compression=${arc.compression(e.folder)}: ")
+            try {
+                val r = Cab.extract(File(args[1]), out, { it.name == e.name })
+                val f = r.first().second
+                println("OK ${f.length()} bytes md5=" + java.security.MessageDigest.getInstance("MD5").digest(f.readBytes()).joinToString("") { "%02x".format(it) })
+            } catch (x: Exception) { println("FAILED $x") }
+        }
+        return
+    }
     if (args.firstOrNull() == "--jcids") {
         for (a in args.drop(1)) {
             val st = OneStore.open(File(a))

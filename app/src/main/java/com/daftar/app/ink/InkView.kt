@@ -70,6 +70,11 @@ class InkView(context: Context) : View(context) {
         fun onTextBox(ui: TextBoxUi?) {}
         /** A text box was long-pressed at view position ([x], [y]) px (it is now selected). */
         fun onTextMenu(page: Int, item: TextItem, x: Float, y: Float) {}
+        /**
+         * Math helper: ~600 ms after the pen lifted, the last strokes on [page] look like an expression ending with "=".
+         * The host recognizes [line] and calls [insertMathAnswer]. Only called while [mathHelper] is on.
+         */
+        fun onMathCandidate(page: Int, line: MathAssist.Line) {}
     }
 
     var listener: Listener? = null
@@ -97,6 +102,22 @@ class InkView(context: Context) : View(context) {
     var textBold = false
     var textColor = 0xFF1F2937.toInt()
     var textHint = ""
+    /** Math helper on/off (set from the editor, persisted in [InkPrefs]). */
+    var mathHelper = true
+
+    // ---- math helper: pending answer (faded until accepted) + its ✓ / × chip ----
+    private var mathPage = -1
+    private var mathId = 0L
+    private var mathCandPage = -1
+    private val mathDetect = Runnable {
+        val pg = mathCandPage
+        if (!mathHelper || pg !in doc.pages.indices || mode == Mode.DRAW) return@Runnable
+        MathAssist.findLine(doc.pages[pg].strokes)?.let { listener?.onMathCandidate(pg, it) }
+    }
+    private val chipOk = RectF()
+    private val chipNo = RectF()
+    private val chipPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val chipStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND }
 
     // ---- audio sync ----
     var recId = 0
@@ -225,17 +246,12 @@ class InkView(context: Context) : View(context) {
     private val tiles = HashMap<Int, Tile>()
     private var generation = 0
 
-    // ---- ink layer cache: committed strokes of a page rasterised once at the current zoom (see drawStrokesCached) ----
-    private class InkLayer(val strokes: List<Stroke>, val count: Int, val scale: Float, val rect: RectF, val bmp: Bitmap)
-    private val layers = HashMap<Int, InkLayer>()
-    private val layerJobs = HashSet<Int>()
-    private val inkExec = Executors.newSingleThreadExecutor { r -> Thread(r, "ink-layer").apply { priority = Thread.NORM_PRIORITY - 1 } }
-    private val layerBudget = Runtime.getRuntime().maxMemory() / 8
-    private var layerCheckPosted = false
-    private val layerCheck = Runnable { layerCheckPosted = false; updateLayers() }
-    private val layerPaint = Paint()
-    /** Pages for which caching was declined (only tapes, or too big at this zoom) — keyed by stroke list + zoom. */
-    private val noLayer = HashMap<Int, Pair<List<Stroke>, Float>>()
+    // ---- ink tiles: committed strokes rasterised per visible tile on a background thread (see InkTiles) ----
+    private val tiles2 = InkTiles({ doc.pages }) { invalidate() }
+    /** Last time the zoom changed (tiles are rendered for a settled zoom only). */
+    private var zoomTime = 0L
+    private val zoomSettle = Runnable { invalidate() }
+    private var paused = false
 
     // ---- paints & preallocated draw objects (no allocation in onDraw) ----
     private val pagePaint = Paint()
@@ -272,11 +288,12 @@ class InkView(context: Context) : View(context) {
 
     fun setDocument(d: InkDoc, src: PageSource?) {
         if (editItem != null) { editItem = null; textOverlay.hide() }
+        mathPage = -1; mathId = 0L; main.removeCallbacks(mathDetect)
         textSelPage = -1; textSelId = 0L
         doc = d; source = src
         generation++
         bgCache.values.forEach { it.recycle() }; bgCache.clear(); tiles.values.forEach { it.bmp.recycle() }; tiles.clear(); pending.clear()
-        clearLayers()
+        tiles2.clear()
         undo.clear(); redo.clear(); sel = null
         margin = if (d.infinite) 0f else marginPx
         if (d.infinite) trimBoard()
@@ -288,11 +305,10 @@ class InkView(context: Context) : View(context) {
 
     fun release() {
         main.removeCallbacks(longPress)
-        main.removeCallbacks(layerCheck)
+        main.removeCallbacks(zoomSettle); main.removeCallbacks(settle); main.removeCallbacks(mathDetect)
         exec.shutdownNow()
-        inkExec.shutdownNow()
+        tiles2.release()
         generation++
-        clearLayers()
         bgCache.values.forEach { it.recycle() }; bgCache.clear()
         tiles.values.forEach { it.bmp.recycle() }; tiles.clear()
     }
@@ -321,7 +337,7 @@ class InkView(context: Context) : View(context) {
 
     private fun initialView() {
         computeFit()
-        scale = fitScale
+        scale = fitScale; zoomTime = SystemClock.uptimeMillis()
         if (doc.infinite && doc.pages.isNotEmpty()) {
             val p = doc.pages[0]
             val b = p.contentBounds()
@@ -434,6 +450,7 @@ class InkView(context: Context) : View(context) {
     fun zoomAt(fx: Float, fy: Float, factor: Float) {
         val ns = (scale * factor).coerceIn(minScale(), maxScale())
         val dx = toDocX(fx); val dy = toDocY(fy)
+        if (ns != scale) zoomTime = SystemClock.uptimeMillis()
         scale = ns
         // keep doc point under the focus
         sx = margin + dx * scale + offX() - fx
@@ -445,11 +462,12 @@ class InkView(context: Context) : View(context) {
     /** Fit width (paged) / fit all content (whiteboard). */
     fun zoomToFit() {
         if (doc.infinite) { fitContent(); return }
-        val cy = toDocY(0f); scale = fitScale; sy = cy * scale; clamp(); settleSoon(); notifyZoom(); invalidate()
+        val cy = toDocY(0f); scale = fitScale; zoomTime = SystemClock.uptimeMillis(); sy = cy * scale; clamp(); settleSoon(); notifyZoom(); invalidate()
     }
 
     private fun fitContent() {
         val p = doc.pages.firstOrNull() ?: return
+        zoomTime = SystemClock.uptimeMillis()
         val b = p.contentBounds()
         if (b == null) {
             scale = fitScale
@@ -473,6 +491,7 @@ class InkView(context: Context) : View(context) {
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
+        zoomTime = SystemClock.uptimeMillis()
         if (!laidOut) { if (doc.pages.isNotEmpty()) initialView(); tiles.values.forEach { it.bmp.recycle() }; tiles.clear(); invalidate(); return }
         if (doc.infinite) {
             // keep the same board point in the middle
@@ -511,7 +530,9 @@ class InkView(context: Context) : View(context) {
      */
     private fun growToCover(l: Float, t: Float, r: Float, b: Float): Boolean {
         val p = doc.pages[0]
-        fun step(x: Float) = ceil((x + GROW_UNIT * 2) / GROW_UNIT) * GROW_UNIT
+        // grow by at least a screen beyond what is needed: growth (and the left/top content shift) stays rare while panning
+        val extra = max(GROW_UNIT * 2, max(width, height) / scale)
+        fun step(x: Float) = ceil((x + extra) / GROW_UNIT) * GROW_UNIT
         var gl = if (l < 0f) step(-l) else 0f
         var gt = if (t < 0f) step(-t) else 0f
         var gr = if (r > p.w) step(r - p.w) else 0f
@@ -530,6 +551,7 @@ class InkView(context: Context) : View(context) {
             editItem = editItem?.let { it.copy(x = it.x + gl, y = it.y + gt) }
             tStart = tStart?.let { it.copy(x = it.x + gl, y = it.y + gt) }
             for (k in 0 until LZ_MAX) { lzX[k] += gl; lzY[k] += gt }
+            lzLastX += gl; lzLastY += gt
         }
         clamp()
         listener?.onChanged()
@@ -544,11 +566,20 @@ class InkView(context: Context) : View(context) {
         // Compose hosts views with clipChildren=false: never paint outside our own bounds.
         c.clipRect(0, 0, width, height)
         if (doc.pages.isEmpty()) { c.drawColor(bgColor); return }
+        tiles2.beginFrame()
         if (doc.infinite) drawBoard(c) else drawPages(c)
+        tiles2.endFrame()
         sel?.let { drawSelectionChrome(c, it) }
         if (hasTextBox) drawTextChrome(c)
         if (eraserOn) c.drawCircle(eraserX, eraserY, eraserRadiusDp * density, eraserPaint)
         if (lzCount > 0) drawLaser(c)
+        else if (mode == Mode.DRAW && activeTool == Tool.LASER && lzLastX.isFinite()) {
+            // pointer held still: just the dot, no animation
+            val x = toScreenX(lzLastX); val y = toScreenY(lzLastY)
+            laserDot.alpha = 70; c.drawCircle(x, y, 11f * density, laserDot)
+            laserDot.alpha = 255; c.drawCircle(x, y, 4.5f * density, laserDot)
+        }
+        drawMathChip(c)
     }
 
     private fun drawPages(c: Canvas) {
@@ -600,153 +631,108 @@ class InkView(context: Context) : View(context) {
             if (im.x <= vis.right && im.x + im.w >= vis.left && im.y <= vis.bottom && im.y + im.h >= vis.top) InkRender.drawImage(c, im)
         }
         val st = page.strokes
-        val tapes = drawStrokesCached(c, i, st, vis, ox, oy)
+        drawStrokes(c, i, page, vis, ox, oy)
         val tx = page.texts
         val editId = if (editPage == i) editItem?.id ?: 0L else 0L
         for (k in tx.indices) {
             val t = tx[k]
             if (editId != 0L && t.id == editId) continue      // the on-canvas editor shows this box
             val lh = InkRender.layout(t).height
-            if (t.x <= vis.right && t.x + t.w >= vis.left && t.y <= vis.bottom && t.y + lh >= vis.top) InkRender.drawText(c, t)
+            if (t.x <= vis.right && t.x + t.w >= vis.left && t.y <= vis.bottom && t.y + lh >= vis.top) {
+                if (mathPage == i && t.id == mathId) {
+                    // math helper answer not accepted yet: faded
+                    c.saveLayerAlpha(t.x - 2f, t.y - 2f, t.x + t.w + 2f, t.y + lh + 2f, 120)
+                    InkRender.drawText(c, t); c.restore()
+                } else InkRender.drawText(c, t)
+            }
         }
         val ln = page.links
         for (k in ln.indices) {
             val l = ln[k]
             if (l.x <= vis.right && l.x + l.w >= vis.left && l.y <= vis.bottom && l.y + l.h >= vis.top) InkRender.drawLink(c, l)
         }
-        if (tapes > 0) for (k in st.indices) {
-            val s = st[k]
-            if (s.isTape && RectF.intersects(s.bounds(), vis)) InkRender.drawTape(c, s, s.revealed)
+        if (st.isNotEmpty()) {
+            val tp = tiles2.grid(i, st).tapes
+            for (k in tp.indices) {
+                val s = st[tp[k]]
+                if (RectF.intersects(s.bounds(), vis)) InkRender.drawTape(c, s, s.revealed)
+            }
         }
         sel?.let { if (it.page == i) drawFloating(c, it) }
         if (mode == Mode.DRAW && drawPage == i && npts > 0) drawLive(c)
     }
 
-    // ---- ink layer cache ----
+    // ---- committed ink ----
     //
-    // Re-rasterising every stroke path every frame is what made big pages lag (each frame = N drawPath calls recorded on
-    // the UI thread and N path rasterisations on the render thread). Instead each visible page keeps one bitmap with its
-    // committed strokes for the visible area plus overscan, rendered at the current zoom on a background thread from the
-    // page's immutable stroke list. A frame then blits that bitmap on whole pixels (1:1, crisp) and draws as vectors only
-    // the strokes appended since it was rendered (prefix check), the live stroke and tapes. While a pinch zooms, a
-    // covering layer is drawn scaled (smooth, slightly soft) until the new one arrives; anything not covered is vectors.
+    // Re-rasterising every stroke path every frame is what made big pages and whiteboards lag. Committed strokes are
+    // served by [InkTiles] (bitmaps of the visible tiles at the settled zoom, rendered off the UI thread); a frame blits
+    // them and draws as vectors only what is not covered yet. Audio replay ("ghost" strokes) draws culled vectors.
 
-    private fun isPrefix(l: InkLayer, st: List<Stroke>): Boolean {
-        if (st === l.strokes) return true
-        if (st.size < l.count) return false
-        val old = l.strokes
-        for (k in 0 until l.count) if (st[k] !== old[k]) return false
-        return true
+    private fun zoomSettled(): Boolean {
+        if (scaling) return false
+        val dt = SystemClock.uptimeMillis() - zoomTime
+        if (dt >= ZOOM_SETTLE) return true
+        main.removeCallbacks(zoomSettle); main.postDelayed(zoomSettle, ZOOM_SETTLE - dt + 8)
+        return false
     }
 
-    /** Draws the non-tape strokes of page [i]; returns the number of tapes (drawn later, on top). */
-    private fun drawStrokesCached(c: Canvas, i: Int, st: List<Stroke>, vis: RectF, ox: Float, oy: Float): Int {
-        var tapes = 0
-        var from = 0
-        val l = layers[i]
-        val ghosting = playRec != 0
-        if (!ghosting && l != null && !l.bmp.isRecycled && l.rect.contains(vis) && isPrefix(l, st)) {
-            if (l.scale == scale) {
-                // pixel-aligned 1:1 blit
-                c.save()
-                c.scale(1f / scale, 1f / scale)
-                val px = Math.round(ox + l.rect.left * scale) - ox
-                val py = Math.round(oy + l.rect.top * scale) - oy
-                c.drawBitmap(l.bmp, px, py, layerPaint)
-                c.restore()
-            } else {
-                c.drawBitmap(l.bmp, null, l.rect, bmpPaint)
-                requestLayers()
+    private fun drawStrokes(c: Canvas, i: Int, page: InkPage, vis: RectF, ox: Float, oy: Float) {
+        val st = page.strokes
+        if (st.isEmpty()) return
+        if (playRec != 0) {
+            val g = tiles2.grid(i, st)
+            g.query(vis.left, vis.top, vis.right, vis.bottom, ghostIdx)
+            for (j in 0 until ghostIdx.size) {
+                val s = st[ghostIdx[j]]
+                val ghost = s.rec == playRec && s.t > playPos
+                InkRender.drawStroke(c, s, if (ghost) 0.18f else 1f)
             }
-            from = l.count
-            if (st.size > l.count) requestLayers(600)     // fold the new strokes into the layer once the pen rests
-        } else if (!ghosting && st.isNotEmpty() && noLayer[i]?.let { it.first === st && it.second == scale } != true) requestLayers()
-        for (k in st.indices) {
-            val s = st[k]
-            if (s.isTape) { tapes++; continue }
-            if (k < from || !RectF.intersects(s.bounds(), vis)) continue
-            val ghost = ghosting && s.rec == playRec && s.t > playPos
-            InkRender.drawStroke(c, s, if (ghost) 0.18f else 1f)
+            return
         }
-        return tapes
+        tiles2.draw(c, i, page, vis, scale, ox, oy, zoomSettled(), mode == Mode.DRAW)
     }
-
-    private fun requestLayers(delay: Long = 90) {
-        if (layerCheckPosted) return
-        layerCheckPosted = true
-        main.postDelayed(layerCheck, delay)
-    }
-
-    private fun clearLayers() {
-        layers.values.forEach { it.bmp.recycle() }
-        layers.clear(); layerJobs.clear(); noLayer.clear()
-    }
-
-    /** Visible part of page [i] in page coordinates, or false when the page is off screen. */
-    private fun visibleOf(i: Int, out: RectF): Boolean {
-        if (doc.infinite) { out.set(toDocX(0f), toDocY(0f), toDocX(width.toFloat()), toDocY(height.toFloat())); return true }
-        val r = pageScreenRect(i, pageRect)
-        if (r.right < 0 || r.left > width || r.bottom < 0 || r.top > height) return false
-        pageVis(doc.pages[i], r, out)
-        return true
-    }
+    private val ghostIdx = IntList(256)
 
     private fun pageVis(page: InkPage, r: RectF, out: RectF) {
         out.set(max(0f, -r.left / scale), max(0f, -r.top / scale), min(page.w, (width - r.left) / scale), min(page.h, (height - r.top) / scale))
     }
 
-    /** Starts background renders for visible pages whose layer is missing / stale; drops layers of hidden pages. */
-    private fun updateLayers() {
-        if (width == 0 || height == 0 || doc.pages.isEmpty() || inkExec.isShutdown) return
-        if (playRec != 0) return
-        val vis = RectF()
-        val visible = HashSet<Int>()
-        val maxPx = min(width.toLong() * height * 2, layerBudget / 4 / 2)
-        for (i in doc.pages.indices) {
-            if (!visibleOf(i, vis)) continue
-            visible.add(i)
-            val page = doc.pages[i]
-            val st = page.strokes
-            val l = layers[i]
-            val covering = l != null && l.scale == scale && l.rect.contains(vis)
-            if ((covering && l!!.strokes === st) || i in layerJobs) continue
-            // still writing: keep blitting the old layer + new strokes as vectors; fold them in once the pen rests
-            if (covering && mode == Mode.DRAW && isPrefix(l!!, st)) { requestLayers(600); continue }
-            if (st.none { !it.isTape }) { layers.remove(i)?.bmp?.recycle(); noLayer[i] = st to scale; continue }
-            // overscan: half a screen above/below, a quarter left/right (scroll direction is mostly vertical)
-            val r = RectF(vis)
-            var ex = vis.width() * 0.25f; var ey = vis.height() * 0.5f
-            fun px(a: Float, b: Float) = ((vis.width() + 2 * a) * scale).toLong() * ((vis.height() + 2 * b) * scale).toLong()
-            while (ex + ey > 1f && px(ex, ey) > maxPx) { ex *= 0.7f; ey *= 0.7f }
-            if (px(ex, ey) > maxPx) { noLayer[i] = st to scale; continue }   // even the visible area is too big: stay vector
-            r.inset(-ex, -ey)
-            if (!doc.infinite) { if (!r.intersect(0f, 0f, page.w, page.h)) continue }
-            val wpx = ceil(r.width() * scale).toInt(); val hpx = ceil(r.height() * scale).toInt()
-            if (wpx <= 0 || hpx <= 0) continue
-            val sc = scale; val gen = generation
-            layerJobs.add(i)
-            val ok = runCatching {
-                inkExec.execute {
-                    val bmp = runCatching {
-                        val b = Bitmap.createBitmap(wpx, hpx, Bitmap.Config.ARGB_8888)
-                        val cv = Canvas(b)
-                        cv.scale(sc, sc); cv.translate(-r.left, -r.top)
-                        for (k in st.indices) { val s = st[k]; if (!s.isTape && RectF.intersects(s.bounds(), r)) InkRender.drawStroke(cv, s) }
-                        b
-                    }.getOrNull()
-                    main.post {
-                        layerJobs.remove(i)
-                        if (bmp == null) return@post
-                        if (gen != generation || i >= doc.pages.size) { bmp.recycle(); return@post }
-                        layers.put(i, InkLayer(st, st.size, sc, r, bmp))?.bmp?.recycle()
-                        invalidate()
-                    }
-                }
-            }.isSuccess
-            if (!ok) layerJobs.remove(i)
-        }
-        val it = layers.entries.iterator()
-        while (it.hasNext()) { val e = it.next(); if (e.key !in visible) { e.value.bmp.recycle(); it.remove() } }
+    /** Editor paused (ON_PAUSE): no background work. */
+    fun onPause() {
+        paused = true
+        tiles2.pause()
+        main.removeCallbacks(settle); main.removeCallbacks(zoomSettle); main.removeCallbacks(longPress)
+        scroller.forceFinished(true)
+        lzCount = 0
+    }
+
+    fun onResume() { paused = false; tiles2.resume(); invalidate() }
+
+    /** Memory pressure: drop caches that can be rebuilt (ComponentCallbacks2 levels). */
+    fun trimMemory(level: Int) {
+        if (level >= android.content.ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN || level == android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW ||
+            level == android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL) {
+            tiles2.clear()
+            tiles.values.forEach { it.bmp.recycle() }; tiles.clear()
+            if (level >= android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) {
+                val keep = bgCache[currentPage]
+                bgCache.entries.removeAll { (k, v) -> if (k != currentPage) { v.recycle(); true } else false }
+                if (keep == null) bgCache.clear()
+            }
+        } else tiles2.trim()
+        invalidate()
+    }
+
+    private val memCallbacks = object : android.content.ComponentCallbacks2 {
+        override fun onTrimMemory(level: Int) = trimMemory(level)
+        override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {}
+        @Deprecated("Deprecated in Java")
+        override fun onLowMemory() = trimMemory(android.content.ComponentCallbacks2.TRIM_MEMORY_COMPLETE)
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        runCatching { context.applicationContext.registerComponentCallbacks(memCallbacks) }
     }
 
     // ---- text box frame ----
@@ -845,7 +831,7 @@ class InkView(context: Context) : View(context) {
         val now = SystemClock.uptimeMillis()
         while (lzCount > 0 && now - lzT[(lzHead - lzCount + LZ_MAX) % LZ_MAX] > LASER_LIFE) lzCount--
         val active = mode == Mode.DRAW && activeTool == Tool.LASER
-        if (lzCount == 0) { if (active) postInvalidateOnAnimation(); return }
+        if (lzCount == 0) return      // trail gone: no more frames until the pointer moves again
         val first = (lzHead - lzCount + LZ_MAX) % LZ_MAX
         for (pass in 0..1) {
             var px = toScreenX(lzX[first]); var py = toScreenY(lzY[first])
@@ -868,8 +854,12 @@ class InkView(context: Context) : View(context) {
         postInvalidateOnAnimation()
     }
 
+    private var lzLastX = Float.NaN
+    private var lzLastY = Float.NaN
+
     private fun laserAdd(screenX: Float, screenY: Float) {
         val x = toDocX(screenX); val y = toDocY(screenY)
+        lzLastX = x; lzLastY = y
         if (lzCount > 0) {
             val last = (lzHead - 1 + LZ_MAX) % LZ_MAX
             if (abs(lzX[last] - x) * scale + abs(lzY[last] - y) * scale < density) { lzT[last] = SystemClock.uptimeMillis(); return }
@@ -1044,6 +1034,12 @@ class InkView(context: Context) : View(context) {
         velocity?.recycle(); velocity = VelocityTracker.obtain().also { it.addMovement(e) }
         val pen = isPen(e)
         if (pen) requestUnbufferedDispatch(e)
+        main.removeCallbacks(mathDetect)
+        if (mathPage >= 0) {
+            val slack = 6 * density
+            if (chipOk.width() > 0f && RectF(chipOk).apply { inset(-slack, -slack) }.contains(e.x, e.y)) { acceptMath(); mode = Mode.NONE; return }
+            if (chipNo.width() > 0f && RectF(chipNo).apply { inset(-slack, -slack) }.contains(e.x, e.y)) { rejectMath(); mode = Mode.NONE; return }
+        }
         dismissedText = false
         pressLink = null; pressText = null
 
@@ -1269,7 +1265,7 @@ class InkView(context: Context) : View(context) {
 
     /** Text tool tap: edit the box under the tap in place, or start a new box right there. */
     private fun textTap(x: Float, y: Float) {
-        if (dismissedText) return
+        // a tap elsewhere while typing commits that box (in onDown) and starts the next one right here
         val h = hit(x, y) ?: return
         val existing = textAt(h.first, h.second, h.third)
         if (existing != null) { beginEdit(h.first, existing, false); return }
@@ -1288,7 +1284,6 @@ class InkView(context: Context) : View(context) {
 
     /** Text tool drag: the drag sets the box width (and where it starts). */
     private fun textDragCreate(x0: Float, y0: Float, x1: Float, y1: Float) {
-        if (dismissedText) return
         val a = hit(min(x0, x1), min(y0, y1), strict = false) ?: return
         val b = hit(max(x0, x1), max(y0, y1), strict = false) ?: return
         if (a.first != b.first) return
@@ -1479,6 +1474,7 @@ class InkView(context: Context) : View(context) {
         }
         clamp(); updateCurrentPage(); notifyUndo(); changed()
         if (textSelPage >= 0 && currentText() == null) { textSelPage = -1; textSelId = 0L }
+        if (mathPage >= 0 && doc.pages.getOrNull(mathPage)?.texts?.none { it.id == mathId } != false) { mathPage = -1; mathId = 0L }
         notifyTextUi()
     }
 
@@ -1502,6 +1498,10 @@ class InkView(context: Context) : View(context) {
         val p = doc.pages[drawPage]
         setPage(drawPage, p.copy(strokes = p.strokes + stampTime(s)))
         changed()
+        if (mathHelper && s.tool == Tool.PEN && !paused) {
+            mathCandPage = drawPage
+            main.removeCallbacks(mathDetect); main.postDelayed(mathDetect, 600)
+        }
     }
 
     private fun commitTape() {
@@ -2047,6 +2047,122 @@ class InkView(context: Context) : View(context) {
         changed()
     }
 
+    // ---- math helper ----
+
+    /**
+     * Places a math answer as typed text right after the "=" of [line] (one undo step). It is drawn faded with a ✓ / ×
+     * chip until accepted; ignored, it simply stays. Skipped when the line's strokes are gone (erased / undone meanwhile).
+     */
+    fun insertMathAnswer(page: Int, line: MathAssist.Line, answer: String) {
+        val p = doc.pages.getOrNull(page) ?: return
+        val have = p.strokes.toHashSet()
+        if (line.strokes.any { it !in have }) return
+        if (sel != null || editItem != null) return
+        val size = (line.charH * 0.85f).coerceIn(8f, 160f)
+        val tf = InkRender.typeface("hand", false)
+        val tp = android.text.TextPaint(Paint.ANTI_ALIAS_FLAG).apply { textSize = size; typeface = tf }
+        val w = tp.measureText(answer) + size * 0.6f
+        val gap = size * 0.35f
+        val x = if (line.rightToLeft) line.eq.left - gap - w else line.eq.right + gap
+        val y = line.eq.centerY() - size * 0.62f
+        val item = TextItem(System.nanoTime(), x, y, w, answer, size, line.color or 0xFF000000.toInt(), "hand", false,
+            if (line.rightToLeft) TextItem.ALIGN_END else TextItem.ALIGN_START)
+        pushUndo()
+        setPage(page, p.copy(texts = p.texts + item))
+        mathPage = page; mathId = item.id
+        changed()
+    }
+
+    /** Lasso "Solve": the answer goes right after the selection ("= 42" when the user did not write the "="). */
+    fun insertSolveAnswer(answer: String, hadEquals: Boolean) {
+        val s = sel ?: return
+        val b = selectionBounds() ?: return
+        val pens = s.strokes.filter { it.tool == Tool.PEN }
+        val h = max(10f, min(b.height(), 120f))
+        commitSelection()
+        val color = pens.lastOrNull()?.color ?: penColor
+        val text = if (hadEquals) answer else "= $answer"
+        val line = MathAssist.Line(emptyList(), RectF(b.right - 1f, b.centerY() - 1f, b.right, b.centerY() + 1f), false, h, color)
+        insertMathAnswer(s.page, line, text)
+    }
+
+    private fun mathItem(): TextItem? = doc.pages.getOrNull(mathPage)?.texts?.firstOrNull { it.id == mathId }
+
+    private fun acceptMath() { mathPage = -1; mathId = 0L; chipOk.setEmpty(); chipNo.setEmpty(); invalidate() }
+
+    private fun rejectMath() {
+        val pg = mathPage; val id = mathId
+        acceptMath()
+        deleteText(pg, id)
+    }
+
+    private fun drawMathChip(c: Canvas) {
+        if (mathPage < 0) { chipOk.setEmpty(); chipNo.setEmpty(); return }
+        val t = mathItem()
+        if (t == null || mathPage >= pageTops.size || (editItem?.id == t.id)) { mathPage = -1; chipOk.setEmpty(); chipNo.setEmpty(); return }
+        val pl = toScreenX(pageLeft(mathPage)); val pt = toScreenY(pageTops[mathPage])
+        val lh = InkRender.layout(t).height
+        val r = 13 * density
+        val cx = pl + (t.x + t.w) * scale + r + 6 * density
+        val cy = pt + (t.y + lh / 2f) * scale
+        chipOk.set(cx - r, cy - r, cx + r, cy + r)
+        chipNo.set(cx + r + 6 * density, cy - r, cx + 3 * r + 6 * density, cy + r)
+        chipPaint.color = 0xFF2F9E6E.toInt(); c.drawOval(chipOk, chipPaint)
+        chipPaint.color = 0xFFE7E5E0.toInt(); c.drawOval(chipNo, chipPaint)
+        chipStroke.strokeWidth = 2.2f * density
+        chipStroke.color = Color.WHITE
+        val k = r * 0.42f
+        c.drawLine(cx - k, cy, cx - k * 0.2f, cy + k * 0.8f, chipStroke)
+        c.drawLine(cx - k * 0.2f, cy + k * 0.8f, cx + k, cy - k * 0.7f, chipStroke)
+        chipStroke.color = 0xFF5E6B78.toInt()
+        val nx = chipNo.centerX()
+        c.drawLine(nx - k * 0.75f, cy - k * 0.75f, nx + k * 0.75f, cy + k * 0.75f, chipStroke)
+        c.drawLine(nx + k * 0.75f, cy - k * 0.75f, nx - k * 0.75f, cy + k * 0.75f, chipStroke)
+    }
+
+    // ---- lasso extras: tidy, flashcard image ----
+
+    /** Tidies the selected handwriting (lines straightened, spacing evened, jitter smoothed). Undo restores it. */
+    fun tidySelection(): Boolean {
+        val s = sel ?: return false
+        val m = mappedSelection(s)
+        if (m.strokes.none { it.tool == Tool.PEN }) return false
+        val tidied = Tidy.tidy(m.strokes)
+        val box = RectF(Float.MAX_VALUE, Float.MAX_VALUE, -Float.MAX_VALUE, -Float.MAX_VALUE)
+        tidied.forEach { box.union(it.bounds()) }
+        m.texts.forEach { InkRender.layout(it); box.union(it.bounds()) }
+        m.images.forEach { box.union(it.bounds()) }
+        m.links.forEach { box.union(it.bounds()) }
+        sel = Sel(s.page, tidied, m.texts, m.images, m.links, box).also { it.changed = true }
+        listener?.onChanged()
+        invalidate()
+        return true
+    }
+
+    /** Typed text inside the selection (top to bottom). */
+    fun selectedTexts(): List<String> = sel?.texts?.sortedBy { it.y }?.map { it.text }?.filter { it.isNotBlank() } ?: emptyList()
+
+    /**
+     * The selection rendered on the paper colour (tapes hidden), cropped to its bounds + a small margin, at [scale] ×
+     * points, at most [maxPx] on the long side. Null when nothing is selected.
+     */
+    fun selectionBitmap(scale: Float = 2f, maxPx: Int = 1600): Bitmap? {
+        val s = sel ?: return null
+        val m = mappedSelection(s)
+        val b = selectionBounds() ?: return null
+        b.inset(-8f, -8f)
+        if (b.width() <= 0f || b.height() <= 0f) return null
+        val k = min(scale, maxPx / max(b.width(), b.height()))
+        val w = (b.width() * k).toInt().coerceIn(1, maxPx); val h = (b.height() * k).toInt().coerceIn(1, maxPx)
+        val bmp = runCatching { Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888) }.getOrNull() ?: return null
+        val c = Canvas(bmp)
+        val paper = if (source != null) Color.WHITE else doc.paperColor or 0xFF000000.toInt()
+        c.drawColor(paper)
+        c.scale(k, k); c.translate(-b.left, -b.top)
+        InkRender.drawPageContent(c, InkPage(strokes = m.strokes, texts = m.texts, images = m.images, links = m.links))
+        return bmp
+    }
+
     // ---- tapes ----
 
     fun hasTapes(): Boolean = doc.pages.any { p -> p.strokes.any { it.isTape } } || sel?.strokes?.any { it.isTape } == true
@@ -2079,6 +2195,20 @@ class InkView(context: Context) : View(context) {
         listener?.onPageChanged(currentPage, doc.pages.size)
     }
 
+    /**
+     * Page manager (pages-agent): replaces the whole page list as one undo step — reorder, delete, duplicate, rotate,
+     * templates, insert, move out. Relayouts, then scrolls to page [goTo] (≥ 0) and saves through the listener.
+     */
+    fun applyPages(newPages: List<InkPage>, goTo: Int = -1) {
+        if (newPages.isEmpty() || (doc.infinite && newPages.size != 1)) return
+        finishEditing()
+        pushUndo()
+        doc.pages = newPages.toList()
+        relayout(); clamp(); updateCurrentPage(); changed()
+        listener?.onPageChanged(currentPage, doc.pages.size)
+        if (goTo in doc.pages.indices) goToPage(goTo)
+    }
+
     fun setPaper(paper: String, all: Boolean) {
         pushUndo()
         doc.pages = doc.pages.mapIndexed { i, p -> if (all || i == currentPage) p.copy(paper = paper) else p }
@@ -2098,8 +2228,9 @@ class InkView(context: Context) : View(context) {
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
         main.removeCallbacks(settle)
-        main.removeCallbacks(layerCheck); layerCheckPosted = false
+        main.removeCallbacks(zoomSettle)
         main.removeCallbacks(longPress)
+        runCatching { context.applicationContext.unregisterComponentCallbacks(memCallbacks) }
     }
 
     companion object {
@@ -2118,6 +2249,7 @@ class InkView(context: Context) : View(context) {
         private const val H_L = 6
         private const val H_R = 7
         private const val LASER_LIFE = 650L
+        private const val ZOOM_SETTLE = 140L
         private const val LASER_COLOR = 0xFFFF3B30.toInt()
     }
 }

@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- OneNote viewer -->
+    <string name="kind_onenote">OneNote</string>
+    <string name="one_loading">Opening notebook…</string>
+    <string name="one_err_encrypted">This section is password protected. Unlock it in OneNote, then export it again to open it here.</string>
+    <string name="one_err_cloud">This file uses OneNote\'s online format, which can\'t be read here. In OneNote, use File › Export to save the section (.one) or notebook (.onepkg), then open that file.</string>
+    <string name="one_err_toc">This is a notebook\'s table of contents (.onetoc2). It has no pages. Open the section files (.one) next to it, or export the notebook as a .onepkg.</string>
+    <string name="one_err_old">This file was made by an old OneNote version (2007 or earlier) and can\'t be shown here.</string>
+    <string name="one_err_not_onenote">This doesn\'t look like a OneNote file.</string>
+    <string name="one_err_corrupt">This OneNote file couldn\'t be read. It may be damaged.</string>
+    <string name="one_err_compression">This notebook package uses a compression type that isn\'t supported here. Open it in OneNote and export the sections as .one files.</string>
+    <string name="one_err_empty_pkg">This notebook package has no sections.</string>
+    <string name="one_err_io">The file couldn\'t be opened.</string>
+    <string name="one_section_locked">Password protected</string>
+    <string name="one_section_unreadable">Can\'t be read</string>
+    <string name="one_no_pages">This section has no pages</string>
+    <string name="one_pages">Pages</string>
+    <string name="one_toggle_pages">Show or hide pages</string>
+    <string name="one_untitled">Untitled page</string>
+    <string name="one_prev_page">Previous page</string>
+    <string name="one_next_page">Next page</string>
+    <string name="one_page_of">%1$d / %2$d</string>
+    <string name="one_search">Search in notebook</string>
+    <string name="one_search_hint">Search notes</string>
+    <string name="one_find_count">%1$d of %2$d</string>
+    <string name="one_find_none">No matches</string>
+    <string name="one_find_prev">Previous match</string>
+    <string name="one_find_next">Next match</string>
+    <string name="one_find_close">Close search</string>
+    <string name="one_import_note">Import as Daftar note</string>
+    <string name="one_import_desc">Text, pictures and ink become a note you can keep writing on with the S Pen. The note is saved next to this file.</string>
+    <string name="one_scope_page">This page</string>
+    <string name="one_scope_all">All pages (%1$d)</string>
+    <string name="one_import">Import</string>
+    <string name="one_export_pdf">Export to PDF</string>
+    <string name="one_export_text">Export as text</string>
+    <string name="one_copy_page">Copy page text</string>
+    <string name="one_copied">Page text copied</string>
+    <string name="one_exporting">Exporting…</string>
+    <string name="one_importing">Importing…</string>
+    <string name="one_done">Done</string>
+    <string name="one_open">Open</string>
+    <string name="one_close">Close</string>
+    <string name="one_failed">Something went wrong. Nothing was saved.</string>
+    <string name="one_attachment">Attachment</string>
+    <string name="one_attachment_saved">Saved %1$s next to the notebook</string>
+    <string name="one_attachment_missing">This attachment isn\'t stored in the file</string>
+</resources>

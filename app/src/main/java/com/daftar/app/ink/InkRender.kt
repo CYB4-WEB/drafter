@@ -55,6 +55,15 @@ class StrokeGeom internal constructor(val tool: Int, val style: Int, val width: 
     /** Brush: total stroke length, known only for saved strokes (end taper). */
     internal var totalLen = -1f
 
+    // ---- dot: a tap / very short stroke is drawn as one round dot of the pen width (all tools, styles, exports) ----
+    private var minX = Float.MAX_VALUE; private var minY = Float.MAX_VALUE
+    private var maxX = -Float.MAX_VALUE; private var maxY = -Float.MAX_VALUE
+    private var p0 = -1f
+    /** > 0 when the finished stroke is a dot: centre ([dotX], [dotY]) and radius, page points. */
+    internal var dotR = 0f
+    internal var dotX = 0f
+    internal var dotY = 0f
+
     // ---- builder state ----
     internal var n = 0
     private var lx = 0f; private var ly = 0f          // last accepted point
@@ -96,6 +105,9 @@ class StrokeGeom internal constructor(val tool: Int, val style: Int, val width: 
 
     fun add(x: Float, y: Float, p: Float) {
         if (kind == KIND_TAPE) { addTapePoint(x, y); return }
+        if (n == 0) p0 = p
+        if (x < minX) minX = x; if (x > maxX) maxX = x
+        if (y < minY) minY = y; if (y > maxY) maxY = y
         if (n > 0) {
             val dx = x - lx; val dy = y - ly
             if (dx * dx + dy * dy < 1e-6f) return
@@ -196,9 +208,30 @@ class StrokeGeom internal constructor(val tool: Int, val style: Int, val width: 
         f.transform(m)
     }
 
+    /** True while the points so far span less than half the pen width: the stroke looks (and is drawn) as a dot. */
+    internal val isDot: Boolean get() = kind != KIND_TAPE && n >= 1 && maxX - minX <= dotLimit && maxY - minY <= dotLimit
+    private val dotLimit get() = max(0.4f, width * 0.5f)
+
+    /** Dot diameter for this tool / style: the pen width at the first pressure, never tapered away (brush). */
+    internal fun dotWidth(): Float {
+        if (tool != Tool.PEN) return width
+        val p = if (p0 < 0f) -1f else p0.coerceIn(0f, 1f)
+        val f = when (style) {
+            PenStyle.FOUNTAIN -> 1.1f
+            PenStyle.PENCIL -> if (p < 0f) 1f else 0.75f + 0.5f * p
+            PenStyle.BRUSH -> if (p < 0f) 1.1f else 0.7f + 0.8f * p
+            PenStyle.MARKER -> 1f
+            else -> if (p < 0f) 1f else 0.85f + 0.35f * p
+        }
+        return max(0.6f, width * f)
+    }
+    internal val liveDotX get() = (minX + maxX) / 2f
+    internal val liveDotY get() = (minY + maxY) / 2f
+
     fun finish() {
         if (finished) return
         finished = true
+        if (isDot) { dotR = dotWidth() / 2f; dotX = liveDotX; dotY = liveDotY }
         when (kind) {
             KIND_CHUNKS -> if (nChunks > 0) {
                 val last = chunks[nChunks - 1]!!
@@ -220,6 +253,7 @@ class StrokeGeom internal constructor(val tool: Int, val style: Int, val width: 
         if (!finished) return null
         val g = StrokeGeom(tool, style, width)
         g.finished = true; g.n = n; g.totalLen = totalLen
+        g.dotR = dotR; g.dotX = dotX + dx; g.dotY = dotY + dy
         if (fill != null) { g.fill!!.set(fill); g.fill.offset(dx, dy) }
         if (kind == KIND_CHUNKS) {
             g.chunks = arrayOfNulls(max(1, nChunks)); g.chunkW = FloatArray(g.chunks.size); g.nChunks = nChunks
@@ -345,6 +379,7 @@ object InkRender {
         }
         for (i in 0 until n) g.add(pts[i * 3], pts[i * 3 + 1], pts[i * 3 + 2])
         g.finish()
+        s.gdx = 0f; s.gdy = 0f
         s.geom = g
         return g
     }
@@ -369,10 +404,26 @@ object InkRender {
     /** Draws a saved stroke (tapes are drawn hidden — see [drawTape] for the editor's reveal state). */
     fun drawStroke(c: Canvas, s: Stroke, alpha: Float = 1f) {
         if (s.isTape) { drawTape(c, s, false, alpha); return }
-        drawGeom(c, geom(s), s.tool, s.style, s.color, alpha)
+        val g = geom(s)
+        val dx = s.gdx; val dy = s.gdy
+        if (dx != 0f || dy != 0f) {
+            c.save(); c.translate(dx, dy)
+            drawGeom(c, g, s.tool, s.style, s.color, alpha)
+            c.restore()
+        } else drawGeom(c, g, s.tool, s.style, s.color, alpha)
+    }
+
+    /** One round dot (square for the highlighter) of diameter [d] at ([x], [y]). */
+    private fun drawDot(c: Canvas, x: Float, y: Float, d: Float, tool: Int, style: Int, color: Int, alpha: Float) {
+        val p = if (tool == Tool.PEN && style == PenStyle.PENCIL) pencilTL.get()!!.also { it.colorFilter = pencilColor(color) }
+        else fillTL.get()!!.also { it.color = if (tool == Tool.PEN && style == PenStyle.MARKER) color or 0xFF000000.toInt() else color }
+        p.alpha = alphaOf(if (tool == Tool.PEN) style else -1, color, alpha)
+        val r = d / 2f
+        if (tool == Tool.HIGHLIGHTER) c.drawRect(x - r, y - r, x + r, y + r, p) else c.drawCircle(x, y, r, p)
     }
 
     private fun drawGeom(c: Canvas, g: StrokeGeom, tool: Int, style: Int, color: Int, alpha: Float) {
+        if (g.dotR > 0f) { drawDot(c, g.dotX, g.dotY, g.dotR * 2f, tool, style, color, alpha); return }
         if (g.kind == StrokeGeom.KIND_OUTLINE) {
             val p = if (style == PenStyle.PENCIL) pencilTL.get()!!.also { it.colorFilter = pencilColor(color) }
             else fillTL.get()!!.also { it.color = color }
@@ -396,6 +447,7 @@ object InkRender {
     fun drawLive(c: Canvas, g: StrokeGeom, color: Int) {
         val tool = g.tool; val style = g.style
         if (g.kind == StrokeGeom.KIND_TAPE) { drawTapeGeom(c, g, color, false, 1f); return }
+        if (!g.finished && g.isDot) { drawDot(c, g.liveDotX, g.liveDotY, g.dotWidth(), tool, style, color, 1f); return }
         drawGeom(c, g, tool, style, color, 1f)
         if (g.finished || g.n == 0) return
         if (g.kind == StrokeGeom.KIND_CHUNKS) {
@@ -422,7 +474,12 @@ object InkRender {
     /** Pastel tape colours offered by the tape tool. */
     val tapeColors = listOf(0xFFF6D77A, 0xFFA9D6F2, 0xFFF4B6C8, 0xFFB7E3C6, 0xFFD5C7F4, 0xFFF8C59A).map { it.toInt() }
 
-    fun drawTape(c: Canvas, s: Stroke, revealed: Boolean, alpha: Float = 1f) = drawTapeGeom(c, geom(s), s.color, revealed, alpha)
+    fun drawTape(c: Canvas, s: Stroke, revealed: Boolean, alpha: Float = 1f) {
+        val g = geom(s)
+        val dx = s.gdx; val dy = s.gdy
+        if (dx != 0f || dy != 0f) { c.save(); c.translate(dx, dy); drawTapeGeom(c, g, s.color, revealed, alpha); c.restore() }
+        else drawTapeGeom(c, g, s.color, revealed, alpha)
+    }
 
     private fun drawTapeGeom(c: Canvas, g: StrokeGeom, color: Int, revealed: Boolean, alpha: Float) {
         val path = g.fill ?: return
@@ -573,6 +630,7 @@ object InkRender {
      */
     fun drawPaper(c: Canvas, page: InkPage, dark: Boolean = false, clip: RectF? = null, pxPerUnit: Float = 0f, bounded: Boolean = true) {
         val paper = page.paper
+        if (PaperTemplates.handles(paper)) { PaperTemplates.draw(c, page, dark, clip, pxPerUnit, bounded); return }
         if (paper != "lined" && paper != "grid" && paper != "dots" && paper != "cornell") return
         val area = rect2TL.get()!!
         if (clip != null) area.set(clip) else area.set(0f, 0f, page.w, page.h)

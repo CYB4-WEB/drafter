@@ -15,7 +15,7 @@ import java.io.File
 import java.io.IOException
 
 /** TEXT = plain/markup text read in the Word viewer (txt, md, rtf, csv…). */
-enum class Kind { FOLDER, NOTE, PDF, PPTX, DOCX, TEXT, IMAGE, AUDIO, OTHER }
+enum class Kind { FOLDER, NOTE, PDF, PPTX, DOCX, TEXT, IMAGE, AUDIO, ONENOTE, OTHER }
 
 @Serializable
 data class FolderMeta(val color: Int = 5, val icon: String = "folder", val desc: String = "")
@@ -78,6 +78,7 @@ object Storage {
         "txt", "md", "markdown", "rtf", "csv", "tsv", "log" -> Kind.TEXT
         "png", "jpg", "jpeg", "webp", "gif", "bmp", "heic" -> Kind.IMAGE
         "m4a", "mp3", "wav", "aac", "ogg" -> Kind.AUDIO
+        "one", "onepkg", "onetoc2" -> Kind.ONENOTE
         else -> Kind.OTHER
     }
 
@@ -243,6 +244,7 @@ object Storage {
                 "application/pdf" -> "pdf"
                 "image/png" -> "png"
                 "image/jpeg" -> "jpg"
+                "application/onenote", "application/msonenote", "application/x-onenote" -> "one"
                 else -> ""
             }
         }

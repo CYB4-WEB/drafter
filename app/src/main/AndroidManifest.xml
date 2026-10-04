@@ -8,6 +8,8 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.READ_CALENDAR" />
     <uses-permission android:name="android.permission.WRITE_CALENDAR" />
+    <!-- study-agent: optional Do Not Disturb during focus blocks (user grants access in system settings) -->
+    <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
 
     <queries>
         <intent>
@@ -55,6 +57,9 @@
                 <data android:mimeType="application/rtf" />
                 <data android:mimeType="text/rtf" />
                 <data android:mimeType="application/msword" />
+                <data android:mimeType="application/onenote" />
+                <data android:mimeType="application/msonenote" />
+                <data android:mimeType="application/x-onenote" />
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.SEND_MULTIPLE" />
@@ -99,6 +104,16 @@
                 android:value="true" />
         </service>
 
+        <!-- study-agent: focus timer phase ends / notification actions / daily cards-due reminder / re-arm after reboot -->
+        <receiver android:name=".study.StudyReceiver" android:exported="false" />
+        <receiver android:name=".study.StudyBootReceiver" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+            </intent-filter>
+        </receiver>
         <receiver android:name=".planner.ReminderReceiver" android:exported="false" />
         <receiver android:name=".planner.BootReceiver" android:exported="true">
             <intent-filter>
