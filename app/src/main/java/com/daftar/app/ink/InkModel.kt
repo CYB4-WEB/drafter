@@ -2,7 +2,6 @@ package com.daftar.app.ink
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.graphics.Path
 import android.graphics.RectF
 import android.text.StaticLayout
 import android.util.Base64
@@ -35,7 +34,10 @@ object PenStyle {
     val all = listOf(BALL, FOUNTAIN, PENCIL, BRUSH, MARKER)
 }
 
-/** One ink stroke. Points are (x, y, pressure) triples in page points. Identity-compared on purpose. */
+/**
+ * One ink stroke. Points are (x, y, pressure) triples in page points. Identity-compared on purpose.
+ * A [Tool.TAPE] stroke has exactly two points (start, end) and [width] = tape thickness.
+ */
 @Serializable
 class Stroke(
     val tool: Int,
@@ -46,13 +48,20 @@ class Stroke(
     val t: Long = -1,      // ms offset into that recording
     val style: Int = PenStyle.BALL,
 ) {
-    @Transient var paths: List<Pair<Path, Float>>? = null
+    /** Render geometry for this stroke's pen style (built once by [InkRender], then reused every frame). */
+    @Transient var geom: StrokeGeom? = null
     @Transient var bbox: RectF? = null
+    /** Tape only: shown see-through in the editor (self-quiz). Never saved, never exported. */
+    @Transient var revealed: Boolean = false
+
+    val isTape get() = tool == Tool.TAPE
 
     fun bounds(): RectF = bbox ?: RectF(Float.MAX_VALUE, Float.MAX_VALUE, -Float.MAX_VALUE, -Float.MAX_VALUE).also { r ->
         var i = 0
         while (i < pts.size) { r.union(pts[i], pts[i + 1]); i += 3 }
-        r.inset(-width, -width)
+        // the widest pen styles (brush, fountain) reach ~1.7 × width; tapes reach width / 2
+        val pad = if (isTape) width * 0.6f else width
+        r.inset(-pad, -pad)
         bbox = r
     }
 
@@ -63,7 +72,21 @@ class Stroke(
         return Stroke(tool, color, width * widthScale, n, rec, t, style)
     }
 
+    /** Same stroke moved by (dx, dy). Keeps the cached geometry (offset copy), so big whiteboards shift cheaply. */
+    fun shifted(dx: Float, dy: Float): Stroke {
+        val n = pts.copyOf()
+        var i = 0
+        while (i < n.size) { n[i] += dx; n[i + 1] += dy; i += 3 }
+        return Stroke(tool, color, width, n, rec, t, style).also { s ->
+            s.geom = geom?.offsetCopy(dx, dy)
+            bbox?.let { b -> s.bbox = RectF(b).apply { offset(dx, dy) } }
+            s.revealed = revealed
+        }
+    }
+
     fun withColor(c: Int) = Stroke(tool, c, width, pts, rec, t, style)
+
+    fun withTime(recId: Int, time: Long) = Stroke(tool, color, width, pts, recId, time, style).also { it.geom = geom; it.bbox = bbox }
 }
 
 @Serializable
@@ -100,12 +123,61 @@ data class ImageItem(val id: Long, val x: Float, val y: Float, val w: Float, val
     }
 }
 
-/** A tappable link on the page: a web/video URL or an absolute path to a library file. */
+/**
+ * A tappable link on the page: a web/video URL or an absolute path to a library file.
+ * Drawn as a chip [w] × [h] page points (resizable with the lasso; [h] defaults to [LINK_H]).
+ */
 @Serializable
-data class LinkItem(val id: Long, val x: Float, val y: Float, val label: String, val target: String, val w: Float = 160f) {
+data class LinkItem(
+    val id: Long,
+    val x: Float,
+    val y: Float,
+    val label: String,
+    val target: String,
+    val w: Float = 160f,
+    val h: Float = LINK_H,
+) {
+    /** Ellipsized label cache for the chip (render-only). */
+    @Transient var shown: CharSequence? = null
+    @Transient var shownFor: Float = -1f
+    /** Render cache: 0 file badge, 1 video, 2 web (-1 = not computed); badge colour + tag for files. */
+    @Transient var iconKind: Int = -1
+    @Transient var badgeColor: Int = 0
+    @Transient var badgeTag: String = ""
+
     val isFile get() = target.startsWith("/")
-    fun bounds() = RectF(x, y, x + w, y + LINK_H)
-    companion object { const val LINK_H = 30f }
+    val isVideo get() = !isFile && isVideoUrl(target)
+    fun bounds() = RectF(x, y, x + w, y + h)
+    fun contains(px: Float, py: Float) = px >= x && px <= x + w && py >= y && py <= y + h
+
+    companion object {
+        const val LINK_H = 30f
+
+        /** Label shown when the user gives none: file name, or the URL without scheme / "www." / trailing slash. */
+        fun defaultLabel(target: String): String {
+            if (target.startsWith("/")) return File(target).nameWithoutExtension
+            val s = target.substringAfter("://").removePrefix("www.").trimEnd('/')
+            return if (s.length > 60) s.take(57) + "…" else s
+        }
+
+        /** "youtube.com/x" → "https://youtube.com/x"; returns null when [raw] is not a usable web address. */
+        fun normalizeUrl(raw: String): String? {
+            val t = raw.trim()
+            if (t.isEmpty() || t.contains(' ')) return null
+            val u = if (t.startsWith("http://", true) || t.startsWith("https://", true)) t else "https://$t"
+            val host = u.substringAfter("://").substringBefore('/').substringBefore('?').substringBefore('#')
+            return if (host.contains('.') && !host.startsWith('.') && !host.endsWith('.')) u else null
+        }
+
+        fun isVideoUrl(u: String): Boolean {
+            val s = u.lowercase()
+            val host = s.substringAfter("://").substringBefore('/').removePrefix("www.").removePrefix("m.")
+            val path = s.substringAfter("://").substringAfter('/', "").substringBefore('?').substringBefore('#')
+            return host == "youtube.com" || host == "youtu.be" || host == "music.youtube.com" || host.endsWith(".youtube.com") ||
+                host == "vimeo.com" || host == "player.vimeo.com" ||
+                path.endsWith(".mp4") || path.endsWith(".webm") || path.endsWith(".m3u8") || path.endsWith(".mov")
+        }
+    }
 }
 
 @Serializable
@@ -117,8 +189,31 @@ data class InkPage(
     val texts: List<TextItem> = emptyList(),
     val images: List<ImageItem> = emptyList(),
     val links: List<LinkItem> = emptyList(),
+    /** Whiteboards only: total amount the content was shifted right/down while the board grew left/top. */
+    val shiftX: Float = 0f,
+    val shiftY: Float = 0f,
 ) {
     fun isEmpty() = strokes.isEmpty() && texts.isEmpty() && images.isEmpty() && links.isEmpty()
+
+    /** All content moved by (dx, dy) (whiteboard growth). Render caches are carried over. */
+    fun shifted(dx: Float, dy: Float): InkPage = copy(
+        strokes = strokes.map { it.shifted(dx, dy) },
+        texts = texts.map { t -> t.copy(x = t.x + dx, y = t.y + dy).also { it.layout = t.layout } },
+        images = images.map { i -> i.copy(x = i.x + dx, y = i.y + dy).also { it.bmp = i.bmp } },
+        links = links.map { l -> l.copy(x = l.x + dx, y = l.y + dy).also { it.shown = l.shown; it.shownFor = l.shownFor } },
+        shiftX = shiftX + dx, shiftY = shiftY + dy,
+    )
+
+    /** Union of everything on the page (text boxes measured), or null when the page is empty. */
+    fun contentBounds(): RectF? {
+        if (isEmpty()) return null
+        val r = RectF(Float.MAX_VALUE, Float.MAX_VALUE, -Float.MAX_VALUE, -Float.MAX_VALUE)
+        for (s in strokes) r.union(s.bounds())
+        for (t in texts) { InkRender.layout(t); r.union(t.bounds()) }
+        for (i in images) r.union(i.bounds())
+        for (l in links) r.union(l.bounds())
+        return r
+    }
 }
 
 @Serializable
@@ -138,12 +233,27 @@ class InkDoc(
         if (!tmp.renameTo(f)) { f.delete(); tmp.renameTo(f) }
     }
 
+    /**
+     * The part of page [i] worth exporting (page points): the whole page for paged notes; for a whiteboard the content
+     * bounds plus a margin (a blank board gives a landscape A4-sized area). Use it to crop note → PDF / images.
+     */
+    fun exportRect(i: Int): RectF {
+        val p = pages[i]
+        if (!infinite) return RectF(0f, 0f, p.w, p.h)
+        val b = p.contentBounds() ?: return RectF(0f, 0f, minOf(p.w, 842f), minOf(p.h, 595f))
+        b.inset(-EXPORT_MARGIN, -EXPORT_MARGIN)
+        return b
+    }
+
     companion object {
+        /** Whiteboard export margin around the content, in points. */
+        const val EXPORT_MARGIN = 36f
+
         fun load(f: File): InkDoc? = if (!f.exists()) null else runCatching { json.decodeFromString<InkDoc>(f.readText()) }.getOrNull()
 
         fun newNote(paper: String, pages: Int = 1) = InkDoc(pages = List(pages) { InkPage(paper = paper) })
 
-        fun newWhiteboard(paper: String = "dots") = InkDoc(pages = listOf(InkPage(w = 2400f, h = 1800f, paper = paper)), infinite = true)
+        fun newWhiteboard(paper: String = "dots") = InkDoc(pages = listOf(InkPage(w = 2340f, h = 1638f, paper = paper)), infinite = true)
 
         /** Ink layer for a document with fixed pages (PDF/slides): keep strokes, adopt the source sizes. */
         fun forSource(existing: InkDoc?, sizes: List<Pair<Float, Float>>): InkDoc {

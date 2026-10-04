@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Hub -->
+    <string name="convert_subtitle">Turn any file into another format</string>
+    <string name="convert_for_file">For this file</string>
+    <string name="convert_recent">Recent conversions</string>
+    <string name="convert_clear">Clear</string>
+    <string name="convert_none">No conversions for this file type</string>
+    <string name="convert_open_hub">More in Convert</string>
+    <string name="convert_merge_more">Merge with other PDFs…</string>
+    <string name="convert_other">Convert to something else</string>
+
+    <!-- Groups -->
+    <string name="convert_group_pdf">From PDF</string>
+    <string name="convert_group_images">From images</string>
+    <string name="convert_group_pptx">From PowerPoint</string>
+    <string name="convert_group_word">From Word</string>
+    <string name="convert_group_notes">From notes &amp; text</string>
+    <string name="convert_group_tools">PDF tools</string>
+
+    <!-- Conversions -->
+    <string name="convert_pdf_images">PDF → Images</string>
+    <string name="convert_pdf_images_desc">Each page as a PNG or JPG picture</string>
+    <string name="convert_pdf_pptx">PDF → PowerPoint</string>
+    <string name="convert_pdf_pptx_desc">One slide per page, as a picture</string>
+    <string name="convert_pdf_docx">PDF → Word</string>
+    <string name="convert_pdf_docx_desc">Editable text, page by page</string>
+    <string name="convert_pdf_txt">PDF → Text</string>
+    <string name="convert_pdf_txt_desc">Plain text of the pages</string>
+    <string name="convert_images_pdf">Images → PDF</string>
+    <string name="convert_images_pdf_desc">Combine pictures into one PDF</string>
+    <string name="convert_images_pptx">Images → PowerPoint</string>
+    <string name="convert_images_pptx_desc">One slide per picture</string>
+    <string name="convert_image_format">Image format</string>
+    <string name="convert_image_format_desc">PNG, JPG or WEBP, with quality</string>
+    <string name="convert_pptx_pdf">PowerPoint → PDF</string>
+    <string name="convert_pptx_pdf_desc">One page per slide</string>
+    <string name="convert_pptx_images">PowerPoint → Images</string>
+    <string name="convert_pptx_images_desc">Each slide as a picture</string>
+    <string name="convert_pptx_txt">PowerPoint → Text</string>
+    <string name="convert_pptx_txt_desc">Slide titles, text and speaker notes</string>
+    <string name="convert_docx_pdf">Word → PDF</string>
+    <string name="convert_docx_pdf_desc">Paginated A4 PDF</string>
+    <string name="convert_docx_txt">Word → Text</string>
+    <string name="convert_docx_txt_desc">Plain text of the document</string>
+    <string name="convert_note_pdf">Note → PDF</string>
+    <string name="convert_note_pdf_desc">Pages with paper and handwriting</string>
+    <string name="convert_note_images">Note → Images</string>
+    <string name="convert_note_images_desc">Each page as a picture</string>
+    <string name="convert_note_docx">Note → Word</string>
+    <string name="convert_note_docx_desc">The typed text of the note</string>
+    <string name="convert_text_pdf">Text → PDF</string>
+    <string name="convert_text_pdf_desc">TXT, Markdown or RTF as A4 pages</string>
+    <string name="convert_text_docx">Text → Word</string>
+    <string name="convert_text_docx_desc">TXT or Markdown as a Word document</string>
+    <string name="convert_merge">Merge PDFs</string>
+    <string name="convert_merge_desc">Join several PDFs in your order</string>
+    <string name="convert_split">Split PDF</string>
+    <string name="convert_split_desc">By page ranges or every N pages</string>
+    <string name="convert_compress">Compress PDF</string>
+    <string name="convert_compress_desc">Shrink scanned PDFs (pages become images)</string>
+
+    <!-- Setup -->
+    <string name="convert_source">File</string>
+    <string name="convert_sources">Files (in this order)</string>
+    <string name="convert_no_source">Choose a file to convert</string>
+    <string name="convert_need_two">Choose at least two PDFs</string>
+    <string name="convert_from_library">From library</string>
+    <string name="convert_from_device">From device</string>
+    <string name="convert_from_photos">From photos</string>
+    <string name="convert_pick_file">Choose a file</string>
+    <string name="convert_pick_files">Choose files</string>
+    <string name="convert_not_supported">Some files aren\'t the right type and were skipped</string>
+    <string name="convert_move_up">Move up</string>
+    <string name="convert_move_down">Move down</string>
+    <string name="convert_remove">Remove</string>
+    <string name="convert_options">Options</string>
+    <string name="convert_range">Pages</string>
+    <string name="convert_range_hint">All pages</string>
+    <string name="convert_range_help">%1$d pages · e.g. 1-3, 5 (empty = all)</string>
+    <string name="convert_range_help_plain">e.g. 1-3, 5 (empty = all)</string>
+    <string name="convert_range_invalid">Use page numbers from 1 to %1$d, e.g. 1-3, 5</string>
+    <string name="convert_format">Format</string>
+    <string name="convert_quality">Quality</string>
+    <string name="convert_dpi">Resolution (DPI)</string>
+    <string name="convert_scale">Resolution</string>
+    <string name="convert_split_mode">Split</string>
+    <string name="convert_split_every">Every N pages</string>
+    <string name="convert_split_ranges">By ranges</string>
+    <string name="convert_split_every_label">Pages per file</string>
+    <string name="convert_split_ranges_label">Ranges (one file each)</string>
+    <string name="convert_split_ranges_hint">1-3, 4-8, 9</string>
+    <string name="convert_split_ranges_help">Each comma-separated range becomes one PDF</string>
+    <string name="convert_split_result">Creates %1$d files</string>
+    <string name="convert_annotations">Include my annotations</string>
+    <string name="convert_save_to">Save to</string>
+    <string name="convert_change">Change</string>
+    <string name="convert_choose_folder">Choose output folder</string>
+    <string name="convert_run">Convert</string>
+    <string name="convert_again">Convert again</string>
+
+    <!-- Progress & result -->
+    <string name="convert_running">Converting…</string>
+    <string name="convert_progress">%1$d of %2$d</string>
+    <string name="convert_cancelled">Conversion cancelled</string>
+    <string name="convert_show_in_folder">Show in folder</string>
+    <string name="convert_n_files">%1$d files</string>
+    <string name="convert_size_change">Size: %1$s → %2$s (%3$s)</string>
+    <string name="convert_skipped">Unreadable files skipped: %1$d</string>
+    <string name="convert_just_now">just now</string>
+
+    <!-- Output names -->
+    <string name="convert_name_images">%1$s (images)</string>
+    <string name="convert_name_split">%1$s (split)</string>
+    <string name="convert_name_compressed">%1$s (compressed)</string>
+    <string name="convert_name_merged">%1$s (merged)</string>
+    <string name="convert_name_page">Page %1$s</string>
+    <string name="convert_name_photos">Images %1$s</string>
+    <string name="convert_txt_slide">Slide %1$d</string>
+    <string name="convert_txt_notes">Speaker notes:</string>
+
+    <!-- Errors -->
+    <string name="convert_err_failed">Conversion failed. The file may be damaged or not supported.</string>
+    <string name="convert_err_read">This file couldn\'t be read.</string>
+    <string name="convert_err_space">Not enough storage space.</string>
+    <string name="convert_err_password">This file is password-protected.</string>
+    <string name="convert_err_memory">The file is too large for this device. Try a lower resolution.</string>
+    <string name="convert_err_legacy_doc">Old .doc files can\'t be converted. Save it as .docx first.</string>
+    <string name="convert_err_legacy_ppt">Old .ppt files can\'t be converted. Save it as .pptx first.</string>
+    <string name="convert_err_range">Invalid page range. Use pages 1 to %1$d.</string>
+    <string name="convert_err_split">Enter pages per file, or valid ranges between 1 and %1$d.</string>
+    <string name="convert_err_no_text">No text found. This PDF looks scanned — try PDF → Images instead.</string>
+    <string name="convert_err_no_text_doc">This file has no text to export.</string>
+    <string name="convert_err_note_no_text">This note has no typed text. Use Note → PDF or Images to keep the handwriting.</string>
+    <string name="convert_err_no_images">None of the images could be read.</string>
+    <string name="convert_err_engine_slides">The PowerPoint converter couldn\'t process this file.</string>
+    <string name="convert_err_engine_word">The Word converter couldn\'t process this file.</string>
+    <string name="convert_err_too_large">This text file is too large (20 MB maximum).</string>
+</resources>

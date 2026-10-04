@@ -95,6 +95,9 @@ fun EditEventScreen(id: Long?, presetType: Int) {
     var remindersCsv by rememberSaveable { mutableStateOf((existing?.reminders ?: defaultReminders(initType)).joinToString(",")) }
     var remindersTouched by rememberSaveable { mutableStateOf(existing != null) }
     var folder by rememberSaveable { mutableStateOf(existing?.folder ?: "") }
+    // Phone calendar copy: per event; new events default from the remembered choice (Always = on).
+    var calSync by rememberSaveable { mutableStateOf(existing?.calendarSync ?: (CalendarPrefs.mode == CalendarPrefs.ALWAYS)) }
+    var calTouched by rememberSaveable { mutableStateOf(false) }
 
     var titleError by remember { mutableStateOf(false) }
     var linkError by remember { mutableStateOf(false) }
@@ -119,6 +122,53 @@ fun EditEventScreen(id: Long?, presetType: Int) {
     val isAssignment = type == EventType.ASSIGNMENT
 
     val permLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { pane.back() }
+    val access = rememberCalendarAccess()
+    /** Event id waiting for the "Also add to your phone's calendar?" answer (after saving a new event). */
+    var askId by remember { mutableStateOf<Long?>(null) }
+    var askReminders by remember { mutableStateOf(false) }
+    val addedMsg = stringResource(R.string.planner_cal_added)
+
+    // Where the phone copy lives (null = no live copy). Also catches copies deleted in the calendar app.
+    val linkedId = existing?.deviceEventId ?: 0L
+    val calName by produceState<String?>(null, linkedId) {
+        if (linkedId == 0L) { value = null; return@produceState }
+        value = withContext(Dispatchers.IO) { DeviceCalendar.calendarNameOf(ctx, linkedId) }
+        if (value == null && DeviceCalendar.canRead(ctx)) {
+            Planner.reconcileDevice(ctx)
+            if (!calTouched) calSync = false
+        }
+    }
+
+    /** Leaves the editor, asking for the notification permission once when the event has reminders. */
+    fun leave(hasReminders: Boolean) {
+        if (hasReminders && Build.VERSION.SDK_INT >= 33 && !Notify.permitted(ctx) && !PlannerLocalPrefs.askedNotif(ctx)) {
+            PlannerLocalPrefs.setAskedNotif(ctx)
+            permLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) // pops in the result callback
+        } else pane.back()
+    }
+
+    /** Explain → calendar permission → insert the copy; denied → the calendar app's own "new event" screen. */
+    fun addToPhone(id: Long, hasReminders: Boolean) {
+        access.request(allowFallback = true) { r ->
+            when (r) {
+                CalAccess.GRANTED -> {
+                    Planner.setCalendarSync(id, true)
+                    toast(ctx, addedMsg)
+                    leave(hasReminders)
+                }
+                CalAccess.DENIED -> {
+                    // Not kept in sync (no access), so the switch goes back off; the user confirms in the calendar app.
+                    if (Planner.get(id)?.calendarSync == true) Planner.setCalendarSync(id, false)
+                    Planner.get(id)?.let { DeviceCalendar.insertViaApp(ctx, it) }
+                    pane.back()
+                }
+                CalAccess.CANCELLED -> {
+                    if (Planner.get(id)?.calendarSync == true) Planner.setCalendarSync(id, false)
+                    leave(hasReminders)
+                }
+            }
+        }
+    }
 
     fun save() {
         val t = title.trim()
@@ -140,12 +190,18 @@ fun EditEventScreen(id: Long?, presetType: Int) {
             id = existing?.id ?: Planner.newId(), type = type, title = t, start = s, end = e, allDay = allDay,
             weekly = weekly, until = u, location = location.trim(), link = l!!, description = description.trim(),
             reminders = reminders.sorted(), folder = folder, done = existing?.done ?: false,
+            calendarSync = calSync, importKey = existing?.importKey ?: "",
         )
-        Planner.upsert(ev)
-        if (ev.reminders.isNotEmpty() && Build.VERSION.SDK_INT >= 33 && !Notify.permitted(ctx) && !PlannerLocalPrefs.askedNotif(ctx)) {
-            PlannerLocalPrefs.setAskedNotif(ctx)
-            permLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) // pops in the result callback
-        } else pane.back()
+        Planner.upsert(ev) // the store keeps the phone copy in step (insert / update / remove)
+        val hasReminders = ev.reminders.isNotEmpty()
+        when {
+            existing == null && !calTouched && CalendarPrefs.mode == CalendarPrefs.ASK -> { askReminders = hasReminders; askId = ev.id }
+            ev.calendarSync && !DeviceCalendar.permitted(ctx) -> addToPhone(ev.id, hasReminders)
+            else -> {
+                if (ev.calendarSync && existing?.calendarSync != true) toast(ctx, addedMsg)
+                leave(hasReminders)
+            }
+        }
     }
 
     Column(Modifier.fillMaxSize().background(D.c.bg)) {
@@ -257,6 +313,26 @@ fun EditEventScreen(id: Long?, presetType: Int) {
                         }
                     }
                 }
+                // Phone calendar
+                Column(Modifier.fillMaxWidth().card(D.c)) {
+                    SwitchRow(
+                        Icons.Rounded.EditCalendar, stringResource(R.string.planner_cal_switch), calSync,
+                        desc = calName?.let { stringResource(R.string.planner_cal_synced_in, it.ifBlank { stringResource(R.string.planner_set_calendar) }) }
+                            ?: stringResource(R.string.planner_cal_switch_hint),
+                    ) { calSync = it; calTouched = true }
+                    val linked = existing?.let { Planner.get(it.id) }
+                    if (linked != null && linked.deviceEventId != 0L && calName != null) {
+                        RowDivider()
+                        Row(
+                            Modifier.fillMaxWidth().heightIn(min = 56.dp).clickable { DeviceCalendar.openInApp(ctx, linked) }.padding(horizontal = 16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(Icons.AutoMirrored.Rounded.OpenInNew, null, tint = D.c.accent, modifier = Modifier.size(22.dp))
+                            Spacer(Modifier.width(14.dp))
+                            Text(stringResource(R.string.planner_cal_open), style = MaterialTheme.typography.bodyLarge, color = D.c.accent)
+                        }
+                    }
+                }
                 // Linked folder
                 Column {
                     Text(stringResource(R.string.planner_folder), style = MaterialTheme.typography.titleMedium, color = D.c.ink,
@@ -296,7 +372,7 @@ fun EditEventScreen(id: Long?, presetType: Int) {
                         }
                         if (folder.isNotBlank() && File(folder).isDirectory) {
                             Spacer(Modifier.width(8.dp))
-                            TextButton(onClick = { Nav.push(Screen.Library(folder)) }) {
+                            TextButton(onClick = { pane.open(ctx, File(folder)) }) {
                                 Text(stringResource(R.string.planner_open_folder), color = D.c.accent)
                             }
                         }
@@ -365,14 +441,29 @@ fun EditEventScreen(id: Long?, presetType: Int) {
     if (confirmDelete && existing != null) {
         ConfirmDialog(
             title = stringResource(R.string.planner_delete_title),
-            text = stringResource(R.string.planner_delete_text, existing.title),
+            text = stringResource(if (existing.deviceEventId != 0L) R.string.planner_delete_text_synced else R.string.planner_delete_text, existing.title),
             confirm = stringResource(R.string.delete), danger = true,
             onDismiss = { confirmDelete = false },
             onConfirm = {
                 confirmDelete = false
                 Notify.cancel(ctx, existing.id)
-                Planner.delete(existing.id)
+                Planner.delete(existing.id) // also removes the phone-calendar copy
                 pane.back()
+            },
+        )
+    }
+
+    askId?.let { id ->
+        AddToCalendarDialog(
+            onAdd = { always ->
+                if (always) CalendarPrefs.putMode(CalendarPrefs.ALWAYS)
+                askId = null
+                addToPhone(id, askReminders)
+            },
+            onNotNow = { never ->
+                if (never) CalendarPrefs.putMode(CalendarPrefs.NEVER)
+                askId = null
+                leave(askReminders)
             },
         )
     }
@@ -382,14 +473,18 @@ fun EditEventScreen(id: Long?, presetType: Int) {
 private fun RowDivider() = HorizontalDivider(color = D.c.line, thickness = 1.dp, modifier = Modifier.padding(start = 52.dp))
 
 @Composable
-private fun SwitchRow(icon: ImageVector, label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+private fun SwitchRow(icon: ImageVector, label: String, checked: Boolean, desc: String? = null, onChange: (Boolean) -> Unit) {
     Row(
-        Modifier.fillMaxWidth().heightIn(min = 56.dp).clickable { onChange(!checked) }.padding(horizontal = 16.dp),
+        Modifier.fillMaxWidth().heightIn(min = 56.dp).clickable { onChange(!checked) }.padding(horizontal = 16.dp, vertical = if (desc != null) 8.dp else 0.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(icon, null, tint = D.c.muted, modifier = Modifier.size(22.dp))
         Spacer(Modifier.width(14.dp))
-        Text(label, style = MaterialTheme.typography.bodyLarge, color = D.c.ink, modifier = Modifier.weight(1f))
+        Column(Modifier.weight(1f)) {
+            Text(label, style = MaterialTheme.typography.bodyLarge, color = D.c.ink)
+            if (desc != null) Text(desc, style = MaterialTheme.typography.bodySmall, color = D.c.muted)
+        }
+        Spacer(Modifier.width(8.dp))
         Switch(
             checked, onChange,
             colors = SwitchDefaults.colors(checkedTrackColor = D.c.accent, checkedThumbColor = D.c.onAccent,

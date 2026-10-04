@@ -48,6 +48,8 @@ internal object PlannerLocalPrefs {
     private fun sp(c: Context) = c.getSharedPreferences("planner", Context.MODE_PRIVATE)
     fun askedNotif(c: Context) = sp(c).getBoolean("askedNotif", false)
     fun setAskedNotif(c: Context) = sp(c).edit().putBoolean("askedNotif", true).apply()
+    fun askedCalendar(c: Context) = sp(c).getBoolean("askedCalendar", false)
+    fun setAskedCalendar(c: Context) = sp(c).edit().putBoolean("askedCalendar", true).apply()
 }
 
 internal fun openLink(ctx: Context, link: String) {
@@ -86,6 +88,10 @@ fun PlannerScreen() {
         val was = exactOk
         exactOk = Alarms.canExact(ctx)
         if (!was && exactOk) Planner.rescheduleAll(ctx) // upgrade inexact alarms to exact
+        if (DeviceCalendar.permitted(ctx)) {
+            Planner.syncPending()          // access granted later in system settings
+            Planner.reconcileDevice(ctx)   // copies deleted in the calendar app
+        }
         onPauseOrDispose { }
     }
     val permLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { notifOk = Notify.enabled(ctx) }
@@ -108,18 +114,24 @@ fun PlannerScreen() {
         }
     }
 
+    var dialog by rememberSaveable { mutableIntStateOf(0) } // 1 sync, 2 import, 3 export
+
     Box(Modifier.fillMaxSize().background(D.c.bg)) {
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.statusBars)) {
-            // Header: title + segmented tabs (same row on wide screens).
+            // Header: title + segmented tabs (same row on wide screens) + overflow menu.
             val tabs = listOf(R.string.planner_tab_agenda, R.string.planner_tab_week, R.string.planner_tab_month)
             if (compact) {
-                Text(stringResource(R.string.planner_title), style = MaterialTheme.typography.headlineSmall, color = D.c.ink,
-                    modifier = Modifier.padding(start = gutter, end = gutter, top = 16.dp, bottom = 12.dp))
+                Row(Modifier.fillMaxWidth().padding(start = gutter, end = 4.dp, top = 8.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(stringResource(R.string.planner_title), style = MaterialTheme.typography.headlineSmall, color = D.c.ink, modifier = Modifier.weight(1f))
+                    PlannerMenu { dialog = it }
+                }
                 Segmented(tabs.map { stringResource(it) }, tab, { tab = it }, Modifier.padding(horizontal = gutter).fillMaxWidth())
             } else {
-                Row(Modifier.fillMaxWidth().padding(start = gutter, end = gutter, top = 24.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.fillMaxWidth().padding(start = gutter, end = gutter - 8.dp, top = 24.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(stringResource(R.string.planner_title), style = MaterialTheme.typography.displaySmall, color = D.c.ink, modifier = Modifier.weight(1f))
                     Segmented(tabs.map { stringResource(it) }, tab, { tab = it }, Modifier.widthIn(max = 420.dp))
+                    Spacer(Modifier.width(4.dp))
+                    PlannerMenu { dialog = it }
                 }
             }
             if (hasReminders && !notifOk) {
@@ -156,7 +168,7 @@ fun PlannerScreen() {
                 val sel = LocalDate.ofEpochDay(monthSelected)
                 Planner.draftStart = if (tab == 2 && sel != Planner.today())
                     sel.atTime(LocalTime.of(9, 0)).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli() else null
-                Nav.push(Screen.EditEvent(null))
+                pane.push(Screen.EditEvent(null))
             },
             shape = CircleShape, containerColor = D.c.accent, contentColor = D.c.onAccent,
             elevation = FloatingActionButtonDefaults.elevation(0.dp, 0.dp, 0.dp, 0.dp),
@@ -164,6 +176,39 @@ fun PlannerScreen() {
         ) { Icon(Icons.Rounded.Add, stringResource(R.string.add_event)) }
 
         SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).then(fabPad).padding(bottom = 88.dp, start = gutter, end = gutter))
+    }
+
+    when (dialog) {
+        1 -> CalendarSyncDialog { dialog = 0 }
+        2 -> ImportCalendarDialog { dialog = 0 }
+        3 -> ExportIcsDialog { dialog = 0 }
+    }
+}
+
+/** Header overflow: Sync with device calendar · Import from calendar · Export .ics. */
+@Composable
+private fun PlannerMenu(onPick: (Int) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { open = true }) { Icon(Icons.Rounded.MoreVert, stringResource(R.string.planner_more), tint = D.c.ink) }
+        DropdownMenu(open, { open = false }) {
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.planner_menu_sync)) },
+                leadingIcon = { Icon(Icons.Rounded.Sync, null, tint = D.c.muted) },
+                trailingIcon = if (CalendarPrefs.mode == CalendarPrefs.ALWAYS) { { Icon(Icons.Rounded.Check, null, tint = D.c.accent) } } else null,
+                onClick = { open = false; onPick(1) },
+            )
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.planner_menu_import)) },
+                leadingIcon = { Icon(Icons.Rounded.Download, null, tint = D.c.muted) },
+                onClick = { open = false; onPick(2) },
+            )
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.planner_menu_export)) },
+                leadingIcon = { Icon(Icons.Rounded.IosShare, null, tint = D.c.muted) },
+                onClick = { open = false; onPick(3) },
+            )
+        }
     }
 }
 
@@ -232,7 +277,7 @@ private fun AgendaTab(gutter: Dp, onToggleDone: (PlanEvent, Boolean) -> Unit) {
         if (grouped.isEmpty() && overdue.isEmpty()) {
             item(key = "empty") {
                 EmptyState(Icons.Rounded.EventAvailable, stringResource(R.string.planner_empty), Modifier.padding(top = 48.dp)) {
-                    Button(onClick = { Nav.push(Screen.EditEvent(null)) }, colors = ButtonDefaults.buttonColors(containerColor = D.c.accent, contentColor = D.c.onAccent)) {
+                    Button(onClick = { pane.push(Screen.EditEvent(null)) }, colors = ButtonDefaults.buttonColors(containerColor = D.c.accent, contentColor = D.c.onAccent)) {
                         Text(stringResource(R.string.add_event))
                     }
                 }
@@ -273,7 +318,7 @@ internal fun EventRow(o: Occurrence, now: Long, onToggleDone: (PlanEvent, Boolea
     val done = e.type == EventType.ASSIGNMENT && e.done
     val past = o.end < now && !(e.type == EventType.ASSIGNMENT && !e.done)
     Row(
-        Modifier.fillMaxWidth().heightIn(min = 64.dp).clickable { Nav.push(Screen.EditEvent(e.id)) }
+        Modifier.fillMaxWidth().heightIn(min = 64.dp).clickable { pane.push(Screen.EditEvent(e.id)) }
             .padding(start = 12.dp, end = 4.dp, top = 8.dp, bottom = 8.dp).alpha(if (past || done) 0.55f else 1f),
         verticalAlignment = Alignment.CenterVertically,
     ) {

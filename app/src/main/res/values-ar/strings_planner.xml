@@ -112,4 +112,102 @@
         <item quantity="many">%d موعدًا آخر</item>
         <item quantity="other">%d موعد آخر</item>
     </plurals>
+
+    <!-- الجولة ٢: تقويم الهاتف (تقويم Samsung / Google) -->
+    <string name="planner_ask_title">هل تريد إضافته إلى تقويم هاتفك أيضًا؟</string>
+    <string name="planner_ask_text">سيذكّرك تقويم Samsung أو تقويم Google أيضًا.</string>
+    <string name="planner_ask_add">إضافة</string>
+    <string name="planner_not_now">ليس الآن</string>
+    <string name="planner_ask_remember">تذكّر اختياري</string>
+    <string name="planner_ask_settings_hint">يمكنك تغيير ذلك في أي وقت من الإعدادات.</string>
+    <string name="planner_ask_always">افعل ذلك دائمًا</string>
+    <string name="planner_ask_never">لا تسألني مجددًا</string>
+    <string name="planner_cal_access_title">السماح بالوصول إلى التقويم</string>
+    <string name="planner_cal_access_text">يضيف دفتر مواعيدك إلى تقويم الهاتف ويحدّثها عندما تعدّلها أو تحذفها هنا. سيطلب منك Android بعد ذلك السماح بالوصول إلى التقويم.</string>
+    <string name="planner_cal_access_blocked">الوصول إلى التقويم متوقف لتطبيق دفتر. يمكنك تفعيله من إعدادات التطبيق، أو إضافة هذا الموعد من تطبيق التقويم بدلًا من ذلك.</string>
+    <string name="planner_cal_access_blocked_short">الوصول إلى التقويم متوقف لتطبيق دفتر. يمكنك تفعيله من إعدادات التطبيق.</string>
+    <string name="planner_continue">متابعة</string>
+    <string name="planner_open_settings">فتح الإعدادات</string>
+    <string name="planner_use_calendar_app">استخدام تطبيق التقويم</string>
+    <string name="planner_cal_needed">يلزم السماح بالوصول إلى التقويم لهذه الخطوة</string>
+    <string name="planner_cal_added">تمت الإضافة إلى تقويم هاتفك</string>
+    <string name="planner_cal_failed">تعذّرت إضافة الموعد إلى تقويم هاتفك</string>
+    <string name="planner_cal_no_app">لم يتم العثور على تطبيق تقويم</string>
+    <string name="planner_cal_switch">أضفه أيضًا إلى تقويم هاتفي</string>
+    <string name="planner_cal_switch_hint">سيذكّرك تقويم Samsung أو تقويم Google أيضًا</string>
+    <string name="planner_cal_synced_in">في تقويم هاتفك: %1$s</string>
+    <string name="planner_cal_open">فتح في تطبيق التقويم</string>
+    <string name="planner_delete_text_synced">سيتم حذف \"%1$s\" مع تذكيراته ونسخته في تقويم هاتفك.</string>
+
+    <string name="planner_more">خيارات أخرى</string>
+    <string name="planner_menu_sync">المزامنة مع تقويم الجهاز</string>
+    <string name="planner_menu_import">استيراد من التقويم</string>
+    <string name="planner_menu_export">تصدير ملف ‎.ics</string>
+    <string name="planner_sync_auto">أضف المواعيد الجديدة تلقائيًا</string>
+    <string name="planner_sync_auto_hint">التعديل والحذف في دفتر يحدّثان تقويم الهاتف أيضًا</string>
+    <string name="planner_sync_target">التقويم للمواعيد الجديدة</string>
+    <string name="planner_sync_target_hint">المواعيد المضافة سابقًا تبقى في تقويمها.</string>
+    <string name="planner_sync_no_calendars">لا توجد حسابات تقويم على هذا الجهاز. أضف حسابًا من تطبيق التقويم.</string>
+    <string name="planner_sync_need_access">اسمح بالوصول إلى التقويم لاختيار تقويم ومزامنة مواعيدك.</string>
+    <string name="planner_sync_allow">السماح بالوصول إلى التقويم</string>
+    <string name="planner_sync_adding">جارٍ الإضافة إلى تقويم هاتفك…</string>
+    <plurals name="planner_sync_add_existing">
+        <item quantity="zero">لا توجد مواعيد قادمة لإضافتها</item>
+        <item quantity="one">إضافة موعد قادم واحد إلى التقويم</item>
+        <item quantity="two">إضافة موعدين قادمين إلى التقويم</item>
+        <item quantity="few">إضافة %d مواعيد قادمة إلى التقويم</item>
+        <item quantity="many">إضافة %d موعدًا قادمًا إلى التقويم</item>
+        <item quantity="other">إضافة %d موعد قادم إلى التقويم</item>
+    </plurals>
+    <plurals name="planner_sync_remove">
+        <item quantity="zero">لا توجد مواعيد لإزالتها</item>
+        <item quantity="one">إزالة موعد واحد من تقويم الهاتف</item>
+        <item quantity="two">إزالة موعدين من تقويم الهاتف</item>
+        <item quantity="few">إزالة %d مواعيد من تقويم الهاتف</item>
+        <item quantity="many">إزالة %d موعدًا من تقويم الهاتف</item>
+        <item quantity="other">إزالة %d موعد من تقويم الهاتف</item>
+    </plurals>
+    <string name="planner_sync_remove_title">الإزالة من تقويم الهاتف؟</string>
+    <string name="planner_sync_remove_text">سيتم حذف النسخ التي أضافها دفتر إلى تقويم هاتفك. ستبقى مواعيدك في دفتر.</string>
+    <string name="planner_remove">إزالة</string>
+    <string name="planner_done">تم</string>
+    <string name="planner_default_cal">افتراضي</string>
+    <string name="planner_close">إغلاق</string>
+
+    <string name="planner_import_title">استيراد من التقويم</string>
+    <string name="planner_import_range_2w">أسبوعان</string>
+    <string name="planner_import_range_1m">شهر</string>
+    <string name="planner_import_range_3m">٣ أشهر</string>
+    <string name="planner_import_range_6m">٦ أشهر</string>
+    <string name="planner_import_select_all">تحديد الكل</string>
+    <string name="planner_import_type_hint">اضغط على النوع لتغييره</string>
+    <string name="planner_import_empty">لا توجد مواعيد قادمة في تقويمك</string>
+    <string name="planner_import_already">موجود في دفتر</string>
+    <string name="planner_import_reminders">إضافة تذكيرات دفتر</string>
+    <string name="planner_import_reminders_hint">اتركه متوقفًا إذا كان تطبيق التقويم يذكّرك بالفعل</string>
+    <string name="planner_import_button">استيراد (%1$d)</string>
+    <plurals name="planner_imported_n">
+        <item quantity="zero">لم يتم استيراد أي موعد</item>
+        <item quantity="one">تم استيراد موعد واحد</item>
+        <item quantity="two">تم استيراد موعدين</item>
+        <item quantity="few">تم استيراد %d مواعيد</item>
+        <item quantity="many">تم استيراد %d موعدًا</item>
+        <item quantity="other">تم استيراد %d موعد</item>
+    </plurals>
+
+    <string name="planner_export_title">تصدير ملف ‎.ics</string>
+    <string name="planner_export_desc">ينشئ ملف iCalendar يمكنك مشاركته أو فتحه في أي تطبيق تقويم.</string>
+    <string name="planner_export_upcoming">المواعيد القادمة (%1$d)</string>
+    <string name="planner_export_all">كل المواعيد (%1$d)</string>
+    <string name="planner_export_failed">تعذّر إنشاء الملف</string>
+    <string name="planner_ics_calname">جدول دفتر</string>
+
+    <string name="planner_set_cal_mode">إضافة المواعيد الجديدة إلى تقويم الهاتف</string>
+    <string name="planner_mode_ask">اسأل</string>
+    <string name="planner_mode_always">دائمًا</string>
+    <string name="planner_mode_never">أبدًا</string>
+    <string name="planner_set_calendar">تقويم الهاتف</string>
+    <string name="planner_set_calendar_none">لم يتم العثور على تقويم</string>
+    <string name="planner_set_daily">ملخص الصباح</string>
+    <string name="planner_set_daily_desc">كل يوم الساعة %1$s: محاضرات اليوم واختباراته ومواعيد التسليم</string>
 </resources>

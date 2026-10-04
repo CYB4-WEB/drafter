@@ -4,6 +4,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.view.MotionEvent
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -19,17 +20,23 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.StickyNote2
 import androidx.compose.material.icons.rounded.*
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
@@ -42,9 +49,16 @@ import com.daftar.app.slides.SlidesScreen
 import com.daftar.app.ui.*
 import com.daftar.app.ui.theme.D
 import com.daftar.app.ui.theme.DaftarTheme
+import com.daftar.app.ui.workspace.ImportHost
+import com.daftar.app.ui.workspace.ImportSource
+import com.daftar.app.ui.workspace.Importer
+import com.daftar.app.ui.workspace.SplitPane
+import com.daftar.app.ui.workspace.WindowNav
 import com.daftar.app.word.ImageScreen
 import com.daftar.app.word.WordScreen
-import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
 
@@ -59,8 +73,12 @@ class MainActivity : AppCompatActivity() {
         handleIntent(intent)
         setContent {
             DaftarTheme {
-                val width = widthClassOf(LocalConfiguration.current.screenWidthDp.dp)
-                CompositionLocalProvider(LocalWidthClass provides width) { AppShell() }
+                val cfg = LocalConfiguration.current
+                val width = widthClassOf(cfg.screenWidthDp.dp)
+                CompositionLocalProvider(LocalWidthClass provides width) {
+                    AppShell(tiny = cfg.screenWidthDp < 400)
+                    ImportHost()
+                }
             }
         }
     }
@@ -68,6 +86,26 @@ class MainActivity : AppCompatActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handleIntent(intent)
+    }
+
+    /** Touching the main window gives it focus; a split pane overrides this during Compose dispatch. */
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        if (ev.actionMasked == MotionEvent.ACTION_DOWN && Nav.activePane !== RootPaneNav) Nav.activePane = RootPaneNav
+        return super.dispatchTouchEvent(ev)
+    }
+
+    /** Coming back from another Daftar window (keyboard / recents) without touching: take focus back from it. */
+    private fun reclaimFocus() {
+        val ap = Nav.activePane
+        val foreign = ap is WindowNav || (ap is SplitPane && ap.controller.host is WindowNav)
+        if (foreign) Nav.activePane = RootPaneNav
+    }
+
+    override fun onResume() { super.onResume(); reclaimFocus() }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) reclaimFocus()
     }
 
     private fun handleIntent(i: Intent?) {
@@ -85,15 +123,42 @@ class MainActivity : AppCompatActivity() {
             Nav.tab(Screen.Planner); Nav.push(Screen.EditEvent(id))
             i.removeExtra(EXTRA_EVENT_ID)
         }
-        // Files shared / opened from other apps are copied into Inbox and opened.
-        val uri: Uri? = when (i.action) {
-            Intent.ACTION_VIEW -> i.data
-            Intent.ACTION_SEND -> if (Build.VERSION.SDK_INT >= 33) i.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
-                else @Suppress("DEPRECATION") i.getParcelableExtra(Intent.EXTRA_STREAM)
-            else -> null
+        // Files shared / opened from other apps are copied into Inbox (on IO, with progress) and opened.
+        val uris: List<Uri> = when (i.action) {
+            Intent.ACTION_VIEW -> listOfNotNull(i.data)
+            Intent.ACTION_SEND -> listOfNotNull(
+                if (Build.VERSION.SDK_INT >= 33) i.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+                else @Suppress("DEPRECATION") i.getParcelableExtra(Intent.EXTRA_STREAM),
+            )
+            Intent.ACTION_SEND_MULTIPLE -> (
+                if (Build.VERSION.SDK_INT >= 33) i.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java)
+                else @Suppress("DEPRECATION") i.getParcelableArrayListExtra(Intent.EXTRA_STREAM)
+                ) ?: emptyList()
+            else -> emptyList()
         }
-        if (uri != null) {
-            Storage.import(this, uri, Storage.inbox())?.let { Nav.open(this, it) }
+        if (uris.isNotEmpty()) {
+            val inbox = Storage.inbox()
+            Importer.start(this, ImportSource.Docs(uris), inbox, move = false) { res ->
+                when {
+                    res.files.size == 1 -> Nav.open(this, res.files[0])
+                    res.files.size > 1 -> Nav.push(Screen.Library(inbox.absolutePath))
+                }
+            }
+            i.action = null
+            return
+        }
+        // Plain text shared without a file: a link opens in the browser, other text is kept as a .txt in Inbox.
+        if (i.action == Intent.ACTION_SEND) {
+            val text = i.getStringExtra(Intent.EXTRA_TEXT)?.trim()
+            if (!text.isNullOrEmpty()) {
+                val link = text.takeIf { (it.startsWith("http://") || it.startsWith("https://")) && !it.contains(Regex("\\s")) }
+                if (link != null) Nav.push(Screen.Web(link))
+                else {
+                    val name = i.getStringExtra(Intent.EXTRA_SUBJECT)?.takeIf { it.isNotBlank() }
+                        ?: (getString(R.string.ws_shared_text) + " " + SimpleDateFormat("d MMM HH.mm", Locale.getDefault()).format(Date()))
+                    runCatching { Storage.writeText(Storage.inbox(), name, text) }.getOrNull()?.let { Nav.open(this, it) }
+                }
+            }
             i.action = null
         }
     }
@@ -101,48 +166,81 @@ class MainActivity : AppCompatActivity() {
 
 private data class NavItem(val screen: Screen, val label: Int, val icon: ImageVector)
 
+private val ItemHome = NavItem(Screen.Home, R.string.home, Icons.Rounded.Home)
+private val ItemNotes = NavItem(Screen.Notes, R.string.notes, Icons.AutoMirrored.Rounded.StickyNote2)
+private val ItemPlanner = NavItem(Screen.Planner, R.string.planner, Icons.Rounded.CalendarMonth)
+private val ItemConvert = NavItem(Screen.Convert(), R.string.convert, Icons.Rounded.Transform)
+private val ItemSearch = NavItem(Screen.Search(""), R.string.search, Icons.Rounded.Search)
+private val ItemSettings = NavItem(Screen.Settings, R.string.settings, Icons.Rounded.Settings)
+
+/** Top-level destination a stack root belongs to (for highlighting). */
+private fun sameDestination(item: Screen, root: Screen): Boolean = when (root) {
+    is Screen.Library -> item is Screen.Library
+    is Screen.Search -> item is Screen.Search
+    is Screen.Convert -> item is Screen.Convert
+    else -> item == root
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun AppShell() {
+private fun AppShell(tiny: Boolean) {
     val current = Nav.current
     BackHandler(enabled = Nav.stack.size > 1) { Nav.pop() }
-    val items = listOf(
-        NavItem(Screen.Home, R.string.home, Icons.Rounded.Home),
-        NavItem(Screen.Library(Storage.root.absolutePath), R.string.files, Icons.Rounded.Folder),
-        NavItem(Screen.Notes, R.string.notes, Icons.AutoMirrored.Rounded.StickyNote2),
-        NavItem(Screen.Planner, R.string.planner, Icons.Rounded.CalendarMonth),
-        NavItem(Screen.Search(""), R.string.search, Icons.Rounded.Search),
-        NavItem(Screen.Settings, R.string.settings, Icons.Rounded.Settings),
-    )
-    fun selected(it: NavItem) = when (val s = Nav.stack.first()) {
-        is Screen.Library -> it.screen is Screen.Library
-        is Screen.Search -> it.screen is Screen.Search
-        else -> it.screen == s
-    }
-    val showChrome = Nav.stack.size == 1 || current is Screen.Library
+    val itemFiles = NavItem(Screen.Library(Storage.root.absolutePath), R.string.files, Icons.Rounded.Folder)
+    val sideItems = listOf(ItemHome, itemFiles, ItemNotes, ItemPlanner, ItemConvert, ItemSearch, ItemSettings)
+    val barItems = listOf(ItemHome, itemFiles, ItemNotes, ItemPlanner)
+    val moreItems = listOf(ItemSearch, ItemConvert, ItemSettings)
+    val root = Nav.stack.first()
+    fun selected(it: NavItem) = sameDestination(it.screen, root)
+    val split = current is Screen.Split
+    val showChrome = !split && (Nav.stack.size == 1 || current is Screen.Library)
     val compact = LocalWidthClass.current == WidthClass.Compact
+    var more by remember { mutableStateOf(false) }
+    val c = D.c
 
-    Row(Modifier.fillMaxSize().background(D.c.bg)) {
-        if (showChrome && !compact) Sidebar(items, ::selected)
+    Row(Modifier.fillMaxSize().background(c.bg)) {
+        if (showChrome && !compact && !tiny) Sidebar(sideItems, ::selected)
         Column(Modifier.weight(1f).fillMaxHeight()) {
             Box(Modifier.weight(1f)) {
                 AnimatedContent(current, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "nav") { s -> Route(s) }
             }
-            if (showChrome && compact) {
-                NavigationBar(containerColor = D.c.surface, tonalElevation = 0.dp) {
-                    // phone: Home, Files, Notes, Planner, More(settings)
-                    items.filter { it.screen !is Screen.Search }.forEach { item ->
-                        val isMore = item.screen is Screen.Settings
+            if (showChrome && (compact || tiny)) {
+                val colors = NavigationBarItemDefaults.colors(
+                    selectedIconColor = c.accent, selectedTextColor = c.accent,
+                    indicatorColor = c.accent.copy(alpha = 0.12f),
+                    unselectedIconColor = c.muted, unselectedTextColor = c.muted,
+                )
+                NavigationBar(containerColor = c.surface, tonalElevation = 0.dp) {
+                    barItems.forEach { item ->
                         NavigationBarItem(
-                            selected = selected(item),
-                            onClick = { Nav.tab(item.screen) },
-                            icon = { Icon(if (isMore) Icons.Rounded.MoreHoriz else item.icon, null) },
-                            label = { Text(stringResource(if (isMore) R.string.more else item.label)) },
-                            colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = D.c.accent, selectedTextColor = D.c.accent,
-                                indicatorColor = D.c.accent.copy(alpha = 0.12f),
-                                unselectedIconColor = D.c.muted, unselectedTextColor = D.c.muted,
-                            ),
+                            selected = selected(item), onClick = { Nav.tab(item.screen) },
+                            icon = { Icon(item.icon, null) }, label = { Text(stringResource(item.label), maxLines = 1) }, colors = colors,
                         )
+                    }
+                    NavigationBarItem(
+                        selected = moreItems.any { selected(it) }, onClick = { more = true },
+                        icon = { Icon(Icons.Rounded.MoreHoriz, null) }, label = { Text(stringResource(R.string.more), maxLines = 1) }, colors = colors,
+                    )
+                }
+            }
+        }
+    }
+
+    if (more) {
+        ModalBottomSheet(onDismissRequest = { more = false }, containerColor = c.surface) {
+            Column(Modifier.padding(horizontal = 16.dp).padding(bottom = 24.dp)) {
+                Text(stringResource(R.string.more), style = MaterialTheme.typography.titleLarge, color = c.ink, modifier = Modifier.padding(8.dp))
+                moreItems.forEach { item ->
+                    val sel = selected(item)
+                    Row(
+                        Modifier.fillMaxWidth().padding(vertical = 2.dp)
+                            .background(if (sel) c.accent.copy(alpha = 0.12f) else Color.Transparent, RoundedCornerShape(12.dp))
+                            .clickable { more = false; Nav.tab(item.screen) }.padding(horizontal = 12.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(item.icon, null, tint = if (sel) c.accent else c.muted)
+                        Spacer(Modifier.width(16.dp))
+                        Text(stringResource(item.label), color = if (sel) c.accent else c.ink, style = MaterialTheme.typography.bodyLarge)
                     }
                 }
             }
@@ -156,13 +254,12 @@ private fun Sidebar(items: List<NavItem>, selected: (NavItem) -> Boolean) {
         Modifier.width(232.dp).fillMaxHeight().background(D.c.bg).windowInsetsPadding(WindowInsets.systemBars)
             .padding(horizontal = 12.dp, vertical = 16.dp),
     ) {
-        Text(stringResource(R.string.app_name), style = MaterialTheme.typography.headlineSmall, color = D.c.ink,
-            modifier = Modifier.padding(start = 12.dp, top = 8.dp, bottom = 24.dp))
+        DaftarBrand(markSize = 28.dp, modifier = Modifier.padding(start = 10.dp, top = 8.dp, bottom = 24.dp))
         items.forEach { item ->
             val sel = selected(item)
             Row(
                 Modifier.fillMaxWidth().padding(vertical = 2.dp)
-                    .background(if (sel) D.c.accent.copy(alpha = 0.12f) else androidx.compose.ui.graphics.Color.Transparent, RoundedCornerShape(12.dp))
+                    .background(if (sel) D.c.accent.copy(alpha = 0.12f) else Color.Transparent, RoundedCornerShape(12.dp))
                     .clickable { Nav.tab(item.screen) }.padding(horizontal = 12.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -194,6 +291,3 @@ fun Route(s: Screen) {
         is Screen.Split -> SplitScreen(s)
     }
 }
-
-@Suppress("unused")
-private fun exists(p: String) = File(p).exists()

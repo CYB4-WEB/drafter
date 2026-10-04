@@ -5,7 +5,9 @@ import android.content.Context
 import android.content.Intent
 import android.webkit.MimeTypeMap
 import android.widget.Toast
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.setValue
 import androidx.core.content.FileProvider
 import com.daftar.app.R
 import com.daftar.app.data.Kind
@@ -55,14 +57,28 @@ interface PaneNav {
     fun back()
     fun open(ctx: Context, f: File)
     fun push(s: Screen)
+    /** Replace the current screen of this pane (e.g. after a rename). */
+    fun replace(s: Screen)
     /** True when the screen is shown inside a split pane (hide redundant chrome, etc.). */
     val inPane: Boolean get() = false
+    /** The screens of this pane's back stack, bottom first. */
+    val screens: List<Screen> get() = emptyList()
+    /** Pop back until [s] is on top (e.g. breadcrumbs). Returns false (and changes nothing) when [s] is not in the stack. */
+    fun popTo(s: Screen): Boolean = false
 }
 
 object RootPaneNav : PaneNav {
     override fun back() { Nav.pop() }
     override fun open(ctx: Context, f: File) = Nav.open(ctx, f)
     override fun push(s: Screen) = Nav.push(s)
+    override fun replace(s: Screen) = Nav.replace(s)
+    override val screens: List<Screen> get() = Nav.stack.toList()
+    override fun popTo(s: Screen): Boolean {
+        val i = Nav.stack.lastIndexOf(s)
+        if (i < 0) return false
+        while (Nav.stack.lastIndex > i) Nav.stack.removeAt(Nav.stack.lastIndex)
+        return true
+    }
 }
 
 val LocalPaneNav = androidx.compose.runtime.staticCompositionLocalOf<PaneNav> { RootPaneNav }
@@ -74,7 +90,8 @@ val LocalPaneNav = androidx.compose.runtime.staticCompositionLocalOf<PaneNav> { 
 val pane: PaneNav get() = Nav.activePane
 
 object Nav {
-    var activePane: PaneNav = RootPaneNav
+    /** Observable so the split workspace can outline the pane that has focus. */
+    var activePane: PaneNav by androidx.compose.runtime.mutableStateOf(RootPaneNav)
     val stack = mutableStateListOf<Screen>(Screen.Home)
     val current get() = stack.last()
 
@@ -85,17 +102,34 @@ object Nav {
     fun replace(s: Screen) { stack[stack.lastIndex] = s }
 
     fun open(ctx: Context, f: File) {
-        if (f.isDirectory) { push(Screen.Library(f.absolutePath)); return }
-        Storage.opened(f)
-        when (Storage.kindOf(f)) {
-            Kind.NOTE -> push(Screen.Note(f.absolutePath))
-            Kind.PDF -> push(Screen.Pdf(f.absolutePath))
-            Kind.PPTX -> push(Screen.Slides(f.absolutePath))
-            Kind.DOCX -> push(Screen.Word(f.absolutePath))
-            Kind.IMAGE -> push(Screen.Image(f.absolutePath))
-            else -> openExternally(ctx, f)
-        }
+        val s = screenFor(f)
+        if (s == null) { openExternally(ctx, f); return }
+        if (!f.isDirectory) Storage.opened(f)
+        push(s)
     }
+}
+
+/** The in-app screen that shows [f], or null when only another app can open it. */
+fun screenFor(f: File): Screen? {
+    if (f.isDirectory) return Screen.Library(f.absolutePath)
+    return when (Storage.kindOf(f)) {
+        Kind.NOTE -> Screen.Note(f.absolutePath)
+        Kind.PDF -> Screen.Pdf(f.absolutePath)
+        Kind.PPTX -> Screen.Slides(f.absolutePath)
+        Kind.DOCX, Kind.TEXT -> Screen.Word(f.absolutePath)
+        Kind.IMAGE -> Screen.Image(f.absolutePath)
+        else -> null
+    }
+}
+
+/** File shown by a viewer screen (null for non-file screens). */
+val Screen.file: File? get() = when (this) {
+    is Screen.Note -> File(path)
+    is Screen.Pdf -> File(path)
+    is Screen.Slides -> File(path)
+    is Screen.Word -> File(path)
+    is Screen.Image -> File(path)
+    else -> null
 }
 
 fun uriFor(ctx: Context, f: File) = FileProvider.getUriForFile(ctx, ctx.packageName + ".files", f)

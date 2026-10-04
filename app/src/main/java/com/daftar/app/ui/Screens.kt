@@ -39,6 +39,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.os.LocaleListCompat
 import com.daftar.app.MainActivity
 import com.daftar.app.R
@@ -52,8 +53,10 @@ import com.daftar.app.planner.EventType
 import com.daftar.app.planner.Occurrence
 import com.daftar.app.planner.Planner
 import com.daftar.app.ui.theme.D
+import com.daftar.app.ui.workspace.fileItemGestures
 import com.daftar.app.ui.theme.folderColor
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.text.DateFormat
@@ -124,10 +127,11 @@ fun HomeScreen() {
                 // quick actions
                 Row(Modifier.fillMaxWidth().padding(top = 16.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     QuickAction(Icons.Rounded.Draw, stringResource(R.string.new_note), Color(0xFF3B82F6)) { actions.quick("note", null) }
-                    QuickAction(Icons.Rounded.CreateNewFolder, stringResource(R.string.new_folder), Color(0xFF4CC38A)) { actions.newFolder(Storage.root) }
-                    QuickAction(Icons.Rounded.FileUpload, stringResource(R.string.import_file), Color(0xFFF59E42)) { actions.quick("import", null) }
-                    QuickAction(Icons.Rounded.PictureAsPdf, stringResource(R.string.images_to_pdf), Color(0xFFF26D5B)) { actions.quick("pdf", null) }
-                    QuickAction(Icons.Rounded.EventAvailable, stringResource(R.string.add_event), Color(0xFF8B6CE0)) { Nav.push(Screen.EditEvent(null)) }
+                    QuickAction(Icons.Rounded.Dashboard, stringResource(R.string.new_whiteboard), Color(0xFF6366F1)) { actions.quick("whiteboard", null) }
+                    QuickAction(Icons.Rounded.CreateNewFolder, stringResource(R.string.new_folder), Color(0xFF10B981)) { actions.newFolder(Storage.root) }
+                    QuickAction(Icons.Rounded.FileUpload, stringResource(R.string.import_file), Color(0xFFF59E0B)) { actions.quick("import", null) }
+                    QuickAction(Icons.Rounded.Transform, stringResource(R.string.convert), Color(0xFFEF4444)) { Nav.tab(Screen.Convert()) }
+                    QuickAction(Icons.Rounded.EventAvailable, stringResource(R.string.add_event), Color(0xFF8B5CF6)) { pane.push(Screen.EditEvent(null)) }
                 }
 
                 if (expanded) {
@@ -238,10 +242,10 @@ private fun UpcomingSection(items: List<Occurrence>) {
     }
     Column(Modifier.fillMaxWidth().card(c).padding(4.dp)) {
         if (items.isEmpty()) EmptyState(Icons.Rounded.EventAvailable, stringResource(R.string.nothing_upcoming)) {
-            OutlinedButton(onClick = { Nav.push(Screen.EditEvent(null)) }) { Text(stringResource(R.string.add_event)) }
+            OutlinedButton(onClick = { pane.push(Screen.EditEvent(null)) }) { Text(stringResource(R.string.add_event)) }
         }
         items.forEach { o ->
-            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { Nav.push(Screen.EditEvent(o.event.id)) }.padding(10.dp),
+            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { pane.push(Screen.EditEvent(o.event.id)) }.padding(10.dp),
                 verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.width(4.dp).height(38.dp).clip(RoundedCornerShape(2.dp)).background(eventColor(o.event.type)))
                 Spacer(Modifier.width(12.dp))
@@ -331,7 +335,7 @@ fun LibraryScreen(dir: String) {
                         color = if (last) c.ink else c.accent,
                         modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(enabled = !last) {
                             if (Storage.isRoot(f)) Nav.tab(Screen.Library(Storage.root.absolutePath))
-                            else { while (Nav.stack.size > 1 && (Nav.current as? Screen.Library)?.dir != f.absolutePath) pane.back() }
+                            else pane.popTo(Screen.Library(f.absolutePath))
                         }.padding(horizontal = 6.dp, vertical = 4.dp))
                     if (!last) Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, null, tint = c.muted, modifier = Modifier.size(16.dp))
                 }
@@ -364,7 +368,21 @@ fun LibraryScreen(dir: String) {
 // Notes (all notebooks)
 // =====================================================================================
 
-private data class NoteInfo(val e: Entry, val subject: File?, val pages: Int, val preview: String)
+private data class NoteInfo(val e: Entry, val subject: File?, val pages: Int, val preview: String, val whiteboard: Boolean)
+
+/** Parsed note summaries keyed by path; reused while the file's mtime is unchanged (notes can be large). */
+private val noteInfoCache = java.util.concurrent.ConcurrentHashMap<String, Pair<Long, NoteInfo>>()
+
+private fun noteInfo(f: File): NoteInfo {
+    val mt = f.lastModified()
+    noteInfoCache[f.absolutePath]?.let { (t, info) -> if (t == mt) return info }
+    val subj = Storage.crumbs(f.parentFile!!).getOrNull(1)
+    val d = InkDoc.load(f)
+    val preview = d?.pages?.flatMap { it.texts }?.firstOrNull()?.text?.lineSequence()?.firstOrNull() ?: ""
+    val info = NoteInfo(Storage.entry(f), subj, d?.pages?.size ?: 1, preview, d?.infinite == true)
+    noteInfoCache[f.absolutePath] = mt to info
+    return info
+}
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -380,12 +398,7 @@ fun NotesScreen() {
             Storage.root.walkTopDown().onEnter { !it.name.startsWith(".") }
                 .filter { it.isFile && it.extension == Storage.NOTE_EXT }
                 .sortedByDescending { it.lastModified() }
-                .map { f ->
-                    val subj = Storage.crumbs(f.parentFile!!).getOrNull(1)
-                    val d = InkDoc.load(f)
-                    val preview = d?.pages?.flatMap { it.texts }?.firstOrNull()?.text?.lineSequence()?.firstOrNull() ?: ""
-                    NoteInfo(Storage.entry(f), subj, d?.pages?.size ?: 1, preview)
-                }.toList()
+                .map { f -> noteInfo(f) }.toList()
         }
     }
     val subjects = notes.mapNotNull { it.subject }.distinctBy { it.absolutePath }
@@ -402,7 +415,10 @@ fun NotesScreen() {
                 }
             }
             if (shown.isEmpty()) EmptyState(Icons.AutoMirrored.Rounded.StickyNote2, stringResource(R.string.no_notes), Modifier.padding(top = 40.dp)) {
-                Button(onClick = { actions.quick("note", null) }) { Text(stringResource(R.string.new_note)) }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = { actions.quick("note", null) }) { Text(stringResource(R.string.new_note)) }
+                    OutlinedButton(onClick = { actions.quick("whiteboard", null) }) { Text(stringResource(R.string.new_whiteboard)) }
+                }
             }
             else LazyVerticalGrid(GridCells.Adaptive(300.dp), Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(start = gutter(), end = gutter(), bottom = 120.dp),
@@ -410,7 +426,7 @@ fun NotesScreen() {
                 items(shown, key = { it.e.file.absolutePath }) { n ->
                     val m = n.subject?.let { Storage.meta(it) }
                     Row(Modifier.fillMaxWidth().card(c).clip(RoundedCornerShape(16.dp))
-                        .combinedClickableCompat({ pane.open(ctx, n.e.file) }, { actions.menu(n.e) }).padding(16.dp)) {
+                        .fileItemGestures(n.e.file, { pane.open(ctx, n.e.file) }, { actions.menu(n.e) }).padding(16.dp)) {
                         Box(Modifier.width(4.dp).height(52.dp).clip(RoundedCornerShape(2.dp)).background(if (m != null) folderColor(m.color) else c.line))
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
@@ -418,14 +434,24 @@ fun NotesScreen() {
                                 Text(n.e.name, style = MaterialTheme.typography.titleMedium, color = c.ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                                 Text(DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(n.e.file.lastModified())), style = MaterialTheme.typography.bodySmall, color = c.muted)
                             }
-                            Text(n.preview.ifBlank { stringResource(R.string.pages_n, n.pages) }, style = MaterialTheme.typography.bodyMedium, color = c.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(n.preview.ifBlank { if (n.whiteboard) stringResource(R.string.whiteboard) else stringResource(R.string.pages_n, n.pages) },
+                                style = MaterialTheme.typography.bodyMedium, color = c.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Text(parentLabel(n.e.file), style = MaterialTheme.typography.bodySmall, color = c.muted, maxLines = 1)
                         }
                     }
                 }
             }
         }
-        Fab({ actions.quick("note", null) }, Modifier.align(Alignment.BottomEnd).padding(24.dp).navigationBarsPadding())
+        var fabMenu by remember { mutableStateOf(false) }
+        Box(Modifier.align(Alignment.BottomEnd).padding(24.dp).navigationBarsPadding()) {
+            Fab({ fabMenu = true })
+            DropdownMenu(fabMenu, { fabMenu = false }) {
+                DropdownMenuItem({ Text(stringResource(R.string.new_note)) }, { fabMenu = false; actions.quick("note", null) },
+                    leadingIcon = { Icon(Icons.Rounded.Draw, null, tint = c.muted) })
+                DropdownMenuItem({ Text(stringResource(R.string.new_whiteboard)) }, { fabMenu = false; actions.quick("whiteboard", null) },
+                    leadingIcon = { Icon(Icons.Rounded.Dashboard, null, tint = c.muted) })
+            }
+        }
     }
 }
 
@@ -485,7 +511,10 @@ fun SearchScreen(query: String) {
 fun SettingsScreen() {
     val c = D.c
     val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
     val stats = remember(Storage.version) { Storage.stats() }
+    var cacheBytes by remember { mutableLongStateOf(-1L) }
+    LaunchedEffect(Unit) { cacheBytes = withContext(Dispatchers.IO) { dirSize(ctx.cacheDir) } }
     val langNow = AppCompatDelegate.getApplicationLocales().toLanguageTags()
     Column(Modifier.fillMaxSize().background(c.bg).verticalScroll(rememberScrollState())) {
         Header(stringResource(R.string.settings))
@@ -499,6 +528,15 @@ fun SettingsScreen() {
                 ChoiceRow(Icons.Rounded.DarkMode, stringResource(R.string.set_theme),
                     listOf(0 to stringResource(R.string.set_system), 1 to stringResource(R.string.set_light), 2 to stringResource(R.string.set_dark)), Prefs.themeMode) { Prefs.putTheme(it) }
             }
+            SettingsGroup(stringResource(R.string.set_display)) {
+                ChoiceRow(Icons.Rounded.FormatSize, stringResource(R.string.set_text_size),
+                    listOf(0.9f to stringResource(R.string.text_small), 1f to stringResource(R.string.text_default), 1.15f to stringResource(R.string.text_large),
+                        1.3f to stringResource(R.string.text_xlarge), 1.5f to stringResource(R.string.text_huge)), Prefs.textScale) { Prefs.putTextScale(it) }
+                Text(stringResource(R.string.set_text_preview), style = MaterialTheme.typography.bodyLarge, color = c.muted,
+                    modifier = Modifier.padding(start = 56.dp, end = 16.dp, bottom = 12.dp))
+                SwitchRow(Icons.Rounded.TouchApp, stringResource(R.string.set_large_controls), stringResource(R.string.set_large_controls_desc), Prefs.largeControls) { Prefs.putLargeControls(it) }
+                SwitchRow(Icons.Rounded.LightMode, stringResource(R.string.set_keep_screen_on), stringResource(R.string.set_keep_screen_on_desc), Prefs.keepScreenOn) { Prefs.putKeepScreenOn(it) }
+            }
             SettingsGroup(stringResource(R.string.set_pen)) {
                 SwitchRow(Icons.Rounded.Draw, stringResource(R.string.set_pen_only), stringResource(R.string.set_pen_only_desc), Prefs.penOnly) { Prefs.putPenOnly(it) }
                 ChoiceRow(Icons.Rounded.Mouse, stringResource(R.string.set_button),
@@ -510,12 +548,9 @@ fun SettingsScreen() {
                     listOf("en-US" to "English", "ar" to "العربية"), Prefs.inkLang) { Prefs.putInkLang(it) }
                 ChoiceRow(Icons.Rounded.KeyboardVoice, stringResource(R.string.set_speech_lang),
                     listOf("ar-SA" to "العربية", "en-US" to "English"), Prefs.speechLang) { Prefs.putSpeechLang(it) }
+                SwitchRow(Icons.Rounded.Link, stringResource(R.string.set_links_in_app), stringResource(R.string.set_links_in_app_desc), Prefs.linksInApp) { Prefs.putLinksInApp(it) }
             }
-            SettingsGroup(stringResource(R.string.planner)) {
-                SwitchRow(Icons.Rounded.WbSunny, stringResource(R.string.set_daily), stringResource(R.string.set_daily_desc), Prefs.dailySummary) {
-                    Prefs.putDaily(it); Planner.init(ctx)
-                }
-            }
+            com.daftar.app.planner.PlannerSettingsSection()
             SettingsGroup(stringResource(R.string.set_storage)) {
                 Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Rounded.Storage, null, tint = c.muted)
@@ -525,11 +560,32 @@ fun SettingsScreen() {
                         Text(Storage.root.absolutePath, color = c.muted, style = MaterialTheme.typography.bodySmall)
                     }
                 }
+                Row(Modifier.fillMaxWidth().clickable {
+                    scope.launch {
+                        withContext(Dispatchers.IO) { ctx.cacheDir.listFiles()?.forEach { it.deleteRecursively() } }
+                        cacheBytes = withContext(Dispatchers.IO) { dirSize(ctx.cacheDir) }
+                        toast(ctx, ctx.getString(R.string.cache_cleared))
+                    }
+                }.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Rounded.CleaningServices, null, tint = c.muted)
+                    Spacer(Modifier.width(16.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(stringResource(R.string.set_clear_cache), color = c.ink)
+                        Text(if (cacheBytes < 0) "…" else stringResource(R.string.set_clear_cache_desc, android.text.format.Formatter.formatShortFileSize(ctx, cacheBytes)),
+                            color = c.muted, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
             }
-            Text("Daftar 1.0", color = c.muted, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(vertical = 24.dp))
+            Column(Modifier.padding(vertical = 24.dp)) {
+                DaftarBrand(28.dp, 20.sp)
+                Text(stringResource(R.string.app_tagline) + " · 1.1", color = c.muted, style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(top = 4.dp))
+            }
         }
     }
 }
+
+private fun dirSize(d: File): Long = d.walkTopDown().filter { it.isFile }.sumOf { it.length() }
 
 @Composable
 private fun SettingsGroup(title: String, content: @Composable ColumnScope.() -> Unit) {
@@ -575,6 +631,6 @@ fun NoteScreen(path: String) {
     InkEditorScaffold(
         title = f.nameWithoutExtension, inkFile = f, source = null, isNote = true,
         onBack = { pane.back() },
-        onRename = { n -> Storage.rename(f, n)?.let { Nav.replace(Screen.Note(it.absolutePath)) } },
+        onRename = { n -> Storage.rename(f, n)?.let { pane.replace(Screen.Note(it.absolutePath)) } },
     )
 }

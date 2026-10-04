@@ -122,4 +122,34 @@
     <string name="set_daily_desc">إشعار كل صباح بمحاضرات اليوم ومواعيده</string>
     <string name="set_storage">التخزين</string>
     <string name="set_storage_stats">%1$d مجلدات · %2$d ملفات · %3$s</string>
+    <!-- round 2 shared -->
+    <string name="kind_text">نص</string>
+    <string name="zoom_in">تكبير</string>
+    <string name="zoom_out">تصغير</string>
+    <string name="zoom_fit">ملاءمة العرض</string>
+    <string name="convert">تحويل</string>
+    <string name="open_side_by_side">فتح جنبًا إلى جنب</string>
+    <string name="open_new_window">فتح في نافذة جديدة</string>
+    <string name="pick_second_file">اختر ملفًا لفتحه بجانب هذا الملف</string>
+    <string name="select_n">تحديد (%1$d)</string>
+    <string name="app_tagline">ملفاتك الدراسية، منظّمة.</string>
+    <string name="whiteboard">سبورة</string>
+    <string name="new_whiteboard">سبورة جديدة</string>
+    <string name="set_display">العرض والنص</string>
+    <string name="set_text_size">حجم النص</string>
+    <string name="text_small">صغير</string>
+    <string name="text_default">افتراضي</string>
+    <string name="text_large">كبير</string>
+    <string name="text_xlarge">كبير جدًا</string>
+    <string name="text_huge">ضخم</string>
+    <string name="set_text_preview">العناوين والقوائم والمستندات تتبع هذا الحجم.</string>
+    <string name="set_large_controls">أزرار أكبر</string>
+    <string name="set_large_controls_desc">أشرطة علوية وأزرار أدوات وأيقونات أكبر</string>
+    <string name="set_keep_screen_on">إبقاء الشاشة مضاءة</string>
+    <string name="set_keep_screen_on_desc">أثناء فتح ملاحظة أو مستند أو عرض تقديمي</string>
+    <string name="set_links_in_app">فتح الروابط داخل دفتر</string>
+    <string name="set_links_in_app_desc">صفحات الويب والفيديوهات في الملاحظات تفتح في المتصفح المدمج</string>
+    <string name="set_clear_cache">مسح الملفات المؤقتة</string>
+    <string name="set_clear_cache_desc">%1$s مستخدمة للمعاينات والمشاركة والتصدير</string>
+    <string name="cache_cleared">تم مسح الملفات المؤقتة</string>
 </resources>

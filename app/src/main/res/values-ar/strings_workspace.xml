@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- split workspace -->
+    <string name="ws_split_menu">خيارات العرض المقسّم</string>
+    <string name="ws_split_swap">تبديل اللوحتين</string>
+    <string name="ws_split_side">جنبًا إلى جنب</string>
+    <string name="ws_split_stacked">فوق بعض</string>
+    <string name="ws_split_equal">حجمان متساويان</string>
+    <string name="ws_open_left">فتح ملف في اليسار…</string>
+    <string name="ws_open_right">فتح ملف في اليمين…</string>
+    <string name="ws_open_top">فتح ملف في الأعلى…</string>
+    <string name="ws_open_bottom">فتح ملف في الأسفل…</string>
+    <string name="ws_close_left">إغلاق اللوحة اليسرى</string>
+    <string name="ws_close_right">إغلاق اللوحة اليمنى</string>
+    <string name="ws_close_top">إغلاق اللوحة العلوية</string>
+    <string name="ws_close_bottom">إغلاق اللوحة السفلية</string>
+    <string name="ws_pick_file">اختر ملفًا لفتحه هنا</string>
+
+    <!-- windows -->
+    <string name="ws_window_missing">هذا الملف لم يعد متاحًا</string>
+
+    <!-- import -->
+    <string name="ws_import_title">استيراد</string>
+    <string name="ws_import_files">ملفات</string>
+    <string name="ws_import_files_desc">اختر مستندًا واحدًا أو أكثر</string>
+    <string name="ws_import_folder">مجلد</string>
+    <string name="ws_import_folder_desc">مجلد كامل مع مجلداته الفرعية</string>
+    <string name="ws_import_folder_action">استيراد مجلد</string>
+    <string name="ws_import_folder_named">استيراد «%1$s»</string>
+    <string name="ws_import_into">إلى %1$s</string>
+    <string name="ws_copy">نسخ</string>
+    <string name="ws_copy_desc">إبقاء الأصل في مكانه</string>
+    <string name="ws_move">نقل</string>
+    <string name="ws_move_desc">حذف الأصل بعد الاستيراد</string>
+    <string name="ws_move_unavailable">هذا الموقع لا يسمح بحذف الملفات</string>
+    <string name="ws_scanning">جارٍ البحث عن الملفات…</string>
+    <string name="ws_importing">جارٍ الاستيراد…</string>
+    <string name="ws_removing">جارٍ حذف الأصول…</string>
+    <string name="ws_progress">%1$d من %2$d</string>
+    <string name="ws_import_busy">هناك عملية استيراد أخرى قيد التنفيذ</string>
+    <string name="ws_import_done_title">اكتمل الاستيراد</string>
+    <string name="ws_import_cancelled_title">أُلغي الاستيراد</string>
+    <string name="ws_not_removed_title">بقيت بعض الملفات الأصلية</string>
+    <string name="ws_shared_text">نص مُشارَك</string>
+    <plurals name="ws_import_items">
+        <item quantity="zero">استيراد %1$d عنصر</item>
+        <item quantity="one">استيراد عنصر واحد</item>
+        <item quantity="two">استيراد عنصرين</item>
+        <item quantity="few">استيراد %1$d عناصر</item>
+        <item quantity="many">استيراد %1$d عنصرًا</item>
+        <item quantity="other">استيراد %1$d عنصر</item>
+    </plurals>
+    <plurals name="ws_imported_n">
+        <item quantity="zero">لم يُستورد أي ملف</item>
+        <item quantity="one">تم استيراد ملف واحد</item>
+        <item quantity="two">تم استيراد ملفين</item>
+        <item quantity="few">تم استيراد %1$d ملفات</item>
+        <item quantity="many">تم استيراد %1$d ملفًا</item>
+        <item quantity="other">تم استيراد %1$d ملف</item>
+    </plurals>
+    <plurals name="ws_failed_n">
+        <item quantity="zero">تعذّر استيراد %1$d ملف:</item>
+        <item quantity="one">تعذّر استيراد ملف واحد:</item>
+        <item quantity="two">تعذّر استيراد ملفين:</item>
+        <item quantity="few">تعذّر استيراد %1$d ملفات:</item>
+        <item quantity="many">تعذّر استيراد %1$d ملفًا:</item>
+        <item quantity="other">تعذّر استيراد %1$d ملف:</item>
+    </plurals>
+    <plurals name="ws_not_removed_n">
+        <item quantity="zero">نُسخ %1$d عنصر لكن تعذّر حذفه من مكانه الأصلي:</item>
+        <item quantity="one">نُسخ عنصر واحد لكن تعذّر حذفه من مكانه الأصلي:</item>
+        <item quantity="two">نُسخ عنصران لكن تعذّر حذفهما من مكانهما الأصلي:</item>
+        <item quantity="few">نُسخت %1$d عناصر لكن تعذّر حذفها من مكانها الأصلي:</item>
+        <item quantity="many">نُسخ %1$d عنصرًا لكن تعذّر حذفها من مكانها الأصلي:</item>
+        <item quantity="other">نُسخ %1$d عنصر لكن تعذّر حذفها من مكانها الأصلي:</item>
+    </plurals>
+
+    <!-- in-app browser -->
+    <string name="ws_web_back">الصفحة السابقة</string>
+    <string name="ws_web_forward">الصفحة التالية</string>
+    <string name="ws_web_reload">إعادة التحميل</string>
+    <string name="ws_web_stop">إيقاف</string>
+    <string name="ws_web_open_external">فتح في المتصفح</string>
+    <string name="ws_web_url_hint">ابحث أو اكتب عنوان موقع</string>
+    <string name="ws_web_file_blocked">لا يمكن فتح الملفات المحلية في المتصفح</string>
+    <string name="ws_web_no_app">لا يوجد تطبيق يفتح هذا الرابط</string>
+    <string name="ws_web_error">تعذّر تحميل هذه الصفحة</string>
+</resources>
