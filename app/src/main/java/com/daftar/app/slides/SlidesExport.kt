@@ -6,6 +6,7 @@ import android.graphics.Bitmap
 import android.graphics.Matrix
 import android.graphics.pdf.PdfDocument
 import com.daftar.app.R
+import com.daftar.app.data.Storage
 import com.tom_roush.pdfbox.io.MemoryUsageSetting
 import com.tom_roush.pdfbox.multipdf.PDFMergerUtility
 import java.io.File
@@ -16,7 +17,8 @@ import kotlin.math.sqrt
 /**
  * Engines used by the converter (PPTX → PDF, PPTX → images). Blocking; call them off the main thread.
  * Neither throws: failures return false / an empty list and leave no partial output behind.
- * Both stop early (as a failure) when the calling thread is interrupted, e.g. from `runInterruptible`.
+ * Both stop early (as a failure) when the calling thread is interrupted (e.g. `runInterruptible`) or, with the overloads
+ * taking callbacks, when `isCancelled()` turns true; those overloads also report progress per slide.
  */
 object SlidesExport {
 
@@ -36,7 +38,14 @@ object SlidesExport {
      * renderer straight onto the PDF canvas, so text and shapes stay vector; pictures are embedded at ~144 dpi.
      * Written to a temporary file next to [out], then renamed.
      */
-    fun toPdf(src: File, out: File): Boolean {
+    fun toPdf(src: File, out: File): Boolean = toPdf(src, out, { _, _ -> })
+
+    /**
+     * Same as [toPdf], reporting [progress] (slides done, slide count) after each slide, and stopping (returning false,
+     * nothing left behind) as soon as [isCancelled] returns true — e.g. `{ !coroutineContext.isActive }` captured by the caller.
+     */
+    fun toPdf(src: File, out: File, progress: (done: Int, total: Int) -> Unit, isCancelled: () -> Boolean = { false }): Boolean {
+        fun stop() = Thread.currentThread().isInterrupted || runCatching { isCancelled() }.getOrDefault(false)
         val dir = out.absoluteFile.parentFile ?: return false
         val parts = ArrayList<File>()
         val tmp = File(dir, ".${out.name}.part")
@@ -55,15 +64,17 @@ object SlidesExport {
 
             fun flush() {
                 val d = doc ?: return
-                val part = File(dir, ".${out.name}.p${parts.size}")
+                val part = File.createTempFile("slides-part", ".pdf", Storage.cacheDir())
                 FileOutputStream(part).use { d.writeTo(it) }
                 d.close()
                 doc = null
                 parts.add(part)
             }
 
+            val total = s.deck.slides.size
+            runCatching { progress(0, total) }
             for (i in s.deck.slides.indices) {
-                if (Thread.currentThread().isInterrupted) return false
+                if (stop()) return false
                 if (doc == null) { doc = PdfDocument(); pagesInDoc = 0; s.markImages() }
                 val d = doc!!
                 val page = d.startPage(PdfDocument.PageInfo.Builder(w, h, i + 1).create())
@@ -73,8 +84,9 @@ object SlidesExport {
                 d.finishPage(page)
                 pagesInDoc++
                 if (i < s.deck.slides.lastIndex && (s.imageBytesSinceMark() > budget || pagesInDoc >= MAX_PAGES_PER_PART)) flush()
+                runCatching { progress(i + 1, total) }
             }
-            if (Thread.currentThread().isInterrupted) return false
+            if (stop()) return false
             if (parts.isEmpty()) {
                 FileOutputStream(tmp).use { doc!!.writeTo(it) }
                 doc!!.close(); doc = null
@@ -85,7 +97,7 @@ object SlidesExport {
                 m.destinationFileName = tmp.absolutePath
                 m.mergeDocuments(MemoryUsageSetting.setupTempFileOnly())
             }
-            if (Thread.currentThread().isInterrupted) return false
+            if (stop()) return false
             return replace(tmp, out)
         } catch (_: Throwable) {
             return false
@@ -102,7 +114,15 @@ object SlidesExport {
      * (capped at ~16 MP per image). One bitmap is reused for every slide and recycled at the end.
      * Returns the files written, in slide order; an empty list on failure (nothing is left behind then).
      */
-    fun toImages(src: File, outDir: File, png: Boolean = true, scale: Float = 2f): List<File> {
+    fun toImages(src: File, outDir: File, png: Boolean = true, scale: Float = 2f): List<File> =
+        toImages(src, outDir, png, scale, { _, _ -> })
+
+    /** Same as [toImages] with [progress] (slides done, slide count) and cooperative cancellation via [isCancelled]. */
+    fun toImages(
+        src: File, outDir: File, png: Boolean, scale: Float,
+        progress: (done: Int, total: Int) -> Unit, isCancelled: () -> Boolean = { false },
+    ): List<File> {
+        fun stop() = Thread.currentThread().isInterrupted || runCatching { isCancelled() }.getOrDefault(false)
         val written = ArrayList<File>()
         var source: PptxSource? = null
         var bmp: Bitmap? = null
@@ -122,8 +142,10 @@ object SlidesExport {
             val m = Matrix().apply { setScale(bw / wPt, bh / hPt) }
             val ext = if (png) "png" else "jpg"
             val digits = maxOf(2, s.deck.slides.size.toString().length)
+            val total = s.deck.slides.size
+            runCatching { progress(0, total) }
             for (i in s.deck.slides.indices) {
-                if (Thread.currentThread().isInterrupted) return emptyList()
+                if (stop()) return emptyList()
                 b.eraseColor(0xFFFFFFFF.toInt())
                 s.render(i, b, m)
                 val name = "Slide " + (i + 1).toString().padStart(digits, '0')
@@ -134,6 +156,7 @@ object SlidesExport {
                 }
                 if (!good || !replace(part, f)) { part.delete(); return emptyList() }
                 written.add(f)
+                runCatching { progress(i + 1, total) }
             }
             ok = true
             return written

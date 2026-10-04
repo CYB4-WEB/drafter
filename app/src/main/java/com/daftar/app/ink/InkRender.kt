@@ -506,9 +506,13 @@ object InkRender {
         val ir = rect2TL.get()!!
         ir.set(ix, iy, ix + s, iy + s)
         val tp = textTL.get()!!
-        when {
-            l.isFile -> {
-                val (col, tag) = fileBadge(l.target)
+        if (l.iconKind < 0) {
+            l.iconKind = if (l.isFile) 0 else if (l.isVideo) 1 else 2
+            if (l.iconKind == 0) { val (col, tag) = fileBadge(l.target); l.badgeColor = col; l.badgeTag = tag }
+        }
+        when (l.iconKind) {
+            0 -> {
+                val col = l.badgeColor; val tag = l.badgeTag
                 f.color = col
                 c.drawRoundRect(ir, 5f * k, 5f * k, f)
                 tp.color = Color.WHITE; tp.typeface = Typeface.DEFAULT_BOLD
@@ -517,7 +521,7 @@ object InkRender {
                 c.drawText(tag, ir.centerX(), ir.centerY() - (tp.ascent() + tp.descent()) / 2f, tp)
                 tp.textAlign = Paint.Align.LEFT
             }
-            l.isVideo -> {
+            1 -> {
                 f.color = 0xFFE5484D.toInt()
                 c.drawRoundRect(ir, 6f * k, 6f * k, f)
                 val tri = pathTL.get()!!

@@ -140,6 +140,10 @@ data class LinkItem(
     /** Ellipsized label cache for the chip (render-only). */
     @Transient var shown: CharSequence? = null
     @Transient var shownFor: Float = -1f
+    /** Render cache: 0 file badge, 1 video, 2 web (-1 = not computed); badge colour + tag for files. */
+    @Transient var iconKind: Int = -1
+    @Transient var badgeColor: Int = 0
+    @Transient var badgeTag: String = ""
 
     val isFile get() = target.startsWith("/")
     val isVideo get() = !isFile && isVideoUrl(target)

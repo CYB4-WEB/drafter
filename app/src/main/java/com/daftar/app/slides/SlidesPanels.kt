@@ -154,7 +154,10 @@ internal enum class PaneTab { SLIDES, SPEAKER, COMMENTS, MINE }
 // ------------------------------------------------------------------ thumbnails
 
 @Composable
-private fun SlideThumb(slide: SlidePart, thumbs: Thumbs, ratio: Float, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun SlideThumb(
+    slide: SlidePart, thumbs: Thumbs, ratio: Float, selected: Boolean, onClick: () -> Unit,
+    modifier: Modifier = Modifier, numberBadge: Boolean = false,
+) {
     val c = D.c
     val i = slide.index
     val bmp by produceState(thumbs.cached(i), i, thumbs) { if (value == null) value = thumbs.load(i) }
@@ -170,6 +173,15 @@ private fun SlideThumb(slide: SlidePart, thumbs: Thumbs, ratio: Float, selected:
             Image(
                 it, contentDescription = label, contentScale = ContentScale.Fit,
                 modifier = Modifier.fillMaxSize().padding(if (selected) 2.dp else 1.dp).alpha(if (slide.hidden) 0.45f else 1f),
+            )
+        }
+        if (numberBadge) {
+            Text(
+                "${i + 1}", style = MaterialTheme.typography.labelSmall, color = if (selected) c.onAccent else c.ink, maxLines = 1,
+                modifier = Modifier.align(Alignment.BottomStart).padding(5.dp)
+                    .background(if (selected) c.accent else c.surface, RoundedCornerShape(6.dp))
+                    .border(1.dp, if (selected) c.accent else c.line, RoundedCornerShape(6.dp))
+                    .padding(horizontal = 6.dp, vertical = 1.dp),
             )
         }
         if (slide.hidden) {
@@ -225,30 +237,25 @@ internal fun SlideRail(deck: Pptx, thumbs: Thumbs, controller: EditorController)
 /** Horizontal filmstrip for narrow screens and split panes (first tab of the notes pane). */
 @Composable
 private fun SlideStrip(deck: Pptx, thumbs: Thumbs, controller: EditorController) {
-    val c = D.c
     val last = deck.slides.lastIndex
     val cur = controller.currentPage
     val list = rememberLazyListState(initialFirstVisibleItemIndex = cur.coerceIn(0, last))
     FollowCurrent(list, cur, last)
     val ratio = (deck.widthPt / deck.heightPt).coerceIn(0.3f, 4f)
     BoxWithConstraints(Modifier.fillMaxSize()) {
-        val thumbH = (maxHeight - 48.dp).coerceIn(40.dp, 220.dp)
+        // Number badge on the thumbnail itself, so even a short pane (landscape phone) shows whole slides.
+        val thumbH = (maxHeight - 20.dp).coerceIn(32.dp, 220.dp)
         LazyRow(
             state = list, modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             items(deck.slides, key = { it.index }) { slide ->
-                val selected = slide.index == cur
-                Column(Modifier.width(thumbH * ratio), horizontalAlignment = Alignment.CenterHorizontally) {
-                    SlideThumb(slide, thumbs, ratio, selected, { controller.goToPage(slide.index) }, Modifier.height(thumbH))
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        "${slide.index + 1}", style = MaterialTheme.typography.labelMedium,
-                        color = if (selected) c.accent else c.muted, maxLines = 1,
-                    )
-                }
+                SlideThumb(
+                    slide, thumbs, ratio, slide.index == cur, { controller.goToPage(slide.index) },
+                    Modifier.height(thumbH).width(thumbH * ratio), numberBadge = true,
+                )
             }
         }
     }

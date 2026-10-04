@@ -94,3 +94,53 @@ Acceptance criteria (my wording):
 - `planner/EditEvent.kt`: the switch, "Open in calendar app", and the post-save flow (ask dialog → permission → push or fallback → notification-permission ask → `pane.back()`). Uses `pane.*` everywhere.
 - `planner/PlannerScreen.kt`: header overflow menu (Sync / Import / Export). `Nav.push` → `pane.push`. Same in WeekView/MonthView.
 - Strings en + ar.
+
+## Progress
+- 15:00: Resumed on the Linux box. Re-read round2b, AGENT_RULES, DESIGN, SPEC R2.5, round2, my log, all of planner/ + widget/, ui/Nav.kt, ui/Common.kt, data/Prefs.kt and Settings in ui/Screens.kt. Wrote Understanding + Plan.
+- 15:10: `Planner.kt`. New PlanEvent fields with defaults (`calendarSync`, `deviceEventId`, `deviceCalendarId`, `importKey`), so old planner.json loads unchanged. The store now owns the link fields (`upsert` keeps the stored link). The phone-copy mirror runs on the existing ordered IO thread, with an id cache so quick edits never insert twice. New API: `setCalendarSync(ids, on)`, `addAll`, `syncPending()`, `reconcileDevice(ctx)`.
+- 15:25: `DeviceCalendar.kt`. `CalendarPrefs` (ask/always/never + target calendar, Compose-observable); listing of visible + writable calendars with primary resolution; insert/update/delete Events with reminders; existence check; ACTION_INSERT fallback; ACTION_VIEW "open in calendar"; reading upcoming Instances for import (simple weekly series → one weekly item per weekday); type guess (EN + AR keywords); link extraction; HTML descriptions → plain text.
+- 15:35: `Ics.kt`. RFC 5545 writer + share sheet (`text/calendar`, FileProvider cache path).
+- 15:45: `CalendarUi.kt`: explain-then-ask permission helper, ask-after-save dialog, calendar list/picker, sync dialog, import dialog, export dialog, `PlannerSettingsSection()`. `EditEvent.kt`: switch + "Open in calendar app" + post-save flow. `PlannerScreen.kt`: overflow menu, resume sync/reconcile. All `Nav.push` → `pane.push`, and "Open folder" → `pane.open`.
+- 15:55: Strings en + ar (143 keys each, parity checked with python, XML well-formed).
+- 16:00: Compiled. The real tree's output was capped at 150 lines by other agents' errors, so I verified on a scratch copy: `git archive 4d7d83e` (the lead's round-2 base with the shared contracts) plus my current files, built with that copy's `tools/compile.sh` (same lock): **BUILD OK, 0 errors, 0 warnings** in planner/ + widget/. Scratch copy deleted.
+- 16:20: Real tree recompiled: **0 errors in planner/ and widget/**. The remaining 5 errors are in `convert/Convert.kt` (1) and `word/WordScreen.kt` (4), owned by other agents.
+
+## Decisions & limits
+- **The per-event switch is the source of truth.** `PlanEvent.calendarSync` says whether an event has a phone copy. The remembered choice only sets the default for new events: Always = switch on; Never = off; Ask = off, and the dialog appears after saving a new event if the user didn't touch the switch. The planner-menu toggle maps to Always (on) / Never (off). Settings offers all three.
+- **"Remember my choice".** The ask dialog has one checkbox, "Remember my choice". When ticked, the buttons read "Always do this" / "Don't ask again", so the choice is stored as always / never. Unticked, they read Add / Not now. That covers all four requested actions in two buttons.
+- **Permission flow.** An explanation dialog comes first, then Android's prompt for READ+WRITE_CALENDAR. If Android denies, the editor falls back to `Intent.ACTION_INSERT` on `Events.CONTENT_URI`, pre-filled with title, description + link, location, begin/end, all-day and RRULE. That copy can't be tracked, so the event's switch goes back off and a later grant cannot create a duplicate. Once Android stops showing its prompt (asked before and no rationale), the dialog offers "Open settings" (plus "Use calendar app" in the add flow).
+- **Phone copy format.** Timed events use DTSTART/DTEND with EVENT_TIMEZONE = device zone. All-day events use UTC-midnight DTSTART/DTEND with EVENT_TIMEZONE = UTC. Weekly events drop DTEND and get DURATION (`P<sec>S` / `P<n>D`) and `RRULE:FREQ=WEEKLY[;UNTIL=…];BYDAY=XX`. UNTIL is a UTC date-time for timed events and a DATE for all-day ones; BYDAY is the start's weekday, added so calendar apps show "every Monday". Description = description + link (unless already included). AVAILABILITY_BUSY, HAS_ALARM.
+- **Reminders.** `CalendarContract.Reminders` with METHOD_ALERT, one per reminder minute (max 5, the usual calendar limit). All-day events: Daftar reminds relative to 09:00 but calendars count back from midnight, so I use m − 540 (e.g. "1 day before" = 900 min = 09:00 the day before). Same-day reminders (at time / 10 min / 30 min / 1 h) cannot be expressed that way. Those stay with Daftar's own notification rather than buzzing at midnight.
+- **Both apps notify.** For synced events, Daftar's reminders keep firing (they carry "Open link" / "Mark done"), and the calendar app alerts at the same moments. This matches the requested copy "Samsung Calendar / Google Calendar will remind you **too**". If the lead prefers one notification, `Alarms.scheduleEvent` can skip events with `deviceEventId != 0` (a one-line change). I didn't do it unasked.
+- **Copy deleted in the calendar app.** When the Planner screen resumes or the editor opens, a reconcile pass (one `_ID IN (…)` query, DELETED=0) clears the link and turns that event's switch off. This respects the user's deletion; turning the switch back on re-adds the copy. If a save races the deletion (copy missing at update time), the push re-inserts it. Deleting in Daftar when the copy is already gone is a no-op.
+- **Edits / deletes.** `upsert` mirrors only when calendar-visible fields changed (title, times, all-day, weekly, until, location, link, description, reminders), when the switch flips, or when no copy exists yet. Ticking an assignment done doesn't touch the calendar. `delete` removes the copy. Updates never move a copy to another calendar: changing the target calendar affects new copies only, and the picker says so.
+- **Import.** Uses `Instances` in the chosen range (2 weeks / 1 month / 3 months / 6 months) from visible calendars and excludes Daftar's own copies. Simple weekly series (FREQ=WEEKLY, interval 1, plain BYDAY) become weekly Daftar events, one per weekday, with `until` from UNTIL or COUNT. Other recurrences are listed per occurrence. The type is guessed (exam / assignment / meeting / class keywords in EN + AR; weekly → Class; else Other) and the user can tap the type chip to change it. Imports are copies (not linked) with `importKey`, so they show as "Already in Daftar" next time. Daftar reminders on imports default off (the calendar already reminds), with a switch to turn them on.
+- **.ics export.** UTC DATE-TIMEs, so no VTIMEZONE is needed, as briefed. Limit: in DST regions a weekly UTC RRULE drifts one hour after a DST change; Saudi/Gulf have no DST and the phone copies themselves use the local zone. All-day = VALUE=DATE. No DTEND when the length is zero (RFC requires DTEND > DTSTART). VALARM TRIGGER relative to DTSTART; for all-day events that means positive offsets for same-day 09:00-based reminders. TEXT escaping, 75-octet UTF-8-safe folding, CRLF, UID `daftar-<id>@com.daftar.app`. Shared via ACTION_SEND `text/calendar` from `cacheDir/ics/` (FileProvider cache-path).
+- **Settings section.** `PlannerSettingsSection()` draws its own `SectionTitle(R.string.planner)` + card, with replicas of SettingsGroup / SwitchRow / ChoiceRow and a value row. Turning the morning summary on also re-arms the alarms and asks for POST_NOTIFICATIONS on API 33+ if it is missing.
+
+## Requests to lead
+1. **Embed the Settings section** (ui/Screens.kt, SettingsScreen). Replace
+   ```kotlin
+   SettingsGroup(stringResource(R.string.planner)) {
+       SwitchRow(Icons.Rounded.WbSunny, stringResource(R.string.set_daily), stringResource(R.string.set_daily_desc), Prefs.dailySummary) {
+           Prefs.putDaily(it)
+       }
+   }
+   ```
+   with
+   ```kotlin
+   com.daftar.app.planner.PlannerSettingsSection()
+   ```
+   (It draws the "Planner" section title + card itself. `set_daily` / `set_daily_desc` are then unused.)
+2. (Optional, consistency) Home in ui/Screens.kt still uses `Nav.push(Screen.EditEvent(...))` for the quick action and the Today strip. `pane.push(...)` would match the round-2 rule.
+3. (Tooling, optional) `tools/compile.sh` caps output at 150 lines, so one agent's many errors can hide another's. A filter would help, e.g. `FILTER=planner/ tools/compile.sh` printing `grep -e "$FILTER" -e FAILURE` on the log.
+4. Decide whether synced events should notify from Daftar too (current: yes, see Decisions).
+
+## Self-check
+1. Ask after adding (dialog, Add / Not now, remember always/never, explain → permission → insert; denied → ACTION_INSERT fallback): **PASS**. `EditEvent.save()` → `AddToCalendarDialog` → `rememberCalendarAccess()` → `Planner.setCalendarSync` / `DeviceCalendar.insertViaApp`. The choice is stored in `CalendarPrefs.mode`. Code-complete; device test by the lead.
+2. Calendar sync (target calendar visible + writable with account + colour, primary default; insert/update/delete with title, description + link, location, start/end, all-day UTC, weekly RRULE with UNTIL, EVENT_TIMEZONE; Reminders METHOD_ALERT; device id stored with a default; deleted-in-app handling; edits/deletes update the copy): **PASS**. The only caveat is that same-day all-day reminders cannot be expressed in calendar minutes (Decisions).
+3. EditEventScreen switch (default from the remembered choice) + "Open in calendar app": **PASS**. The switch subtitle shows which calendar holds the copy; the open action only appears while the copy exists.
+4. Planner menu: Sync (toggle + calendar picker + add existing / remove copies), Import (range, multi-select, select all, type guess editable, reminders option, no duplicates), Export .ics (upcoming / all, RFC 5545 UTC, RRULE weekly, VALARM, share): **PASS**.
+5. `PlannerSettingsSection()` (Ask / Always / Never, target calendar, morning summary via Prefs.dailySummary / putDaily, Settings look replicated): **PASS**. The lead must embed it (Request 1).
+6. `pane.back()` / `pane.open()` / `pane.push()` only (no Nav.push/pop in planner/ or widget/); typography/sp only (no `sp` / `fontSize` in my files): **PASS** (grep-verified).
+7. Strings en + real Arabic for every new text (143 keys each, plurals with zero/one/two/few/many/other in Arabic); compiles: **PASS**. 0 errors / 0 warnings in planner/ + widget/ on the clean scratch build, and 0 errors in my files in the real tree (the remaining errors are in convert/ and word/).
