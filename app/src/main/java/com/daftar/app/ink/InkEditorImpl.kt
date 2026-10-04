@@ -269,7 +269,7 @@ internal fun InkEditorImpl(
             else existing ?: InkDoc.newNote(PaperTemplates.stamp(Prefs.defaultPaper))
         }
         view.setDocument(d, source)
-        com.daftar.app.study.StudyLinks.consumePage(hostFile)?.let { pg -> view.post { view.goToPage(pg) } }
+        com.daftar.app.study.StudyLinks.consumePage(hostFile)?.let { pg -> view.goToPageWhenReady(pg) }
         whiteboard = d.infinite
         hasTapes = view.hasTapes()
         ctl.pageCount = d.pages.size

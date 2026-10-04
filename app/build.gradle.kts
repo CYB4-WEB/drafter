@@ -13,8 +13,8 @@ android {
         applicationId = "com.daftar.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 2
-        versionName = "1.1"
+        versionCode = 3
+        versionName = "2.0"
         // Galaxy Tab S11 Ultra is arm64; x86_64 keeps the emulator working. Dropping 32-bit ABIs keeps the APK small.
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
     }

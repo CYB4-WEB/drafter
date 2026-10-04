@@ -197,8 +197,5 @@ object SlidesExport {
     }
 
     /** The application context when no slides screen has bound one yet (converter used first). */
-    @SuppressLint("PrivateApi", "DiscouragedPrivateApi")
-    private fun currentApplication(): Context? = runCatching {
-        Class.forName("android.app.ActivityThread").getMethod("currentApplication").invoke(null) as? Context
-    }.getOrNull()
+    private fun currentApplication(): Context? = runCatching { com.daftar.app.data.Storage.appCtx }.getOrNull()
 }
