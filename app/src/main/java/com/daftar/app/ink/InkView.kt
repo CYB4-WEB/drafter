@@ -66,6 +66,15 @@ class InkView(context: Context) : View(context) {
         fun onLinkMenu(page: Int, link: LinkItem, x: Float, y: Float) {}
         /** Something was dropped that could not be read (missing file, undecodable image). */
         fun onDropFailed() {}
+        /** The selected / edited text box changed (null = none). Not called for every move frame. */
+        fun onTextBox(ui: TextBoxUi?) {}
+        /** A text box was long-pressed at view position ([x], [y]) px (it is now selected). */
+        fun onTextMenu(page: Int, item: TextItem, x: Float, y: Float) {}
+        /**
+         * Math helper: ~600 ms after the pen lifted, the last strokes on [page] look like an expression ending with "=".
+         * The host recognizes [line] and calls [insertMathAnswer]. Only called while [mathHelper] is on.
+         */
+        fun onMathCandidate(page: Int, line: MathAssist.Line) {}
     }
 
     var listener: Listener? = null
@@ -87,6 +96,28 @@ class InkView(context: Context) : View(context) {
     var stylusButtonTool = Tool.ERASER
     var bgColor = 0xFFF7F6F2.toInt()
     var darkPaper = false
+    // defaults for new text boxes (set from the editor; last used values)
+    var textFont = "sans"
+    var textSize = 16f
+    var textBold = false
+    var textColor = 0xFF1F2937.toInt()
+    var textHint = ""
+    /** Math helper on/off (set from the editor, persisted in [InkPrefs]). */
+    var mathHelper = true
+
+    // ---- math helper: pending answer (faded until accepted) + its ✓ / × chip ----
+    private var mathPage = -1
+    private var mathId = 0L
+    private var mathCandPage = -1
+    private val mathDetect = Runnable {
+        val pg = mathCandPage
+        if (!mathHelper || pg !in doc.pages.indices || mode == Mode.DRAW) return@Runnable
+        MathAssist.findLine(doc.pages[pg].strokes)?.let { listener?.onMathCandidate(pg, it) }
+    }
+    private val chipOk = RectF()
+    private val chipNo = RectF()
+    private val chipPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val chipStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND }
 
     // ---- audio sync ----
     var recId = 0
@@ -113,7 +144,7 @@ class InkView(context: Context) : View(context) {
     val isWhiteboard get() = doc.infinite
 
     // ---- input ----
-    private enum class Mode { NONE, DRAW, NAV, SEL_MOVE, SEL_SCALE, PEN_ZOOM }
+    private enum class Mode { NONE, DRAW, NAV, SEL_MOVE, SEL_SCALE, PEN_ZOOM, TEXT_DRAG, TEXT_PINCH }
     private var mode = Mode.NONE
     private var activeTool = Tool.PEN
     private var drawPage = -1
@@ -141,18 +172,43 @@ class InkView(context: Context) : View(context) {
         override fun onScaleEnd(d: ScaleGestureDetector) { scaling = false; settleSoon() }
     }).apply { isQuickScaleEnabled = false }
 
-    // long-press on a link chip
+    // long-press on a link chip or a text box (any tool)
     private var pressLink: LinkItem? = null
+    private var pressText: TextItem? = null
     private var pressPage = -1
     private val longPress = Runnable {
-        val l = pressLink ?: return@Runnable
-        if (moved) return@Runnable
+        val l = pressLink; val t = pressText
+        if ((l == null && t == null) || moved) return@Runnable
         mode = Mode.NONE; npts = 0; live = null; eraserOn = false
         velocity?.recycle(); velocity = null
         performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
-        listener?.onLinkMenu(pressPage, l, downX, downY)
+        if (l != null) listener?.onLinkMenu(pressPage, l, downX, downY)
+        else if (t != null) { selectText(pressPage, t); listener?.onTextMenu(pressPage, t, downX, downY) }
         invalidate()
     }
+
+    // ---- text boxes: selection (frame + handles) and on-canvas editing ----
+    /** The native editor placed over the box being edited; the host adds [TextOverlay.edit] next to this view. */
+    internal val textOverlay = TextOverlay(context, this).also { o -> o.onEdited = { ensureCaretVisible(); invalidate() } }
+    /** Current zoom in px per page point (used by the text overlay). */
+    internal val zoomScale get() = scale
+    private var textSelPage = -1
+    private var textSelId = 0L
+    private var editPage = -1
+    private var editItem: TextItem? = null      // box being typed; a new box is not on the page until it is committed
+    private var editIsNew = false
+    private var tHandle = 0
+    private var tStart: TextItem? = null
+    private var tStartH = 0f
+    private var tGrabX = 0f
+    private var tGrabY = 0f
+    private var tPinchD0 = 0f
+    private var tUndoPushed = false
+    private var dismissedText = false           // this touch ended an edit / selection: a Text-tool tap must not create a box
+    private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 1.5f * density; color = 0xFF3B82F6.toInt() }
+    private val textRect = RectF()
+    val isEditingText get() = editItem != null
+    val hasTextBox get() = editItem != null || textSelPage >= 0
 
     // ---- selection ----
     private class Sel(
@@ -169,6 +225,8 @@ class InkView(context: Context) : View(context) {
     private var selGrabX = 0f
     private var selGrabY = 0f
     val hasSelection get() = sel != null
+    /** Page of the current lasso selection (-1 = none). */
+    val selectionPage: Int get() = sel?.page ?: -1
 
     // ---- undo ----
     private val undo = ArrayDeque<List<InkPage>>()
@@ -189,6 +247,13 @@ class InkView(context: Context) : View(context) {
     private class Tile(val page: Int, val scale: Float, val doc: RectF, val bmp: Bitmap)
     private val tiles = HashMap<Int, Tile>()
     private var generation = 0
+
+    // ---- ink tiles: committed strokes rasterised per visible tile on a background thread (see InkTiles) ----
+    private val tiles2 = InkTiles({ doc.pages }) { invalidate() }
+    /** Last time the zoom changed (tiles are rendered for a settled zoom only). */
+    private var zoomTime = 0L
+    private val zoomSettle = Runnable { invalidate() }
+    private var paused = false
 
     // ---- paints & preallocated draw objects (no allocation in onDraw) ----
     private val pagePaint = Paint()
@@ -224,9 +289,13 @@ class InkView(context: Context) : View(context) {
     // =====================================================================================
 
     fun setDocument(d: InkDoc, src: PageSource?) {
+        if (editItem != null) { editItem = null; textOverlay.hide() }
+        mathPage = -1; mathId = 0L; main.removeCallbacks(mathDetect)
+        textSelPage = -1; textSelId = 0L
         doc = d; source = src
         generation++
         bgCache.values.forEach { it.recycle() }; bgCache.clear(); tiles.values.forEach { it.bmp.recycle() }; tiles.clear(); pending.clear()
+        tiles2.clear()
         undo.clear(); redo.clear(); sel = null
         margin = if (d.infinite) 0f else marginPx
         if (d.infinite) trimBoard()
@@ -238,7 +307,10 @@ class InkView(context: Context) : View(context) {
 
     fun release() {
         main.removeCallbacks(longPress)
+        main.removeCallbacks(zoomSettle); main.removeCallbacks(settle); main.removeCallbacks(mathDetect)
         exec.shutdownNow()
+        tiles2.release()
+        generation++
         bgCache.values.forEach { it.recycle() }; bgCache.clear()
         tiles.values.forEach { it.bmp.recycle() }; tiles.clear()
     }
@@ -267,7 +339,7 @@ class InkView(context: Context) : View(context) {
 
     private fun initialView() {
         computeFit()
-        scale = fitScale
+        scale = fitScale; zoomTime = SystemClock.uptimeMillis()
         if (doc.infinite && doc.pages.isNotEmpty()) {
             val p = doc.pages[0]
             val b = p.contentBounds()
@@ -278,7 +350,13 @@ class InkView(context: Context) : View(context) {
         } else { sx = 0f; sy = 0f }
         laidOut = true
         clamp(); notifyZoom()
+        if (pendingGo >= 0) { val g = pendingGo; pendingGo = -1; goToPage(g) }
     }
+
+    private var pendingGo = -1
+
+    /** [goToPage] now, or right after the first layout when the view has no size yet (opening at a given page). */
+    fun goToPageWhenReady(i: Int) { if (laidOut && width > 0) goToPage(i) else pendingGo = i }
 
     /** Whiteboards are normalised on open: empty space far from the content (from earlier panning) is trimmed. */
     private fun trimBoard() {
@@ -380,6 +458,7 @@ class InkView(context: Context) : View(context) {
     fun zoomAt(fx: Float, fy: Float, factor: Float) {
         val ns = (scale * factor).coerceIn(minScale(), maxScale())
         val dx = toDocX(fx); val dy = toDocY(fy)
+        if (ns != scale) zoomTime = SystemClock.uptimeMillis()
         scale = ns
         // keep doc point under the focus
         sx = margin + dx * scale + offX() - fx
@@ -391,11 +470,12 @@ class InkView(context: Context) : View(context) {
     /** Fit width (paged) / fit all content (whiteboard). */
     fun zoomToFit() {
         if (doc.infinite) { fitContent(); return }
-        val cy = toDocY(0f); scale = fitScale; sy = cy * scale; clamp(); settleSoon(); notifyZoom(); invalidate()
+        val cy = toDocY(0f); scale = fitScale; zoomTime = SystemClock.uptimeMillis(); sy = cy * scale; clamp(); settleSoon(); notifyZoom(); invalidate()
     }
 
     private fun fitContent() {
         val p = doc.pages.firstOrNull() ?: return
+        zoomTime = SystemClock.uptimeMillis()
         val b = p.contentBounds()
         if (b == null) {
             scale = fitScale
@@ -419,6 +499,7 @@ class InkView(context: Context) : View(context) {
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
+        zoomTime = SystemClock.uptimeMillis()
         if (!laidOut) { if (doc.pages.isNotEmpty()) initialView(); tiles.values.forEach { it.bmp.recycle() }; tiles.clear(); invalidate(); return }
         if (doc.infinite) {
             // keep the same board point in the middle
@@ -434,6 +515,7 @@ class InkView(context: Context) : View(context) {
             sy = max(0f, topDoc * scale)
         }
         clamp(); tiles.values.forEach { it.bmp.recycle() }; tiles.clear(); settleSoon(); notifyZoom(); invalidate()
+        if (editItem != null) post { ensureCaretVisible() }     // keyboard opened / window resized while typing
     }
 
     // =====================================================================================
@@ -456,7 +538,9 @@ class InkView(context: Context) : View(context) {
      */
     private fun growToCover(l: Float, t: Float, r: Float, b: Float): Boolean {
         val p = doc.pages[0]
-        fun step(x: Float) = ceil((x + GROW_UNIT * 2) / GROW_UNIT) * GROW_UNIT
+        // grow by at least a screen beyond what is needed: growth (and the left/top content shift) stays rare while panning
+        val extra = max(GROW_UNIT * 2, max(width, height) / scale)
+        fun step(x: Float) = ceil((x + extra) / GROW_UNIT) * GROW_UNIT
         var gl = if (l < 0f) step(-l) else 0f
         var gt = if (t < 0f) step(-t) else 0f
         var gr = if (r > p.w) step(r - p.w) else 0f
@@ -472,7 +556,10 @@ class InkView(context: Context) : View(context) {
         sy = margin + gt * scale - ay
         if (gl > 0f || gt > 0f) {
             sel?.let { it.dx += gl; it.dy += gt; it.changed = true }
+            editItem = editItem?.let { it.copy(x = it.x + gl, y = it.y + gt) }
+            tStart = tStart?.let { it.copy(x = it.x + gl, y = it.y + gt) }
             for (k in 0 until LZ_MAX) { lzX[k] += gl; lzY[k] += gt }
+            lzLastX += gl; lzLastY += gt
         }
         clamp()
         listener?.onChanged()
@@ -487,10 +574,20 @@ class InkView(context: Context) : View(context) {
         // Compose hosts views with clipChildren=false: never paint outside our own bounds.
         c.clipRect(0, 0, width, height)
         if (doc.pages.isEmpty()) { c.drawColor(bgColor); return }
+        tiles2.beginFrame()
         if (doc.infinite) drawBoard(c) else drawPages(c)
+        tiles2.endFrame()
         sel?.let { drawSelectionChrome(c, it) }
+        if (hasTextBox) drawTextChrome(c)
         if (eraserOn) c.drawCircle(eraserX, eraserY, eraserRadiusDp * density, eraserPaint)
         if (lzCount > 0) drawLaser(c)
+        else if (mode == Mode.DRAW && activeTool == Tool.LASER && lzLastX.isFinite()) {
+            // pointer held still: just the dot, no animation
+            val x = toScreenX(lzLastX); val y = toScreenY(lzLastY)
+            laserDot.alpha = 70; c.drawCircle(x, y, 11f * density, laserDot)
+            laserDot.alpha = 255; c.drawCircle(x, y, 4.5f * density, laserDot)
+        }
+        drawMathChip(c)
     }
 
     private fun drawPages(c: Canvas) {
@@ -502,8 +599,8 @@ class InkView(context: Context) : View(context) {
             val r = pageScreenRect(i, pageRect)
             if (!RectF.intersects(r, viewRect)) continue
             val page = doc.pages[i]
-            // visible region of this page in page coords (culling, paper clip)
-            visRect.set(max(0f, -r.left) / scale, max(0f, -r.top) / scale, (width - r.left) / scale, (height - r.top) / scale)
+            // visible region of this page in page coords (culling, paper clip, ink layer)
+            pageVis(page, r, visRect)
             c.drawRect(r, pagePaint)
             if (source != null) drawBackground(c, i, r) else {
                 c.save(); c.translate(r.left, r.top); c.scale(scale, scale)
@@ -514,7 +611,7 @@ class InkView(context: Context) : View(context) {
             c.save()
             c.clipRect(r)
             c.translate(r.left, r.top); c.scale(scale, scale)
-            drawContent(c, i, page, visRect)
+            drawContent(c, i, page, visRect, r.left, r.top)
             c.restore()
         }
     }
@@ -524,45 +621,173 @@ class InkView(context: Context) : View(context) {
         val page = doc.pages[0]
         visRect.set(toDocX(0f), toDocY(0f), toDocX(width.toFloat()), toDocY(height.toFloat()))
         c.save()
-        c.translate(toScreenX(0f), toScreenY(0f)); c.scale(scale, scale)
+        val ox = toScreenX(0f); val oy = toScreenY(0f)
+        c.translate(ox, oy); c.scale(scale, scale)
         InkRender.drawPaper(c, page, darkPaper, visRect, scale, bounded = false)
-        drawContent(c, 0, page, visRect)
+        drawContent(c, 0, page, visRect, ox, oy)
         c.restore()
     }
 
-    /** Page content in page coordinates, culled to [vis]; tapes on top (with the editor's reveal state). */
-    private fun drawContent(c: Canvas, i: Int, page: InkPage, vis: RectF) {
+    /**
+     * Page content in page coordinates, culled to [vis]; tapes on top (with the editor's reveal state).
+     * ([ox], [oy]) = screen position of the page origin (used to blit the ink layer on whole pixels).
+     */
+    private fun drawContent(c: Canvas, i: Int, page: InkPage, vis: RectF, ox: Float, oy: Float) {
         val imgs = page.images
         for (k in imgs.indices) {
             val im = imgs[k]
             if (im.x <= vis.right && im.x + im.w >= vis.left && im.y <= vis.bottom && im.y + im.h >= vis.top) InkRender.drawImage(c, im)
         }
         val st = page.strokes
-        var tapes = 0
-        for (k in st.indices) {
-            val s = st[k]
-            if (s.isTape) { tapes++; continue }
-            if (!RectF.intersects(s.bounds(), vis)) continue
-            val ghost = playRec != 0 && s.rec == playRec && s.t > playPos
-            InkRender.drawStroke(c, s, if (ghost) 0.18f else 1f)
-        }
+        drawStrokes(c, i, page, vis, ox, oy)
         val tx = page.texts
+        val editId = if (editPage == i) editItem?.id ?: 0L else 0L
         for (k in tx.indices) {
             val t = tx[k]
+            if (editId != 0L && t.id == editId) continue      // the on-canvas editor shows this box
             val lh = InkRender.layout(t).height
-            if (t.x <= vis.right && t.x + t.w >= vis.left && t.y <= vis.bottom && t.y + lh >= vis.top) InkRender.drawText(c, t)
+            if (t.x <= vis.right && t.x + t.w >= vis.left && t.y <= vis.bottom && t.y + lh >= vis.top) {
+                if (mathPage == i && t.id == mathId) {
+                    // math helper answer not accepted yet: faded
+                    c.saveLayerAlpha(t.x - 2f, t.y - 2f, t.x + t.w + 2f, t.y + lh + 2f, 120)
+                    InkRender.drawText(c, t); c.restore()
+                } else InkRender.drawText(c, t)
+            }
         }
         val ln = page.links
         for (k in ln.indices) {
             val l = ln[k]
             if (l.x <= vis.right && l.x + l.w >= vis.left && l.y <= vis.bottom && l.y + l.h >= vis.top) InkRender.drawLink(c, l)
         }
-        if (tapes > 0) for (k in st.indices) {
-            val s = st[k]
-            if (s.isTape && RectF.intersects(s.bounds(), vis)) InkRender.drawTape(c, s, s.revealed)
+        if (st.isNotEmpty()) {
+            val tp = tiles2.grid(i, st).tapes
+            for (k in tp.indices) {
+                val s = st[tp[k]]
+                if (RectF.intersects(s.bounds(), vis)) InkRender.drawTape(c, s, s.revealed)
+            }
         }
         sel?.let { if (it.page == i) drawFloating(c, it) }
         if (mode == Mode.DRAW && drawPage == i && npts > 0) drawLive(c)
+    }
+
+    // ---- committed ink ----
+    //
+    // Re-rasterising every stroke path every frame is what made big pages and whiteboards lag. Committed strokes are
+    // served by [InkTiles] (bitmaps of the visible tiles at the settled zoom, rendered off the UI thread); a frame blits
+    // them and draws as vectors only what is not covered yet. Audio replay ("ghost" strokes) draws culled vectors.
+
+    private fun zoomSettled(): Boolean {
+        if (scaling) return false
+        val dt = SystemClock.uptimeMillis() - zoomTime
+        if (dt >= ZOOM_SETTLE) return true
+        main.removeCallbacks(zoomSettle); main.postDelayed(zoomSettle, ZOOM_SETTLE - dt + 8)
+        return false
+    }
+
+    private fun drawStrokes(c: Canvas, i: Int, page: InkPage, vis: RectF, ox: Float, oy: Float) {
+        val st = page.strokes
+        if (st.isEmpty()) return
+        if (playRec != 0) {
+            val g = tiles2.grid(i, st)
+            g.query(vis.left, vis.top, vis.right, vis.bottom, ghostIdx)
+            for (j in 0 until ghostIdx.size) {
+                val s = st[ghostIdx[j]]
+                val ghost = s.rec == playRec && s.t > playPos
+                InkRender.drawStroke(c, s, if (ghost) 0.18f else 1f)
+            }
+            return
+        }
+        tiles2.draw(c, i, page, vis, scale, ox, oy, zoomSettled(), mode == Mode.DRAW)
+    }
+    private val ghostIdx = IntList(256)
+
+    private fun pageVis(page: InkPage, r: RectF, out: RectF) {
+        out.set(max(0f, -r.left / scale), max(0f, -r.top / scale), min(page.w, (width - r.left) / scale), min(page.h, (height - r.top) / scale))
+    }
+
+    /** Editor paused (ON_PAUSE): no background work. */
+    fun onPause() {
+        paused = true
+        tiles2.pause()
+        main.removeCallbacks(settle); main.removeCallbacks(zoomSettle); main.removeCallbacks(longPress)
+        scroller.forceFinished(true)
+        lzCount = 0
+    }
+
+    fun onResume() { paused = false; tiles2.resume(); invalidate() }
+
+    /** Memory pressure: drop caches that can be rebuilt (ComponentCallbacks2 levels). */
+    fun trimMemory(level: Int) {
+        if (level >= android.content.ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN || level == android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW ||
+            level == android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL) {
+            tiles2.clear()
+            tiles.values.forEach { it.bmp.recycle() }; tiles.clear()
+            if (level >= android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) {
+                val keep = bgCache[currentPage]
+                bgCache.entries.removeAll { (k, v) -> if (k != currentPage) { v.recycle(); true } else false }
+                if (keep == null) bgCache.clear()
+            }
+        } else tiles2.trim()
+        invalidate()
+    }
+
+    private val memCallbacks = object : android.content.ComponentCallbacks2 {
+        override fun onTrimMemory(level: Int) = trimMemory(level)
+        override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {}
+        @Deprecated("Deprecated in Java")
+        override fun onLowMemory() = trimMemory(android.content.ComponentCallbacks2.TRIM_MEMORY_COMPLETE)
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        runCatching { context.applicationContext.registerComponentCallbacks(memCallbacks) }
+    }
+
+    // ---- text box frame ----
+
+    private fun textHeightPt(t: TextItem): Float =
+        if (editItem?.id == t.id && textOverlay.showing) textOverlay.heightPt() else InkRender.layout(t).height.toFloat().coerceAtLeast(t.size * 1.2f)
+
+    /** The selected / edited text box and its page, or null. */
+    private fun currentText(): Pair<Int, TextItem>? {
+        editItem?.let { return editPage to it }
+        if (textSelPage < 0) return null
+        val t = doc.pages.getOrNull(textSelPage)?.texts?.firstOrNull { it.id == textSelId } ?: return null
+        return textSelPage to t
+    }
+
+    private fun textScreenRect(page: Int, t: TextItem, out: RectF): RectF {
+        val pl = toScreenX(pageLeft(page)); val pt = toScreenY(pageTops[page])
+        out.set(pl + t.x * scale, pt + t.y * scale, pl + (t.x + t.w) * scale, pt + (t.y + textHeightPt(t)) * scale)
+        return out
+    }
+
+    private fun drawTextChrome(c: Canvas) {
+        val (page, t) = currentText() ?: return
+        if (page >= pageTops.size) return
+        val b = textScreenRect(page, t, textRect)
+        if (editItem != null) textOverlay.place(b.left, b.top)
+        val pad = 6 * density
+        b.inset(-pad, -pad)
+        textPaint.style = Paint.Style.STROKE
+        textPaint.alpha = if (editItem != null) 150 else 255
+        c.drawRect(b, textPaint)
+        textPaint.alpha = 255
+        val hr = 6 * density
+        for (k in 0..3) {
+            val x = if (k % 2 == 0) b.left else b.right; val y = if (k < 2) b.top else b.bottom
+            c.drawCircle(x, y, hr, handleInner); c.drawCircle(x, y, hr, textPaint)
+        }
+        // side handles (wrap width): short bars in the middle of the left / right edges
+        val bh = min(b.height() * 0.5f, 18 * density); val bw = 3.5f * density; val cy = b.centerY()
+        textPaint.style = Paint.Style.FILL
+        for (x in floatArrayOf(b.left, b.right)) {
+            selRect.set(x - bw, cy - bh / 2f, x + bw, cy + bh / 2f)
+            c.drawRoundRect(selRect, bw, bw, handleInner)
+            selRect.inset(1f * density, 1f * density)
+            c.drawRoundRect(selRect, bw, bw, textPaint)
+        }
+        textPaint.style = Paint.Style.STROKE
     }
 
     private fun drawFloating(c: Canvas, s: Sel) {
@@ -614,7 +839,7 @@ class InkView(context: Context) : View(context) {
         val now = SystemClock.uptimeMillis()
         while (lzCount > 0 && now - lzT[(lzHead - lzCount + LZ_MAX) % LZ_MAX] > LASER_LIFE) lzCount--
         val active = mode == Mode.DRAW && activeTool == Tool.LASER
-        if (lzCount == 0) { if (active) postInvalidateOnAnimation(); return }
+        if (lzCount == 0) return      // trail gone: no more frames until the pointer moves again
         val first = (lzHead - lzCount + LZ_MAX) % LZ_MAX
         for (pass in 0..1) {
             var px = toScreenX(lzX[first]); var py = toScreenY(lzY[first])
@@ -637,8 +862,12 @@ class InkView(context: Context) : View(context) {
         postInvalidateOnAnimation()
     }
 
+    private var lzLastX = Float.NaN
+    private var lzLastY = Float.NaN
+
     private fun laserAdd(screenX: Float, screenY: Float) {
         val x = toDocX(screenX); val y = toDocY(screenY)
+        lzLastX = x; lzLastY = y
         if (lzCount > 0) {
             val last = (lzHead - 1 + LZ_MAX) % LZ_MAX
             if (abs(lzX[last] - x) * scale + abs(lzY[last] - y) * scale < density) { lzT[last] = SystemClock.uptimeMillis(); return }
@@ -768,6 +997,16 @@ class InkView(context: Context) : View(context) {
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN -> onDown(e)
             MotionEvent.ACTION_POINTER_DOWN -> {
+                if (mode == Mode.TEXT_DRAG && e.pointerCount >= 2) {
+                    // second finger on a selected text box: pinch scales the box
+                    currentText()?.let { (_, t) ->
+                        tStart = t; tStartH = textHeightPt(t)
+                        tPinchD0 = max(1f, hypot(e.getX(0) - e.getX(1), e.getY(0) - e.getY(1)))
+                        mode = Mode.TEXT_PINCH
+                    }
+                    return true
+                }
+                if (mode == Mode.TEXT_PINCH) return true
                 if (mode == Mode.DRAW && !isPen(e, 0)) {
                     // second finger: user wants to zoom, not draw
                     npts = 0; live = null; mode = Mode.NAV
@@ -776,11 +1015,15 @@ class InkView(context: Context) : View(context) {
                 }
                 if (mode == Mode.NAV) { scaleDetector.onTouchEvent(e); focus(e, -1) }
             }
-            MotionEvent.ACTION_POINTER_UP -> if (mode == Mode.NAV) focus(e, e.actionIndex)
+            MotionEvent.ACTION_POINTER_UP -> {
+                if (mode == Mode.NAV) focus(e, e.actionIndex)
+                if (mode == Mode.TEXT_PINCH) { finishTextGesture(); mode = Mode.NONE }
+            }
             MotionEvent.ACTION_MOVE -> onMove(e)
             MotionEvent.ACTION_UP -> onUp(e)
             MotionEvent.ACTION_CANCEL -> {
                 main.removeCallbacks(longPress)
+                if (mode == Mode.TEXT_DRAG || mode == Mode.TEXT_PINCH) finishTextGesture()
                 npts = 0; live = null; mode = Mode.NONE; eraserOn = false; velocity?.recycle(); velocity = null; invalidate()
             }
         }
@@ -799,6 +1042,27 @@ class InkView(context: Context) : View(context) {
         velocity?.recycle(); velocity = VelocityTracker.obtain().also { it.addMovement(e) }
         val pen = isPen(e)
         if (pen) requestUnbufferedDispatch(e)
+        main.removeCallbacks(mathDetect)
+        if (mathPage >= 0) {
+            val slack = 6 * density
+            if (chipOk.width() > 0f && RectF(chipOk).apply { inset(-slack, -slack) }.contains(e.x, e.y)) { acceptMath(); mode = Mode.NONE; return }
+            if (chipNo.width() > 0f && RectF(chipNo).apply { inset(-slack, -slack) }.contains(e.x, e.y)) { rejectMath(); mode = Mode.NONE; return }
+        }
+        dismissedText = false
+        pressLink = null; pressText = null
+
+        // a selected / edited text box: its frame and handles take priority for any pointer; a touch elsewhere ends it
+        if (hasTextBox) {
+            val h = textHandleAt(e.x, e.y)
+            if (h != 0) {
+                val (_, t) = currentText()!!
+                tHandle = h; tStart = t; tStartH = textHeightPt(t); tGrabX = e.x; tGrabY = e.y; tUndoPushed = false
+                mode = Mode.TEXT_DRAG
+                return
+            }
+            dismissedText = true
+            endTextEdit(); clearTextSelection()
+        }
 
         // selection handles take priority for any pointer
         sel?.let { s ->
@@ -817,12 +1081,11 @@ class InkView(context: Context) : View(context) {
             return
         }
 
-        // long-press on a link chip opens its menu (any tool)
-        pressLink = null
-        linkAtScreen(e.x, e.y)?.let { (pg, l) ->
-            pressLink = l; pressPage = pg
-            main.postDelayed(longPress, ViewConfiguration.getLongPressTimeout().toLong())
-        }
+        // long-press on a link chip / text box opens its menu (any tool)
+        val lk = linkAtScreen(e.x, e.y)
+        if (lk != null) { pressLink = lk.second; pressPage = lk.first }
+        else textAtScreen(e.x, e.y)?.let { (pg, t) -> pressText = t; pressPage = pg }
+        if (pressLink != null || pressText != null) main.postDelayed(longPress, ViewConfiguration.getLongPressTimeout().toLong())
 
         activeTool = when {
             e.getToolType(0) == MotionEvent.TOOL_TYPE_ERASER -> Tool.ERASER
@@ -919,6 +1182,8 @@ class InkView(context: Context) : View(context) {
                 lastFy = e.y
                 zoomAt(downX, downY, f)
             }
+            Mode.TEXT_DRAG -> if (moved) dragText(e)
+            Mode.TEXT_PINCH -> if (e.pointerCount >= 2) pinchText(e)
             Mode.SEL_MOVE -> sel?.let { s ->
                 s.dx += (e.x - selGrabX) / scale; s.dy += (e.y - selGrabY) / scale
                 selGrabX = e.x; selGrabY = e.y; s.changed = true; invalidate()
@@ -943,9 +1208,10 @@ class InkView(context: Context) : View(context) {
                 if (!consumed) when (activeTool) {
                     Tool.PEN, Tool.HIGHLIGHTER -> if (drawPage >= 0 && npts > 0) commitStroke(makeStroke())
                     Tool.SHAPE -> if (drawPage >= 0 && npts > 1) commitStroke(recognizeShape(makeStroke()))
-                    Tool.LASSO -> if (drawPage >= 0 && npts > 2) lassoSelect()
+                    Tool.LASSO -> if (!moved) textAtScreen(e.x, e.y)?.let { (pg, t) -> selectText(pg, t) }
+                        else if (drawPage >= 0 && npts > 2) lassoSelect()
                     Tool.TAPE -> if (drawPage >= 0 && npts > 1) commitTape()
-                    Tool.TEXT -> if (wasTap) textTap(e.x, e.y)
+                    Tool.TEXT -> if (!moved) textTap(e.x, e.y) else textDragCreate(downX, downY, e.x, e.y)
                     Tool.ERASER -> { eraserOn = false; if (eraseUndoPushed) changed() }
                 }
                 eraserOn = false
@@ -964,6 +1230,12 @@ class InkView(context: Context) : View(context) {
                 }
             }
             Mode.PEN_ZOOM -> settleSoon()
+            Mode.TEXT_DRAG -> {
+                // a tap on a selected (not edited) box edits it in place
+                if (!moved && editItem == null && tHandle == H_MOVE) currentText()?.let { (pg, t) -> beginEdit(pg, t, false) }
+                else finishTextGesture()
+            }
+            Mode.TEXT_PINCH -> finishTextGesture()
             Mode.SEL_MOVE, Mode.SEL_SCALE -> invalidate()
             Mode.NONE -> {}
         }
@@ -991,7 +1263,7 @@ class InkView(context: Context) : View(context) {
         }
         if (tapAction(x, y)) return
         if (tool == Tool.TEXT && h != null) { textTap(x, y); return }
-        if (h != null) textAt(h.first, h.second, h.third)?.let { listener?.onTextRequest(h.first, it.x, it.y, it); return }
+        if (h != null) textAt(h.first, h.second, h.third)?.let { selectText(h.first, it); return }
         if (now - lastTapTime < 300) {
             // double tap (finger, or pen with the Hand tool): toggle fit <-> 2x
             if (scale > fitScale * 1.2f) zoomAt(x, y, fitScale / scale) else zoomAt(x, y, 2f)
@@ -999,13 +1271,45 @@ class InkView(context: Context) : View(context) {
         } else lastTapTime = now
     }
 
+    /** Text tool tap: edit the box under the tap in place, or start a new box right there. */
     private fun textTap(x: Float, y: Float) {
+        // a tap elsewhere while typing commits that box (in onDown) and starts the next one right here
         val h = hit(x, y) ?: return
-        listener?.onTextRequest(h.first, h.second, h.third, textAt(h.first, h.second, h.third))
+        val existing = textAt(h.first, h.second, h.third)
+        if (existing != null) { beginEdit(h.first, existing, false); return }
+        val p = doc.pages[h.first]
+        val size = textSize
+        var w = if (doc.infinite) 320f else min(320f, max(120f, p.w - 24f))
+        val rtl = layoutDirection == LAYOUT_DIRECTION_RTL
+        var left = if (rtl) h.second - w else h.second
+        if (!doc.infinite) {
+            w = min(w, p.w - 8f)
+            left = left.coerceIn(4f, max(4f, p.w - w - 4f))
+        }
+        val top = h.third - size * 0.7f
+        beginEdit(h.first, TextItem(System.nanoTime(), left, if (doc.infinite) top else top.coerceIn(0f, max(0f, p.h - size)), w, "", size, textColor, textFont, textBold), true)
+    }
+
+    /** Text tool drag: the drag sets the box width (and where it starts). */
+    private fun textDragCreate(x0: Float, y0: Float, x1: Float, y1: Float) {
+        val a = hit(min(x0, x1), min(y0, y1), strict = false) ?: return
+        val b = hit(max(x0, x1), max(y0, y1), strict = false) ?: return
+        if (a.first != b.first) return
+        val p = doc.pages[a.first]
+        val w = max(40f, b.second - a.second)
+        var left = a.second
+        if (!doc.infinite) left = left.coerceIn(0f, max(0f, p.w - w))
+        beginEdit(a.first, TextItem(System.nanoTime(), left, a.third, w, "", textSize, textColor, textFont, textBold), true)
     }
 
     private fun textAt(page: Int, x: Float, y: Float): TextItem? =
         doc.pages[page].texts.lastOrNull { InkRender.layout(it); it.bounds().contains(x, y) }
+
+    private fun textAtScreen(x: Float, y: Float): Pair<Int, TextItem>? {
+        val h = hit(x, y, strict = false) ?: return null
+        if (h.first !in doc.pages.indices) return null
+        return textAt(h.first, h.second, h.third)?.let { h.first to it }
+    }
 
     private fun linkAt(page: Int, x: Float, y: Float): LinkItem? = doc.pages.getOrNull(page)?.links?.lastOrNull { it.contains(x, y) }
 
@@ -1152,12 +1456,14 @@ class InkView(context: Context) : View(context) {
     }
 
     fun undo() {
+        endTextEdit()
         commitSelection()
         val prev = undo.removeLastOrNull() ?: return
         redo.addLast(snapshot()); restore(prev)
     }
 
     fun redo() {
+        endTextEdit()
         commitSelection()
         val next = redo.removeLastOrNull() ?: return
         undo.addLast(snapshot()); restore(next)
@@ -1175,6 +1481,9 @@ class InkView(context: Context) : View(context) {
             sy = margin + dy * scale - ay
         }
         clamp(); updateCurrentPage(); notifyUndo(); changed()
+        if (textSelPage >= 0 && currentText() == null) { textSelPage = -1; textSelId = 0L }
+        if (mathPage >= 0 && doc.pages.getOrNull(mathPage)?.texts?.none { it.id == mathId } != false) { mathPage = -1; mathId = 0L }
+        notifyTextUi()
     }
 
     private fun stampTime(s: Stroke): Stroke =
@@ -1197,6 +1506,10 @@ class InkView(context: Context) : View(context) {
         val p = doc.pages[drawPage]
         setPage(drawPage, p.copy(strokes = p.strokes + stampTime(s)))
         changed()
+        if (mathHelper && s.tool == Tool.PEN && !paused) {
+            mathCandPage = drawPage
+            main.removeCallbacks(mathDetect); main.postDelayed(mathDetect, 600)
+        }
     }
 
     private fun commitTape() {
@@ -1434,6 +1747,196 @@ class InkView(context: Context) : View(context) {
         return if (doc.infinite) x to y else x.coerceIn(0f, p.w) to y.coerceIn(0f, p.h)
     }
 
+    // ---- text boxes on the canvas ----
+
+    /** Which part of the selected / edited box's frame is under ([x], [y]): a handle, the body (move) or nothing (0). */
+    private fun textHandleAt(x: Float, y: Float): Int {
+        val (page, t) = currentText() ?: return 0
+        if (page >= pageTops.size) return 0
+        val b = textScreenRect(page, t, textRect)
+        val pad = 6 * density
+        b.inset(-pad, -pad)
+        val hr = 22 * density
+        if (hypot(x - b.left, y - b.top) < hr) return H_TL
+        if (hypot(x - b.right, y - b.top) < hr) return H_TR
+        if (hypot(x - b.left, y - b.bottom) < hr) return H_BL
+        if (hypot(x - b.right, y - b.bottom) < hr) return H_BR
+        val inY = y > b.top && y < b.bottom
+        if (inY && abs(x - b.left) < 16 * density) return H_L
+        if (inY && abs(x - b.right) < 16 * density) return H_R
+        // body (while editing, touches inside the box go to the editor; the frame ring moves the box)
+        val ring = 14 * density
+        if (x > b.left - ring && x < b.right + ring && y > b.top - ring && y < b.bottom + ring) return H_MOVE
+        return 0
+    }
+
+    /** Applies a live change of the selected / edited box (one undo step per gesture). */
+    private fun applyTextLive(n: TextItem) {
+        if (editItem != null) { editItem = n; textOverlay.apply(n); invalidate(); return }
+        val page = textSelPage
+        if (page < 0) return
+        if (!tUndoPushed) { pushUndo(); tUndoPushed = true }
+        replaceText(page, n)
+        invalidate()
+    }
+
+    private fun replaceText(page: Int, n: TextItem) {
+        val p = doc.pages[page]
+        setPage(page, p.copy(texts = p.texts.map { if (it.id == n.id) n else it }))
+    }
+
+    private fun dragText(e: MotionEvent) {
+        val t0 = tStart ?: return
+        val dx = (e.x - tGrabX) / scale; val dy = (e.y - tGrabY) / scale
+        val w0 = t0.w; val h0 = max(1f, tStartH)
+        val minW = max(24f, t0.size * 1.2f)
+        val n = when (tHandle) {
+            H_MOVE -> t0.copy(x = t0.x + dx, y = t0.y + dy)
+            H_L -> { val w = (w0 - dx).coerceAtLeast(minW); t0.copy(x = t0.x + w0 - w, w = w) }
+            H_R -> t0.copy(w = (w0 + dx).coerceAtLeast(minW))
+            else -> {
+                // corner: scale font and width proportionally, the opposite corner stays put
+                val sxSign = if (tHandle == H_TR || tHandle == H_BR) 1f else -1f
+                val sySign = if (tHandle == H_BL || tHandle == H_BR) 1f else -1f
+                var f = ((w0 + sxSign * dx) * w0 + (h0 + sySign * dy) * h0) / (w0 * w0 + h0 * h0)
+                f = f.coerceIn(max(0.05f, 4f / t0.size), 400f / t0.size)
+                val w = w0 * f; val h = h0 * f
+                t0.copy(size = t0.size * f, w = w, x = if (sxSign < 0) t0.x + w0 - w else t0.x, y = if (sySign < 0) t0.y + h0 - h else t0.y)
+            }
+        }
+        applyTextLive(n)
+    }
+
+    private fun pinchText(e: MotionEvent) {
+        val t0 = tStart ?: return
+        val d = hypot(e.getX(0) - e.getX(1), e.getY(0) - e.getY(1))
+        val f = (d / tPinchD0).coerceIn(max(0.05f, 4f / t0.size), 400f / t0.size)
+        val cx = t0.x + t0.w / 2f; val cy = t0.y + tStartH / 2f
+        val w = t0.w * f; val h = tStartH * f
+        applyTextLive(t0.copy(size = t0.size * f, w = w, x = cx - w / 2f, y = cy - h / 2f))
+    }
+
+    private fun finishTextGesture() {
+        tStart = null
+        if (tUndoPushed) { tUndoPushed = false; changed() }
+        notifyTextUi()
+        invalidate()
+    }
+
+    private fun notifyTextUi() {
+        val cur = currentText()
+        listener?.onTextBox(cur?.let { TextBoxUi(it.first, it.second, editItem != null) })
+    }
+
+    /** Selects a text box (frame + handles + format bar). */
+    fun selectText(page: Int, item: TextItem) {
+        commitSelection()
+        if (editItem != null && editItem?.id != item.id) endTextEdit()
+        textSelPage = page; textSelId = item.id
+        notifyTextUi(); invalidate()
+    }
+
+    fun clearTextSelection() {
+        if (textSelPage < 0 && editItem == null) return
+        if (editItem != null) endTextEdit()
+        textSelPage = -1; textSelId = 0L
+        notifyTextUi(); invalidate()
+    }
+
+    /** Starts typing on the canvas in [item] ([isNew]: not on the page yet). */
+    private fun beginEdit(page: Int, item: TextItem, isNew: Boolean) {
+        commitSelection()
+        if (editItem != null) endTextEdit()
+        editPage = page; editItem = item; editIsNew = isNew
+        textSelPage = page; textSelId = item.id
+        textOverlay.show(item, textHint)
+        val b = textScreenRect(page, item, textRect)
+        textOverlay.place(b.left, b.top)
+        notifyTextUi(); invalidate()
+    }
+
+    /** Edits the selected box in place. */
+    fun editSelectedText() { currentText()?.let { (pg, t) -> if (editItem == null) beginEdit(pg, t, false) } }
+
+    /** Ends on-canvas typing and commits it to the page as one undo step (blank text removes the box). */
+    fun endTextEdit() {
+        val t = editItem ?: return
+        val page = editPage
+        val text = textOverlay.text().trimEnd()
+        editItem = null
+        textOverlay.hide()
+        if (page !in doc.pages.indices) { notifyTextUi(); return }
+        val existing = doc.pages[page].texts.firstOrNull { it.id == t.id }
+        if (text.isBlank()) {
+            if (existing != null) deleteText(page, t.id)
+            textSelPage = -1; textSelId = 0L
+        } else {
+            val n = t.copy(text = text)
+            if (existing != n) upsertText(page, n)
+        }
+        notifyTextUi(); invalidate()
+    }
+
+    /** Ends typing and drops every selection (back, Done, tool change, leaving the editor). */
+    fun finishEditing() {
+        endTextEdit(); clearTextSelection(); commitSelection()
+    }
+
+    /** Changes the selected / edited box's formatting (live while typing; one undo step otherwise). */
+    fun formatText(f: (TextItem) -> TextItem) {
+        editItem?.let { val n = f(it); editItem = n; textOverlay.apply(n); notifyTextUi(); invalidate(); return }
+        val (page, old) = currentText() ?: return
+        val n = f(old)
+        if (n == old) return
+        pushUndo(); replaceText(page, n); changed(); notifyTextUi()
+    }
+
+    fun duplicateText() {
+        if (editItem != null) endTextEdit()
+        val (page, t) = currentText() ?: return
+        val n = t.copy(id = System.nanoTime(), x = t.x + 24f, y = t.y + 24f)
+        pushUndo()
+        val p = doc.pages[page]
+        setPage(page, p.copy(texts = p.texts + n))
+        textSelPage = page; textSelId = n.id
+        changed(); notifyTextUi()
+    }
+
+    fun deleteSelectedText() {
+        val e = editItem
+        if (e != null) {
+            editItem = null; textOverlay.hide()
+            if (!editIsNew && editPage in doc.pages.indices) deleteText(editPage, e.id)
+        } else currentText()?.let { (pg, t) -> deleteText(pg, t.id) }
+        textSelPage = -1; textSelId = 0L
+        notifyTextUi(); invalidate()
+    }
+
+    /** Opens the classic text dialog for the selected box ("Edit text…" fallback). */
+    fun editSelectedTextInDialog() {
+        if (editItem != null) endTextEdit()
+        val (pg, t) = currentText() ?: return
+        listener?.onTextRequest(pg, t.x, t.y, t)
+    }
+
+    /** Scrolls so the caret of the on-canvas editor stays visible above the keyboard (and the box horizontally). */
+    private fun ensureCaretVisible() {
+        if (editItem == null || !textOverlay.showing || width == 0 || height == 0) return
+        val (top, bottom) = textOverlay.caretLine() ?: return
+        val ed = textOverlay.edit
+        val m = 24 * density
+        val ct = ed.translationY + top; val cb = ed.translationY + bottom
+        var dy = 0f
+        if (cb > height - m) dy = cb - (height - m) else if (ct < m) dy = ct - m
+        var dx = 0f
+        val l = ed.translationX; val r = l + ed.width
+        if (ed.width < width - 2 * m) { if (r > width - m) dx = r - (width - m) else if (l < m) dx = l - m }
+        if (dx == 0f && dy == 0f) return
+        scroller.forceFinished(true)
+        sx += dx; sy += dy
+        growIfNeeded(); clamp(); updateCurrentPage(); invalidate()
+    }
+
     fun upsertText(page: Int, item: TextItem) {
         commitSelection()
         pushUndo()
@@ -1444,6 +1947,7 @@ class InkView(context: Context) : View(context) {
     }
 
     fun deleteText(page: Int, id: Long) {
+        if (doc.pages.getOrNull(page)?.texts?.none { it.id == id } != false) return
         pushUndo()
         val p = doc.pages[page]
         setPage(page, p.copy(texts = p.texts.filterNot { it.id == id }))
@@ -1551,6 +2055,123 @@ class InkView(context: Context) : View(context) {
         changed()
     }
 
+    // ---- math helper ----
+
+    /**
+     * Places a math answer as typed text right after the "=" of [line] (one undo step). It is drawn faded with a ✓ / ×
+     * chip until accepted; ignored, it simply stays. Skipped when the line's strokes are gone (erased / undone meanwhile).
+     */
+    fun insertMathAnswer(page: Int, line: MathAssist.Line, answer: String) {
+        val p = doc.pages.getOrNull(page) ?: return
+        val have = p.strokes.toHashSet()
+        if (line.strokes.any { it !in have }) return
+        // automatic answers only while nothing new was written after the "=" (the user may have answered it already)
+        if (line.strokes.isNotEmpty() && p.strokes.lastOrNull { it.tool == Tool.PEN } !== line.strokes.last()) return
+        if (sel != null || editItem != null) return
+        val size = (line.charH * 0.85f).coerceIn(8f, 160f)
+        val tf = InkRender.typeface("hand", false)
+        val tp = android.text.TextPaint(Paint.ANTI_ALIAS_FLAG).apply { textSize = size; typeface = tf }
+        val w = tp.measureText(answer) + size * 0.6f
+        val gap = size * 0.35f
+        val x = if (line.rightToLeft) line.eq.left - gap - w else line.eq.right + gap
+        val y = line.eq.centerY() - size * 0.62f
+        val item = TextItem(System.nanoTime(), x, y, w, answer, size, line.color or 0xFF000000.toInt(), "hand", false,
+            if (line.rightToLeft) TextItem.ALIGN_END else TextItem.ALIGN_START)
+        pushUndo()
+        setPage(page, p.copy(texts = p.texts + item))
+        mathPage = page; mathId = item.id
+        changed()
+    }
+
+    /** Lasso "Solve": the answer goes right after the selection ("= 42" when the user did not write the "="). */
+    fun insertSolveAnswer(answer: String, hadEquals: Boolean) {
+        val s = sel ?: return
+        val b = selectionBounds() ?: return
+        val pens = s.strokes.filter { it.tool == Tool.PEN }
+        val h = max(10f, min(b.height(), 120f))
+        commitSelection()
+        val color = pens.lastOrNull()?.color ?: penColor
+        val text = if (hadEquals) answer else "= $answer"
+        val line = MathAssist.Line(emptyList(), RectF(b.right - 1f, b.centerY() - 1f, b.right, b.centerY() + 1f), false, h, color)
+        insertMathAnswer(s.page, line, text)
+    }
+
+    private fun mathItem(): TextItem? = doc.pages.getOrNull(mathPage)?.texts?.firstOrNull { it.id == mathId }
+
+    private fun acceptMath() { mathPage = -1; mathId = 0L; chipOk.setEmpty(); chipNo.setEmpty(); invalidate() }
+
+    private fun rejectMath() {
+        val pg = mathPage; val id = mathId
+        acceptMath()
+        deleteText(pg, id)
+    }
+
+    private fun drawMathChip(c: Canvas) {
+        if (mathPage < 0) { chipOk.setEmpty(); chipNo.setEmpty(); return }
+        val t = mathItem()
+        if (t == null || mathPage >= pageTops.size || (editItem?.id == t.id)) { mathPage = -1; chipOk.setEmpty(); chipNo.setEmpty(); return }
+        val pl = toScreenX(pageLeft(mathPage)); val pt = toScreenY(pageTops[mathPage])
+        val lh = InkRender.layout(t).height
+        val r = 13 * density
+        val cx = pl + (t.x + t.w) * scale + r + 6 * density
+        val cy = pt + (t.y + lh / 2f) * scale
+        chipOk.set(cx - r, cy - r, cx + r, cy + r)
+        chipNo.set(cx + r + 6 * density, cy - r, cx + 3 * r + 6 * density, cy + r)
+        chipPaint.color = 0xFF2F9E6E.toInt(); c.drawOval(chipOk, chipPaint)
+        chipPaint.color = 0xFFE7E5E0.toInt(); c.drawOval(chipNo, chipPaint)
+        chipStroke.strokeWidth = 2.2f * density
+        chipStroke.color = Color.WHITE
+        val k = r * 0.42f
+        c.drawLine(cx - k, cy, cx - k * 0.2f, cy + k * 0.8f, chipStroke)
+        c.drawLine(cx - k * 0.2f, cy + k * 0.8f, cx + k, cy - k * 0.7f, chipStroke)
+        chipStroke.color = 0xFF5E6B78.toInt()
+        val nx = chipNo.centerX()
+        c.drawLine(nx - k * 0.75f, cy - k * 0.75f, nx + k * 0.75f, cy + k * 0.75f, chipStroke)
+        c.drawLine(nx + k * 0.75f, cy - k * 0.75f, nx - k * 0.75f, cy + k * 0.75f, chipStroke)
+    }
+
+    // ---- lasso extras: tidy, flashcard image ----
+
+    /** Tidies the selected handwriting (lines straightened, spacing evened, jitter smoothed). Undo restores it. */
+    fun tidySelection(): Boolean {
+        val s = sel ?: return false
+        val m = mappedSelection(s)
+        if (m.strokes.none { it.tool == Tool.PEN }) return false
+        val tidied = Tidy.tidy(m.strokes)
+        val box = RectF(Float.MAX_VALUE, Float.MAX_VALUE, -Float.MAX_VALUE, -Float.MAX_VALUE)
+        tidied.forEach { box.union(it.bounds()) }
+        m.texts.forEach { InkRender.layout(it); box.union(it.bounds()) }
+        m.images.forEach { box.union(it.bounds()) }
+        m.links.forEach { box.union(it.bounds()) }
+        sel = Sel(s.page, tidied, m.texts, m.images, m.links, box).also { it.changed = true }
+        invalidate()
+        return true
+    }
+
+    /** Typed text inside the selection (top to bottom). */
+    fun selectedTexts(): List<String> = sel?.texts?.sortedBy { it.y }?.map { it.text }?.filter { it.isNotBlank() } ?: emptyList()
+
+    /**
+     * The selection rendered on the paper colour (tapes hidden), cropped to its bounds + a small margin, at [scale] ×
+     * points, at most [maxPx] on the long side. Null when nothing is selected.
+     */
+    fun selectionBitmap(scale: Float = 2f, maxPx: Int = 1600): Bitmap? {
+        val s = sel ?: return null
+        val m = mappedSelection(s)
+        val b = selectionBounds() ?: return null
+        b.inset(-8f, -8f)
+        if (b.width() <= 0f || b.height() <= 0f) return null
+        val k = min(scale, maxPx / max(b.width(), b.height()))
+        val w = (b.width() * k).toInt().coerceIn(1, maxPx); val h = (b.height() * k).toInt().coerceIn(1, maxPx)
+        val bmp = runCatching { Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888) }.getOrNull() ?: return null
+        val c = Canvas(bmp)
+        val paper = if (source != null) Color.WHITE else doc.paperColor or 0xFF000000.toInt()
+        c.drawColor(paper)
+        c.scale(k, k); c.translate(-b.left, -b.top)
+        InkRender.drawPageContent(c, InkPage(strokes = m.strokes, texts = m.texts, images = m.images, links = m.links))
+        return bmp
+    }
+
     // ---- tapes ----
 
     fun hasTapes(): Boolean = doc.pages.any { p -> p.strokes.any { it.isTape } } || sel?.strokes?.any { it.isTape } == true
@@ -1566,7 +2187,7 @@ class InkView(context: Context) : View(context) {
 
     fun addPage(after: Int, paper: String) {
         if (doc.infinite) return
-        commitSelection()
+        finishEditing()
         pushUndo()
         val ref = doc.pages.getOrNull(after) ?: InkPage()
         doc.pages = doc.pages.toMutableList().also { it.add(after + 1, InkPage(ref.w, ref.h, paper)) }
@@ -1576,11 +2197,25 @@ class InkView(context: Context) : View(context) {
 
     fun deletePage(i: Int) {
         if (doc.pages.size <= 1 || doc.infinite) return
-        commitSelection()
+        finishEditing()
         pushUndo()
         doc.pages = doc.pages.toMutableList().also { it.removeAt(i) }
         relayout(); clamp(); updateCurrentPage(); changed()
         listener?.onPageChanged(currentPage, doc.pages.size)
+    }
+
+    /**
+     * Page manager (pages-agent): replaces the whole page list as one undo step — reorder, delete, duplicate, rotate,
+     * templates, insert, move out. Relayouts, then scrolls to page [goTo] (≥ 0) and saves through the listener.
+     */
+    fun applyPages(newPages: List<InkPage>, goTo: Int = -1) {
+        if (newPages.isEmpty() || (doc.infinite && newPages.size != 1)) return
+        finishEditing()
+        pushUndo()
+        doc.pages = newPages.toList()
+        relayout(); clamp(); updateCurrentPage(); changed()
+        listener?.onPageChanged(currentPage, doc.pages.size)
+        if (goTo in doc.pages.indices) goToPage(goTo)
     }
 
     fun setPaper(paper: String, all: Boolean) {
@@ -1590,7 +2225,7 @@ class InkView(context: Context) : View(context) {
     }
 
     fun clearPage(i: Int) {
-        commitSelection()
+        finishEditing()
         if (doc.pages[i].isEmpty()) return
         pushUndo()
         setPage(i, doc.pages[i].copy(strokes = emptyList(), texts = emptyList(), images = emptyList(), links = emptyList()))
@@ -1602,7 +2237,9 @@ class InkView(context: Context) : View(context) {
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
         main.removeCallbacks(settle)
+        main.removeCallbacks(zoomSettle)
         main.removeCallbacks(longPress)
+        runCatching { context.applicationContext.unregisterComponentCallbacks(memCallbacks) }
     }
 
     companion object {
@@ -1613,7 +2250,15 @@ class InkView(context: Context) : View(context) {
         private const val BOARD_H = 1638f
         private const val MAX_BOARD = 400_000f
         private const val LZ_MAX = 256
+        private const val H_MOVE = 1
+        private const val H_TL = 2
+        private const val H_TR = 3
+        private const val H_BL = 4
+        private const val H_BR = 5
+        private const val H_L = 6
+        private const val H_R = 7
         private const val LASER_LIFE = 650L
+        private const val ZOOM_SETTLE = 140L
         private const val LASER_COLOR = 0xFFFF3B30.toInt()
     }
 }

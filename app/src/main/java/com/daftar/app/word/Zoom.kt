@@ -12,6 +12,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.isSpecified
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.isCtrlPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
@@ -64,6 +65,39 @@ fun Modifier.ctrlWheelZoom(onZoom: (factor: Float, position: Offset) -> Unit): M
                     val dy = e.changes.fold(0f) { acc, ch -> acc + ch.scrollDelta.y }
                     if (dy != 0f) cb(if (dy < 0f) 1.1f else 1f / 1.1f, e.changes.first().position)
                     e.changes.forEach { it.consume() }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Double-tap with the S Pen (stylus pointers only). It only observes events — nothing is consumed — so pen taps on links
+ * and text selection keep working; [onDoubleTap] gets the second tap's position.
+ */
+@Composable
+fun Modifier.stylusDoubleTap(onDoubleTap: (Offset) -> Unit): Modifier {
+    val cb by rememberUpdatedState(onDoubleTap)
+    return this.pointerInput(Unit) {
+        var lastUpTime = 0L
+        var lastUpPos = Offset.Zero
+        val slop = viewConfiguration.touchSlop * 3
+        awaitPointerEventScope {
+            while (true) {
+                val e = awaitPointerEvent(PointerEventPass.Initial)
+                val ch = e.changes.firstOrNull() ?: continue
+                if (ch.type != PointerType.Stylus || e.changes.size != 1) continue
+                if (!ch.pressed && ch.previousPressed) {
+                    val downFor = ch.uptimeMillis - ch.previousUptimeMillis
+                    if (downFor < 300) {
+                        if (ch.uptimeMillis - lastUpTime < 350 && (ch.position - lastUpPos).getDistance() < slop) {
+                            cb(ch.position)
+                            lastUpTime = 0L
+                        } else {
+                            lastUpTime = ch.uptimeMillis
+                            lastUpPos = ch.position
+                        }
+                    }
                 }
             }
         }

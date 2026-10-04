@@ -16,6 +16,9 @@ import com.daftar.app.ink.InkDoc
 import com.daftar.app.ink.InkPage
 import com.daftar.app.ink.InkRender
 import com.daftar.app.ink.exportNoteToPdf
+import com.daftar.app.onenote.OneConvert
+import com.daftar.app.onenote.OneError
+import com.daftar.app.onenote.OneException
 import com.daftar.app.pdf.PdfSource
 import com.daftar.app.pdf.PdfTools
 import com.daftar.app.slides.PptxException
@@ -107,6 +110,7 @@ object Engines {
                     Conv.NOTE_DOCX -> noteToDocx(fileOf(first), outDir, progress)
                     Conv.TEXT_PDF -> textToPdf(ctx, fileOf(first), outDir, progress)
                     Conv.TEXT_DOCX -> textToDocx(fileOf(first), outDir, progress)
+                    Conv.ONE_PDF, Conv.ONE_TXT, Conv.ONE_NOTE -> oneNote(ctx, conv, fileOf(first), outDir, progress)
                     Conv.MERGE_PDF -> mergePdfs(ctx, sources.map(::fileOf), outDir, progress)
                     Conv.SPLIT_PDF -> splitPdf(ctx, fileOf(first), opt, outDir, progress)
                     Conv.COMPRESS_PDF -> compressPdf(ctx, fileOf(first), opt, outDir, progress)
@@ -122,6 +126,14 @@ object Engines {
         return when (t) {
             is InvalidPasswordException, is SecurityException -> ConvertException(R.string.convert_err_password)
             is LegacyDocException -> ConvertException(R.string.convert_err_legacy_doc)
+            is OneException -> ConvertException(
+                when (t.kind) {
+                    OneError.ENCRYPTED -> R.string.convert_err_password
+                    OneError.IO -> R.string.convert_err_read
+                    OneError.CLOUD, OneError.TOC, OneError.OLD_FORMAT, OneError.PACKAGE_COMPRESSION -> R.string.convert_err_one_unsupported
+                    else -> R.string.convert_err_failed
+                },
+            )
             is PptxException -> ConvertException(if (t.kind == PptxException.Kind.LEGACY) R.string.convert_err_legacy_ppt else R.string.convert_err_failed)
             is OutOfMemoryError -> ConvertException(R.string.convert_err_memory)
             is FileNotFoundException -> ConvertException(R.string.convert_err_read)
@@ -782,6 +794,27 @@ object Engines {
             val ok = DocxExport.writeDocx(lines.map { it.replace('\u000C', ' ') }.dropLastWhile { it.isBlank() }, out, f.nameWithoutExtension)
             checkActive()
             if (!ok || !out.isFile || out.length() == 0L) throw ConvertException(R.string.convert_err_engine_word)
+        }
+        progress(1, 1)
+        return single(out)
+    }
+
+    /** OneNote section / package → PDF, text or a Daftar note (onenote-agent's engines, cancellable). */
+    private suspend fun oneNote(ctx: Context, conv: Conv, f: File, outDir: File, progress: Progress): ConvOutput {
+        val ext = when (conv) { Conv.ONE_PDF -> "pdf"; Conv.ONE_TXT -> "txt"; else -> Storage.NOTE_EXT }
+        val out = Storage.uniqueFile(outDir, f.nameWithoutExtension, ext)
+        val tmp = tmpFor(out)
+        val cancelled = cancelledFlag()
+        cleanupOnFail(tmp, out) {
+            progress(0, if (conv == Conv.ONE_PDF) 100 else 0)
+            when (conv) {
+                Conv.ONE_PDF -> OneConvert.toPdf(ctx, f, tmp, { p -> progress(p.coerceIn(0, 100), 100) }, cancelled)
+                Conv.ONE_TXT -> OneConvert.toText(ctx, f, tmp, cancelled)
+                else -> OneConvert.toNote(ctx, f, tmp, cancelled)
+            }
+            checkActive()
+            if (!tmp.isFile || tmp.length() == 0L) throw ConvertException(R.string.convert_err_failed)
+            moveInto(tmp, out)
         }
         progress(1, 1)
         return single(out)

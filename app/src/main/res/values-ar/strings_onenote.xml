@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- عارض OneNote -->
+    <string name="kind_onenote">OneNote</string>
+    <string name="one_loading">جارٍ فتح دفتر الملاحظات…</string>
+    <string name="one_err_encrypted">هذا القسم محمي بكلمة مرور. افتح قفله في OneNote ثم صدّره مرة أخرى لفتحه هنا.</string>
+    <string name="one_err_cloud">يستخدم هذا الملف تنسيق OneNote عبر الإنترنت، ولا يمكن قراءته هنا. في OneNote اختر ملف › تصدير لحفظ القسم (‎.one) أو دفتر الملاحظات (‎.onepkg) ثم افتح ذلك الملف.</string>
+    <string name="one_err_toc">هذا جدول محتويات دفتر ملاحظات (‎.onetoc2) ولا يحتوي على صفحات. افتح ملفات الأقسام (‎.one) الموجودة بجانبه، أو صدّر الدفتر بصيغة ‎.onepkg.</string>
+    <string name="one_err_old">أُنشئ هذا الملف بإصدار قديم من OneNote ‏(2007 أو أقدم) ولا يمكن عرضه هنا.</string>
+    <string name="one_err_not_onenote">لا يبدو أن هذا ملف OneNote.</string>
+    <string name="one_err_corrupt">تعذّرت قراءة ملف OneNote هذا. قد يكون تالفًا.</string>
+    <string name="one_err_compression">تستخدم حزمة دفتر الملاحظات هذه نوع ضغط غير مدعوم هنا. افتحها في OneNote وصدّر الأقسام كملفات ‎.one.</string>
+    <string name="one_err_empty_pkg">لا تحتوي حزمة دفتر الملاحظات هذه على أي أقسام.</string>
+    <string name="one_err_io">تعذّر فتح الملف.</string>
+    <string name="one_section_locked">محمي بكلمة مرور</string>
+    <string name="one_section_unreadable">تتعذّر قراءته</string>
+    <string name="one_no_pages">لا توجد صفحات في هذا القسم</string>
+    <string name="one_pages">الصفحات</string>
+    <string name="one_toggle_pages">إظهار الصفحات أو إخفاؤها</string>
+    <string name="one_untitled">صفحة بلا عنوان</string>
+    <string name="one_prev_page">الصفحة السابقة</string>
+    <string name="one_next_page">الصفحة التالية</string>
+    <string name="one_page_of">%1$d / %2$d</string>
+    <string name="one_search">البحث في دفتر الملاحظات</string>
+    <string name="one_search_hint">ابحث في الملاحظات</string>
+    <string name="one_find_count">%1$d من %2$d</string>
+    <string name="one_find_none">لا توجد نتائج</string>
+    <string name="one_find_prev">النتيجة السابقة</string>
+    <string name="one_find_next">النتيجة التالية</string>
+    <string name="one_find_close">إغلاق البحث</string>
+    <string name="one_import_note">استيراد كملاحظة في دفتر</string>
+    <string name="one_import_desc">يتحوّل النص والصور والحبر إلى ملاحظة يمكنك متابعة الكتابة عليها بقلم S Pen. تُحفظ الملاحظة بجانب هذا الملف.</string>
+    <string name="one_scope_page">هذه الصفحة</string>
+    <string name="one_scope_all">كل الصفحات (%1$d)</string>
+    <string name="one_import">استيراد</string>
+    <string name="one_export_pdf">تصدير إلى PDF</string>
+    <string name="one_export_text">تصدير كنص</string>
+    <string name="one_copy_page">نسخ نص الصفحة</string>
+    <string name="one_copied">تم نسخ نص الصفحة</string>
+    <string name="one_exporting">جارٍ التصدير…</string>
+    <string name="one_importing">جارٍ الاستيراد…</string>
+    <string name="one_done">تم</string>
+    <string name="one_open">فتح</string>
+    <string name="one_close">إغلاق</string>
+    <string name="one_failed">حدث خطأ ما. لم يُحفظ أي شيء.</string>
+    <string name="one_attachment">مرفق</string>
+    <string name="one_attachment_saved">تم حفظ %1$s بجانب دفتر الملاحظات</string>
+    <string name="one_attachment_missing">هذا المرفق غير مخزّن في الملف</string>
+</resources>

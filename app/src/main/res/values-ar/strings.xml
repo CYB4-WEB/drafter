@@ -158,4 +158,8 @@
     <string name="countdown_hm">%1$d س %2$d د</string>
     <string name="countdown_m">%1$d دقيقة</string>
     <string name="countdown_left">متبقٍّ</string>
+    <string name="print">طباعة</string>
+    <string name="print_preparing">جارٍ التحضير للطباعة…</string>
+    <string name="study">المذاكرة</string>
+    <string name="trash">سلة المحذوفات</string>
 </resources>

@@ -130,6 +130,7 @@ fun HomeScreen() {
                     QuickAction(Icons.Rounded.Dashboard, stringResource(R.string.new_whiteboard), Color(0xFF6366F1)) { actions.quick("whiteboard", null) }
                     QuickAction(Icons.Rounded.CreateNewFolder, stringResource(R.string.new_folder), Color(0xFF10B981)) { actions.newFolder(Storage.root) }
                     QuickAction(Icons.Rounded.FileUpload, stringResource(R.string.import_file), Color(0xFFF59E0B)) { actions.quick("import", null) }
+                    QuickAction(Icons.Rounded.DocumentScanner, stringResource(R.string.files_scan), Color(0xFF0EA5E9)) { actions.quick("scan", null) }  // files-agent hook
                     QuickAction(Icons.Rounded.Transform, stringResource(R.string.convert), Color(0xFFEF4444)) { Nav.tab(Screen.Convert()) }
                     QuickAction(Icons.Rounded.EventAvailable, stringResource(R.string.add_event), Color(0xFF8B5CF6)) { pane.push(Screen.EditEvent(null)) }
                 }
@@ -142,11 +143,13 @@ fun HomeScreen() {
                         }
                         Column(Modifier.weight(1f)) {
                             UpcomingSection(upcoming)
+                            com.daftar.app.study.StudyHomeCard()
                             if (pins.isNotEmpty()) PinnedSection(pins, actions)
                         }
                     }
                 } else {
                     UpcomingSection(upcoming)
+                    com.daftar.app.study.StudyHomeCard()
                     SubjectsSection(subjects, actions, columns = if (compact) 0 else 3)
                     if (pins.isNotEmpty()) PinnedSection(pins, actions)
                     RecentSection(recents, actions)
@@ -241,7 +244,7 @@ private fun UpcomingSection(items: List<Occurrence>) {
         TextButton(onClick = { Nav.tab(Screen.Planner) }) { Text(stringResource(R.string.see_all)) }
     }
     // Ticks every 20 s so the countdowns stay live (minutes resolution).
-    val now by produceState(System.currentTimeMillis()) { while (true) { kotlinx.coroutines.delay(20_000); value = System.currentTimeMillis() } }
+    val now = rememberTickingNow(60_000)
     Column(Modifier.fillMaxWidth().card(c).padding(4.dp)) {
         if (items.isEmpty()) EmptyState(Icons.Rounded.EventAvailable, stringResource(R.string.nothing_upcoming)) {
             OutlinedButton(onClick = { pane.push(Screen.EditEvent(null)) }) { Text(stringResource(R.string.add_event)) }
@@ -335,13 +338,14 @@ fun LibraryScreen(dir: String) {
                 if (!isRoot) {
                     IconButton(onClick = { pane.back() }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, stringResource(R.string.back), tint = c.ink) }
                     Spacer(Modifier.width(4.dp))
-                    FolderGlyph(meta?.color ?: 6, meta?.icon ?: "folder", 40.dp)
+                    FolderThumb(Storage.entry(folder), 40.dp)
                     Spacer(Modifier.width(12.dp))
                 }
                 Column(Modifier.weight(1f)) {
                     Text(if (isRoot) stringResource(R.string.files) else folder.name, style = MaterialTheme.typography.displaySmall, color = c.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     if (!meta?.desc.isNullOrBlank()) Text(meta!!.desc, style = MaterialTheme.typography.bodyMedium, color = c.muted, maxLines = 1)
                 }
+                IconButton(onClick = { actions.quick("scan", folder) }) { Icon(Icons.Rounded.DocumentScanner, stringResource(R.string.files_scan), tint = c.ink) }  // files-agent hook
                 if (!isRoot) IconButton(onClick = { actions.menu(Storage.entry(folder)) }) { Icon(Icons.Rounded.MoreVert, stringResource(R.string.more), tint = c.ink) }
                 Box {
                     IconButton(onClick = { sortMenu = true }) { Icon(Icons.AutoMirrored.Rounded.Sort, stringResource(R.string.sort), tint = c.ink) }
@@ -575,8 +579,7 @@ fun SettingsScreen() {
                 ChoiceRow(Icons.Rounded.Mouse, stringResource(R.string.set_button),
                     listOf(0 to stringResource(R.string.ink_tool_eraser), 1 to stringResource(R.string.ink_tool_lasso)), Prefs.stylusButton) { Prefs.putStylusButton(it) }
                 ChoiceRow(Icons.Rounded.GridOn, stringResource(R.string.set_paper),
-                    listOf("blank" to stringResource(R.string.ink_paper_blank), "lined" to stringResource(R.string.ink_paper_lined), "grid" to stringResource(R.string.ink_paper_grid),
-                        "dots" to stringResource(R.string.ink_paper_dots), "cornell" to stringResource(R.string.ink_paper_cornell)), Prefs.defaultPaper) { Prefs.putPaper(it) }
+                    com.daftar.app.ink.PaperTemplates.choices(), com.daftar.app.ink.PaperTemplates.base(Prefs.defaultPaper)) { Prefs.putPaper(it) }
                 ChoiceRow(Icons.Rounded.Gesture, stringResource(R.string.set_ink_lang),
                     listOf("en-US" to "English", "ar" to "العربية"), Prefs.inkLang) { Prefs.putInkLang(it) }
                 ChoiceRow(Icons.Rounded.KeyboardVoice, stringResource(R.string.set_speech_lang),
@@ -584,6 +587,7 @@ fun SettingsScreen() {
                 SwitchRow(Icons.Rounded.Link, stringResource(R.string.set_links_in_app), stringResource(R.string.set_links_in_app_desc), Prefs.linksInApp) { Prefs.putLinksInApp(it) }
             }
             com.daftar.app.planner.PlannerSettingsSection()
+            com.daftar.app.study.StudySettingsSection()
             SettingsGroup(stringResource(R.string.set_storage)) {
                 Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Rounded.Storage, null, tint = c.muted)
@@ -593,6 +597,7 @@ fun SettingsScreen() {
                         Text(Storage.root.absolutePath, color = c.muted, style = MaterialTheme.typography.bodySmall)
                     }
                 }
+                TrashSettingsRow()  // files-agent hook: Recycle bin → Screen.Trash
                 Row(Modifier.fillMaxWidth().clickable {
                     scope.launch {
                         withContext(Dispatchers.IO) { ctx.cacheDir.listFiles()?.forEach { it.deleteRecursively() } }
@@ -611,7 +616,7 @@ fun SettingsScreen() {
             }
             Column(Modifier.padding(vertical = 24.dp)) {
                 DaftarBrand(28.dp, 20.sp)
-                Text(stringResource(R.string.app_tagline) + " · 1.1", color = c.muted, style = MaterialTheme.typography.bodySmall,
+                Text(stringResource(R.string.app_tagline) + " · 2.0", color = c.muted, style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.padding(top = 4.dp))
             }
         }

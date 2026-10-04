@@ -10,6 +10,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
@@ -113,6 +114,8 @@ class MainActivity : AppCompatActivity() {
         i.getStringExtra(EXTRA_ACTION)?.let { a ->
             when (a) {
                 ACTION_PLANNER -> Nav.tab(Screen.Planner)
+                "study" -> Nav.tab(Screen.Study)
+                "study_review" -> { Nav.tab(Screen.Study); Nav.push(Screen.Review(null)) }
                 ACTION_ADD_EVENT -> { Nav.tab(Screen.Planner); Nav.push(Screen.EditEvent(null)) }
                 else -> { Nav.tab(Screen.Home); pendingAction.value = a }
             }
@@ -169,6 +172,7 @@ private data class NavItem(val screen: Screen, val label: Int, val icon: ImageVe
 private val ItemHome = NavItem(Screen.Home, R.string.home, Icons.Rounded.Home)
 private val ItemNotes = NavItem(Screen.Notes, R.string.notes, Icons.AutoMirrored.Rounded.StickyNote2)
 private val ItemPlanner = NavItem(Screen.Planner, R.string.planner, Icons.Rounded.CalendarMonth)
+private val ItemStudy = NavItem(Screen.Study, R.string.study, Icons.Rounded.School)
 private val ItemConvert = NavItem(Screen.Convert(), R.string.convert, Icons.Rounded.Transform)
 private val ItemSearch = NavItem(Screen.Search(""), R.string.search, Icons.Rounded.Search)
 private val ItemSettings = NavItem(Screen.Settings, R.string.settings, Icons.Rounded.Settings)
@@ -187,9 +191,9 @@ private fun AppShell(tiny: Boolean) {
     val current = Nav.current
     BackHandler(enabled = Nav.stack.size > 1) { Nav.pop() }
     val itemFiles = NavItem(Screen.Library(Storage.root.absolutePath), R.string.files, Icons.Rounded.Folder)
-    val sideItems = listOf(ItemHome, itemFiles, ItemNotes, ItemPlanner, ItemConvert, ItemSearch, ItemSettings)
+    val sideItems = listOf(ItemHome, itemFiles, ItemNotes, ItemPlanner, ItemStudy, ItemConvert, ItemSearch, ItemSettings)
     val barItems = listOf(ItemHome, itemFiles, ItemNotes, ItemPlanner)
-    val moreItems = listOf(ItemSearch, ItemConvert, ItemSettings)
+    val moreItems = listOf(ItemStudy, ItemSearch, ItemConvert, ItemSettings)
     val root = Nav.stack.first()
     fun selected(it: NavItem) = sameDestination(it.screen, root)
     val split = current is Screen.Split
@@ -202,7 +206,8 @@ private fun AppShell(tiny: Boolean) {
         if (showChrome && !compact && !tiny) Sidebar(sideItems, ::selected)
         Column(Modifier.weight(1f).fillMaxHeight()) {
             Box(Modifier.weight(1f)) {
-                AnimatedContent(current, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "nav") { s -> Route(s) }
+                AnimatedContent(current, transitionSpec = { fadeIn(tween(140)) togetherWith fadeOut(tween(90)) }, label = "nav") { s -> Route(s) }
+                com.daftar.app.study.FocusChip(Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 6.dp))
             }
             if (showChrome && (compact || tiny)) {
                 val colors = NavigationBarItemDefaults.colors(
@@ -285,9 +290,13 @@ fun Route(s: Screen) {
         is Screen.Slides -> SlidesScreen(s.path)
         is Screen.Word -> WordScreen(s.path)
         is Screen.Image -> ImageScreen(s.path)
+        is Screen.OneNote -> com.daftar.app.onenote.OneNoteScreen(s.path)
         is Screen.EditEvent -> EditEventScreen(s.id, s.presetType)
         is Screen.Web -> WebScreen(s.url)
         is Screen.Convert -> com.daftar.app.convert.ConvertScreen(s.path)
         is Screen.Split -> SplitScreen(s)
+        Screen.Study -> com.daftar.app.study.StudyScreen()
+        is Screen.Review -> com.daftar.app.study.ReviewScreen(s.deck)
+        Screen.Trash -> com.daftar.app.ui.TrashScreen()
     }
 }
