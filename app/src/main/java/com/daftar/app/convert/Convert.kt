@@ -159,13 +159,14 @@ fun ConvertScreen(path: String?) {
     BoxWithConstraints(Modifier.fillMaxSize().background(c.bg)) {
         val wide = maxWidth >= 840.dp
         val gutter = if (maxWidth < 600.dp) 16.dp else 24.dp
+        val panelWidth = (maxWidth * 0.4f).coerceIn(380.dp, 520.dp)
         val onPick: (Conv) -> Unit = { selectedName = it.name }
         when {
             wide -> Row(Modifier.fillMaxSize()) {
                 Hub(Modifier.weight(1f).fillMaxHeight(), gutter, selected, preFile, path != null, navPad, onPick)
                 if (setup != null) {
                     Box(Modifier.fillMaxHeight().width(1.dp).background(c.line))
-                    SetupPanel(setup, Modifier.width((maxWidth * 0.4f).coerceIn(380.dp, 520.dp)).fillMaxHeight().background(c.surface),
+                    SetupPanel(setup, Modifier.width(panelWidth).fillMaxHeight().background(c.surface),
                         wide = true, navPad = navPad) { selectedName = null }
                 }
             }

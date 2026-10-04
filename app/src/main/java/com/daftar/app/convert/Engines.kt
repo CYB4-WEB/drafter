@@ -25,8 +25,8 @@ import com.daftar.app.slides.XNode
 import com.daftar.app.slides.phFamily
 import com.daftar.app.slides.phOf
 import com.daftar.app.slides.plainText
+import com.daftar.app.word.DocLoader
 import com.daftar.app.word.DocxExport
-import com.daftar.app.word.DocxParser
 import com.daftar.app.word.LegacyDocException
 import com.tom_roush.pdfbox.io.MemoryUsageSetting
 import com.tom_roush.pdfbox.multipdf.PDFMergerUtility
@@ -40,6 +40,7 @@ import com.tom_roush.pdfbox.pdmodel.graphics.image.LosslessFactory
 import com.tom_roush.pdfbox.text.PDFTextStripper
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
@@ -85,6 +86,7 @@ object Engines {
             if (sources.isEmpty()) throw ConvertException(R.string.convert_no_source)
             if (sources.size < conv.minSources) throw ConvertException(R.string.convert_need_two)
             outDir.mkdirs()
+            SlidesExport.bind(ctx)
             try {
                 val first = sources.first()
                 when (conv) {
@@ -134,6 +136,12 @@ object Engines {
     // ============================================================================================ helpers
 
     private suspend fun checkActive() = currentCoroutineContext().ensureActive()
+
+    /** Cancellation check for blocking engines owned by other agents (polled from their worker loop). */
+    private suspend fun cancelledFlag(): () -> Boolean {
+        val job = currentCoroutineContext()[Job]
+        return { job?.isActive == false }
+    }
 
     private fun fileOf(s: Src): File {
         val f = s.libFile ?: throw ConvertException(R.string.convert_err_read)
@@ -553,7 +561,7 @@ object Engines {
         progress(0, 0)
         val out = Storage.uniqueFile(outDir, f.nameWithoutExtension, "pdf")
         cleanupOnFail(out) {
-            val ok = SlidesExport.toPdf(f, out)
+            val ok = SlidesExport.toPdf(f, out, { d, t -> progress(d, t) }, cancelledFlag())
             checkActive()
             if (!ok || !out.isFile || out.length() == 0L) throw ConvertException(R.string.convert_err_engine_slides)
         }
@@ -565,7 +573,8 @@ object Engines {
         progress(0, 0)
         val dir = newDir(outDir, ctx.getString(R.string.convert_name_images, f.nameWithoutExtension))
         val files = cleanupOnFail(dir) {
-            val res = SlidesExport.toImages(f, dir, png = opt.format != ImgFmt.JPG, scale = opt.scale).filter { it.isFile && it.length() > 0 }
+            val res = SlidesExport.toImages(f, dir, opt.format != ImgFmt.JPG, opt.scale, { d, t -> progress(d, t) }, cancelledFlag())
+                .filter { it.isFile && it.length() > 0 }
             checkActive()
             if (res.isEmpty()) throw ConvertException(R.string.convert_err_engine_slides)
             res
@@ -625,7 +634,8 @@ object Engines {
         progress(0, 0)
         val out = Storage.uniqueFile(outDir, f.nameWithoutExtension, "pdf")
         cleanupOnFail(out) {
-            val ok = DocxExport.toPdf(f, out)
+            val cancelled = cancelledFlag()
+            val ok = DocxExport.toPdf(f, out) { _ -> !cancelled() }
             checkActive()
             if (!ok || !out.isFile || out.length() == 0L) throw ConvertException(R.string.convert_err_engine_word)
         }
@@ -635,7 +645,7 @@ object Engines {
 
     private suspend fun docxToTxt(f: File, outDir: File, progress: Progress): ConvOutput {
         progress(0, 0)
-        val text = DocxParser.parse(f).plainText().trim()
+        val text = DocLoader.load(f).plainText().trim()
         checkActive()
         if (text.isEmpty()) throw ConvertException(R.string.convert_err_no_text_doc)
         val out = Storage.uniqueFile(outDir, f.nameWithoutExtension, "txt")
@@ -733,6 +743,15 @@ object Engines {
 
     private suspend fun textToPdf(ctx: Context, f: File, outDir: File, progress: Progress): ConvOutput {
         progress(0, 0)
+        if (f.extension.lowercase() in setOf("rtf", "csv", "tsv")) {
+            // The Word engine keeps RTF formatting and lays CSV/TSV out as a table; plain text rendering is the fallback.
+            val out = Storage.uniqueFile(outDir, f.nameWithoutExtension, "pdf")
+            val cancelled = cancelledFlag()
+            val ok = runCatching { DocxExport.toPdf(f, out) { _ -> !cancelled() } }.getOrDefault(false)
+            checkActive()
+            if (ok && out.isFile && out.length() > 0L) { progress(1, 1); return single(out) }
+            out.delete()
+        }
         val text = readTextFile(f)
         val style = when (f.extension.lowercase()) {
             "md", "markdown" -> TextPdf.Style.MARKDOWN

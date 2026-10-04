@@ -1,15 +1,14 @@
 package com.daftar.app.word
 
-import com.daftar.app.ui.pane
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
-import android.content.Intent
-import android.graphics.BitmapFactory
-import android.net.Uri
-import android.util.LruCache
+import android.os.SystemClock
+import android.text.format.Formatter
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.Image
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -18,10 +17,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -30,36 +28,37 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ChromeReaderMode
+import androidx.compose.material.icons.automirrored.rounded.MenuBook
 import androidx.compose.material.icons.automirrored.rounded.Toc
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.ErrorOutline
-import androidx.compose.material.icons.rounded.Image
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.MoreVert
-import androidx.compose.material.icons.automirrored.rounded.OpenInNew
+import androidx.compose.material.icons.rounded.Print
 import androidx.compose.material.icons.rounded.Search
-import androidx.compose.material.icons.rounded.Share
-import androidx.compose.material.icons.rounded.TextDecrease
-import androidx.compose.material.icons.rounded.TextIncrease
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -67,11 +66,13 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -79,7 +80,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
@@ -89,68 +92,50 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
-import androidx.compose.ui.graphics.lerp
-import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.LinkAnnotation
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.TextLinkStyles
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.style.BaselineShift
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextDecoration
-import androidx.compose.ui.text.style.TextDirection
-import androidx.compose.ui.text.style.TextIndent
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.em
-import androidx.compose.ui.unit.sp
 import com.daftar.app.R
+import com.daftar.app.ui.ConvertButton
 import com.daftar.app.ui.EmptyState
-import com.daftar.app.ui.LocalWidthClass
-import com.daftar.app.ui.Nav
+import com.daftar.app.ui.ViewerMenuItems
 import com.daftar.app.ui.ViewerTopBar
-import com.daftar.app.ui.WidthClass
+import com.daftar.app.ui.ZoomControls
 import com.daftar.app.ui.openExternally
-import com.daftar.app.ui.shareFiles
+import com.daftar.app.ui.pane
+import com.daftar.app.ui.rememberViewerActions
 import com.daftar.app.ui.theme.D
 import com.daftar.app.ui.theme.DaftarColors
 import com.daftar.app.ui.toast
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.util.zip.ZipFile
+import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.roundToInt
 
-/** Text size multiplier, kept in memory for the whole app session. */
+/** Read-layout zoom (text scale), kept in memory for the app session. */
 private object WordPrefs {
     var scale by mutableFloatStateOf(1f)
 }
 
-/** sp per document point at 100% (11pt body → ~15sp, DESIGN body size). */
-private const val SP_PER_PT = 1.4f
-private const val MAX_TEXT_WIDTH = 760
+/** dp per point at 100% in the print layout (96-dpi "100%" like desktop Word: A4 ≈ 794dp wide). */
+private const val PRINT_DP_PER_PT = 4f / 3f
+private val PRINT_STEPS = floatArrayOf(0.25f, 0.33f, 0.5f, 0.67f, 0.75f, 0.9f, 1f, 1.1f, 1.25f, 1.5f, 1.75f, 2f, 2.5f, 3f, 4f)
+private val READ_STEPS = floatArrayOf(0.6f, 0.7f, 0.8f, 0.9f, 1f, 1.1f, 1.25f, 1.4f, 1.6f, 1.8f, 2f, 2.5f)
 
 private sealed interface DocLoad {
     data object Loading : DocLoad
@@ -159,10 +144,10 @@ private sealed interface DocLoad {
     class Ready(val doc: DocxDoc) : DocLoad
 }
 
-private class Match(val pid: Int, val start: Int, val end: Int, val top: Int)
+private enum class Mode { PRINT, READ, SHEET }
 
-/** Search state shared by all paragraphs. */
-private class Hits(val byPid: Map<Int, List<IntRange>>, val current: Match?)
+private fun stepUp(steps: FloatArray, v: Float) = steps.firstOrNull { it > v * 1.01f } ?: steps.last()
+private fun stepDown(steps: FloatArray, v: Float) = steps.lastOrNull { it < v * 0.99f } ?: steps.first()
 
 @Composable
 fun WordScreen(path: String) {
@@ -171,7 +156,7 @@ fun WordScreen(path: String) {
     val load by produceState<DocLoad>(DocLoad.Loading, path) {
         value = withContext(Dispatchers.IO) {
             try {
-                if (!file.exists()) DocLoad.Error else DocLoad.Ready(DocxParser.parse(file))
+                if (!file.exists()) DocLoad.Error else DocLoad.Ready(DocLoader.load(file))
             } catch (_: LegacyDocException) {
                 DocLoad.Legacy
             } catch (_: Throwable) {
@@ -179,149 +164,342 @@ fun WordScreen(path: String) {
             }
         }
     }
+    val actions = rememberViewerActions(file)
     val images = remember(path) { DocxImages(path) }
     DisposableEffect(images) { onDispose { images.close() } }
+    val doc = (load as? DocLoad.Ready)?.doc
 
-    val ready = load as? DocLoad.Ready
-    val widthClass = LocalWidthClass.current
-    val expanded = widthClass == WidthClass.Expanded
     var finding by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
     var matches by remember { mutableStateOf<List<Match>>(emptyList()) }
     var current by remember { mutableIntStateOf(0) }
-    var outlinePanel by remember { mutableStateOf(true) }
+    var outlineOn by rememberSaveable { mutableStateOf(true) }
     var outlineSheet by remember { mutableStateOf(false) }
     var menu by remember { mutableStateOf(false) }
-    val listState = rememberLazyListState()
+    var viewMenu by remember { mutableStateOf(false) }
+    var printChoice by rememberSaveable(path) { mutableStateOf<Boolean?>(null) }
+    var layoutFailed by remember(doc) { mutableStateOf(false) }
+
+    val readList = rememberLazyListState()
+    val printList = rememberLazyListState()
+    val sheetList = rememberLazyListState()
+    val printH = rememberScrollState()
+    val sheetH = rememberScrollState()
     val scope = rememberCoroutineScope()
-    val scale = WordPrefs.scale
 
+    val mode = when {
+        doc == null -> Mode.READ
+        doc.sheet != null -> Mode.SHEET
+        layoutFailed -> Mode.READ
+        else -> if (printChoice ?: defaultPrint(doc, file)) Mode.PRINT else Mode.READ
+    }
+
+    // ---------------------------------------------------------------- zoom state
+    var printZoom by rememberSaveable(path) { mutableFloatStateOf(-1f) }
+    var sheetZoom by rememberSaveable(path) { mutableFloatStateOf(1f) }
+    val readScale = WordPrefs.scale
+    var live by remember { mutableFloatStateOf(1f) }
+    var pivot by remember { mutableStateOf(Offset.Zero) }
+    var viewportW by remember { mutableFloatStateOf(0f) }
+
+    fun printFit(): Float {
+        val page = doc?.page ?: return 1f
+        return ((viewportW - 32f) / (page.w * PRINT_DP_PER_PT)).coerceIn(0.2f, 4f)
+    }
+    val zoomValue = when (mode) { Mode.PRINT -> max(printZoom, 0.2f); Mode.READ -> readScale; Mode.SHEET -> sheetZoom }
+
+    /** Applies a zoom factor around [at] (px in the viewer), keeping that point steady. */
+    fun applyZoom(factor: Float, at: Offset) {
+        val list = when (mode) { Mode.PRINT -> printList; Mode.READ -> readList; Mode.SHEET -> sheetList }
+        val h = when (mode) { Mode.PRINT -> printH; Mode.SHEET -> sheetH; Mode.READ -> null }
+        val old = zoomValue
+        val new = when (mode) {
+            Mode.PRINT -> (old * factor).coerceIn(0.2f, 4f)
+            Mode.READ -> (old * factor).coerceIn(0.5f, 2.5f)
+            Mode.SHEET -> (old * factor).coerceIn(0.5f, 3f)
+        }
+        if (abs(new - old) < 0.001f) return
+        val ratio = new / old
+        when (mode) { Mode.PRINT -> printZoom = new; Mode.READ -> WordPrefs.scale = new; Mode.SHEET -> sheetZoom = new }
+        val idx = list.firstVisibleItemIndex
+        val off = list.firstVisibleItemScrollOffset
+        scope.launch {
+            list.scrollToItem(idx, ((off + at.y) * ratio - at.y).roundToInt().coerceAtLeast(0))
+            if (h != null) {
+                withFrameNanos { }
+                withFrameNanos { }
+                h.scrollTo(((h.value + at.x) * ratio - at.x).roundToInt().coerceIn(0, h.maxValue))
+            }
+        }
+    }
+    fun zoomTo(target: Float, at: Offset = Offset(viewportW / 2f, 0f)) { if (zoomValue > 0f) applyZoom(target / zoomValue, at) }
+
+    // ---------------------------------------------------------------- pagination (background, published progressively)
+    val pagesFlow = remember(doc) { MutableStateFlow<List<LaidPage>>(emptyList()) }
+    val pages by pagesFlow.collectAsState()
+    var layoutDone by remember(doc) { mutableStateOf(false) }
+    LaunchedEffect(doc, mode) {
+        if (doc == null || mode != Mode.PRINT || layoutDone) return@LaunchedEffect
+        val ok = withContext(Dispatchers.Default) {
+            val job = coroutineContext[Job]
+            val acc = ArrayList<LaidPage>()
+            var last = 0L
+            try {
+                val pg = Paginator(doc.page, TextEngine(), onPage = { p ->
+                    acc.add(p)
+                    val now = SystemClock.uptimeMillis()
+                    if (acc.size <= 3 || now - last > 150) { last = now; pagesFlow.value = ArrayList(acc) }
+                }, cancelled = { job?.isActive == false })
+                pg.addAll(doc.blocks)
+                pg.finish()
+                pagesFlow.value = ArrayList(acc)
+                true
+            } catch (_: Paginator.Cancelled) {
+                null
+            } catch (_: Throwable) {
+                false
+            }
+        }
+        when (ok) { true -> layoutDone = true; false -> layoutFailed = true; null -> {} }
+    }
+
+    // ---------------------------------------------------------------- find
     BackHandler(enabled = finding) { finding = false; query = "" }
-
-    // Find: recompute matches off the main thread (debounced).
-    LaunchedEffect(query, ready) {
-        val doc = ready?.doc
+    LaunchedEffect(query, doc) {
         if (doc == null || query.isBlank()) { matches = emptyList(); current = 0; return@LaunchedEffect }
         delay(180)
         val q = query
-        val found = withContext(Dispatchers.Default) {
-            val out = ArrayList<Match>()
-            for ((p, top) in doc.paragraphs) {
-                var i = p.text.indexOf(q, ignoreCase = true)
-                while (i >= 0 && out.size < 5000) {
-                    out.add(Match(p.pid, i, i + q.length, top))
-                    i = p.text.indexOf(q, i + q.length, ignoreCase = true)
-                }
-            }
-            out
-        }
-        matches = found
+        matches = withContext(Dispatchers.Default) { findAll(doc, q) }
         current = 0
-        found.firstOrNull()?.let { listState.animateScrollToItem(it.top + 1) }
     }
     val hits = remember(matches, current) {
-        Hits(matches.groupBy { it.pid }.mapValues { e -> e.value.map { it.start until it.end } }, matches.getOrNull(current))
+        if (doc?.sheet != null) Hits.None
+        else Hits(matches.groupBy { it.pid }.mapValues { e -> e.value.map { it.start until it.end } }, matches.getOrNull(current))
     }
+    val sheetHits = remember(matches, doc) {
+        if (doc?.sheet == null) emptyMap()
+        else matches.groupBy { it.pid }.mapValues { e -> e.value.groupBy { it.col }.mapValues { c -> c.value.map { it.start until it.end } } }
+    }
+    val density = LocalDensity.current
+
+    /** y offset (px) of the slice holding [pid]/[offset] on its page, for scrolling the print layout. */
+    fun sliceOffsetPx(pageIdx: Int, pid: Int, offset: Int): Int {
+        val d = doc ?: return 0
+        val page = pages.getOrNull(pageIdx) ?: return 0
+        var y = d.page.top
+        for (s in page.slices) {
+            val hit = when (s) {
+                is TextSlice -> s.para.pid == pid && offset >= s.start && offset <= s.end
+                is TableSlice -> true.takeIf { s.rows.any { r -> s.table.rows[r].cells.any { c -> c.blocks.any { b -> b is DocBlock.Para && b.pid == pid } } } } ?: false
+                else -> false
+            }
+            if (hit) break
+            y += s.gap + s.height + s.after
+        }
+        val k = max(printZoom, 0.2f) * PRINT_DP_PER_PT * density.density
+        return (y * k - 48 * density.density).roundToInt().coerceAtLeast(0)
+    }
+
+    fun reveal(m: Match) {
+        val d = doc ?: return
+        scope.launch {
+            when (mode) {
+                Mode.SHEET -> {
+                    sheetList.animateScrollToItem((m.pid).coerceAtLeast(0))
+                    val s = d.sheet ?: return@launch
+                    val charDp = 7.6f * sheetZoom
+                    var x = (s.rows.size.toString().length * 8f + 20f) * sheetZoom
+                    for (c in 0 until m.col.coerceAtMost(s.cols)) x += s.charWidths[c].coerceIn(3, 40) * charDp + 20f * sheetZoom
+                    sheetH.animateScrollTo((x * density.density - viewportW * density.density / 3).roundToInt().coerceIn(0, sheetH.maxValue))
+                }
+                Mode.READ -> readList.animateScrollToItem(m.top + 1)
+                Mode.PRINT -> {
+                    val pg = pageOf(pages, m.pid, m.start)
+                    if (pg >= 0) printList.animateScrollToItem(pg, sliceOffsetPx(pg, m.pid, m.start))
+                }
+            }
+        }
+    }
+    LaunchedEffect(matches) { matches.firstOrNull()?.let { reveal(it) } }
     fun goTo(i: Int) {
         if (matches.isEmpty()) return
         current = (i + matches.size) % matches.size
-        scope.launch { listState.animateScrollToItem(matches[current].top + 1) }
+        reveal(matches[current])
     }
-    fun jump(block: Int) { scope.launch { listState.animateScrollToItem(block + 1) } }
+    fun jump(h: Heading) {
+        val d = doc ?: return
+        scope.launch {
+            if (mode == Mode.PRINT) {
+                val pid = (d.blocks.getOrNull(h.blockIndex) as? DocBlock.Para)?.pid ?: return@launch
+                val pg = pageOf(pages, pid, 0)
+                if (pg >= 0) printList.animateScrollToItem(pg, sliceOffsetPx(pg, pid, 0))
+            } else readList.animateScrollToItem(h.blockIndex + 1)
+        }
+    }
 
-    Column(Modifier.fillMaxSize().background(D.c.bg)) {
-        ViewerTopBar(title = file.nameWithoutExtension, onBack = { pane.back() }) {
-            if (ready != null) {
-                IconButton(onClick = { finding = !finding; if (!finding) query = "" }) {
-                    Icon(Icons.Rounded.Search, stringResource(R.string.word_find), tint = if (finding) D.c.accent else D.c.muted)
-                }
-                if (widthClass != WidthClass.Compact) {
-                    IconButton(onClick = { WordPrefs.scale = (scale - 0.1f).coerceAtLeast(0.8f) }, enabled = scale > 0.81f) {
-                        Icon(Icons.Rounded.TextDecrease, stringResource(R.string.word_text_smaller), tint = D.c.muted)
+    // ---------------------------------------------------------------- UI
+    BoxWithConstraints(Modifier.fillMaxSize().background(D.c.bg)) {
+        val narrow = maxWidth < 400.dp
+        val wideScreen = maxWidth >= 840.dp
+        Column(Modifier.fillMaxSize()) {
+            ViewerTopBar(title = file.nameWithoutExtension, onBack = { pane.back() }) {
+                if (doc != null) {
+                    IconButton(onClick = { finding = !finding; if (!finding) query = "" }) {
+                        Icon(Icons.Rounded.Search, stringResource(R.string.word_find), tint = if (finding) D.c.accent else D.c.ink)
                     }
-                    IconButton(onClick = { WordPrefs.scale = (scale + 0.1f).coerceAtMost(1.8f) }, enabled = scale < 1.79f) {
-                        Icon(Icons.Rounded.TextIncrease, stringResource(R.string.word_text_larger), tint = D.c.muted)
-                    }
-                }
-                if (ready.doc.headings.isNotEmpty()) {
-                    val active = if (expanded) outlinePanel else outlineSheet
-                    IconButton(onClick = { if (expanded) outlinePanel = !outlinePanel else outlineSheet = true }) {
-                        Icon(Icons.AutoMirrored.Rounded.Toc, stringResource(R.string.word_outline), tint = if (active) D.c.accent else D.c.muted)
-                    }
-                }
-            }
-            Box {
-                IconButton(onClick = { menu = true }) { Icon(Icons.Rounded.MoreVert, stringResource(R.string.more), tint = D.c.muted) }
-                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                    if (ready != null && widthClass == WidthClass.Compact) {
-                        MenuRow(stringResource(R.string.word_text_smaller), Icons.Rounded.TextDecrease) {
-                            WordPrefs.scale = (scale - 0.1f).coerceAtLeast(0.8f)
+                    if (doc.sheet == null) Box {
+                        IconButton(onClick = { viewMenu = true }) {
+                            Icon(Icons.AutoMirrored.Rounded.ChromeReaderMode, stringResource(R.string.word_view), tint = if (viewMenu) D.c.accent else D.c.ink)
                         }
-                        MenuRow(stringResource(R.string.word_text_larger), Icons.Rounded.TextIncrease) {
-                            WordPrefs.scale = (scale + 0.1f).coerceAtMost(1.8f)
-                        }
-                    }
-                    MenuRow(stringResource(R.string.share), Icons.Rounded.Share) { menu = false; shareFiles(ctx, listOf(file)) }
-                    MenuRow(stringResource(R.string.open_externally), Icons.AutoMirrored.Rounded.OpenInNew) { menu = false; openExternally(ctx, file) }
-                    if (ready != null) {
-                        val copiedMsg = stringResource(R.string.word_copied)
-                        MenuRow(stringResource(R.string.word_copy_all), Icons.Rounded.ContentCopy) {
-                            menu = false
-                            scope.launch {
-                                val text = withContext(Dispatchers.Default) { ready.doc.plainText() }
-                                copyText(ctx, file.nameWithoutExtension, text)
-                                toast(ctx, copiedMsg)
+                        DropdownMenu(expanded = viewMenu, onDismissRequest = { viewMenu = false }) {
+                            CheckRow(stringResource(R.string.word_layout_print), Icons.Rounded.Print, mode == Mode.PRINT) {
+                                viewMenu = false; printChoice = true; layoutFailed = false
+                            }
+                            CheckRow(stringResource(R.string.word_layout_read), Icons.AutoMirrored.Rounded.MenuBook, mode == Mode.READ) {
+                                viewMenu = false; printChoice = false
+                            }
+                            if (doc.headings.isNotEmpty()) {
+                                HorizontalDivider(color = D.c.line)
+                                CheckRow(stringResource(R.string.word_outline), Icons.AutoMirrored.Rounded.Toc, if (wideScreen) outlineOn else false) {
+                                    viewMenu = false
+                                    if (wideScreen) outlineOn = !outlineOn else outlineSheet = true
+                                }
                             }
                         }
                     }
                 }
-            }
-        }
-        if (finding && ready != null) {
-            FindBar(query, { query = it }, matches.size, current, onPrev = { goTo(current - 1) }, onNext = { goTo(current + 1) },
-                onClose = { finding = false; query = "" })
-        }
-
-        when (val l = load) {
-            DocLoad.Loading -> Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-                CircularProgressIndicator(color = D.c.accent)
-                Spacer(Modifier.height(12.dp))
-                Text(stringResource(R.string.word_loading), color = D.c.muted, style = MaterialTheme.typography.bodyLarge)
-            }
-            DocLoad.Error, DocLoad.Legacy -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                EmptyState(Icons.Rounded.ErrorOutline, stringResource(if (l == DocLoad.Legacy) R.string.word_legacy else R.string.word_error)) {
-                    Button(onClick = { openExternally(ctx, file) }) { Text(stringResource(R.string.open_externally)) }
+                if (!narrow) ConvertButton(actions)
+                Box {
+                    IconButton(onClick = { menu = true }) { Icon(Icons.Rounded.MoreVert, stringResource(R.string.more), tint = D.c.ink) }
+                    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                        ViewerMenuItems(actions, close = { menu = false })
+                        if (doc != null) {
+                            val copiedMsg = stringResource(R.string.word_copied)
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.word_copy_all)) },
+                                leadingIcon = { Icon(Icons.Rounded.ContentCopy, null, tint = D.c.muted) },
+                                onClick = {
+                                    menu = false
+                                    scope.launch {
+                                        val text = withContext(Dispatchers.Default) { doc.plainText() }
+                                        copyText(ctx, file.nameWithoutExtension, text)
+                                        toast(ctx, copiedMsg)
+                                    }
+                                },
+                            )
+                        }
+                    }
                 }
             }
-            is DocLoad.Ready -> {
-                if (l.doc.blocks.isEmpty()) {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        EmptyState(Icons.Rounded.Description, stringResource(R.string.word_empty))
+            if (finding && doc != null) {
+                FindBar(query, { query = it }, matches.size, current, onPrev = { goTo(current - 1) }, onNext = { goTo(current + 1) },
+                    onClose = { finding = false; query = "" })
+            }
+            if (doc != null && doc.kind == DocKind.DOC) {
+                Banner(stringResource(R.string.word_doc_notice), stringResource(R.string.open_externally)) { openExternally(ctx, file) }
+            }
+            if (doc != null && doc.truncatedAt > 0) {
+                Banner(stringResource(R.string.word_truncated, Formatter.formatShortFileSize(ctx, doc.truncatedAt)), stringResource(R.string.open_externally)) {
+                    openExternally(ctx, file)
+                }
+            }
+
+            when (val l = load) {
+                DocLoad.Loading -> Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+                    CircularProgressIndicator(color = D.c.accent)
+                    Spacer(Modifier.height(12.dp))
+                    Text(stringResource(R.string.word_loading), color = D.c.muted, style = MaterialTheme.typography.bodyLarge)
+                }
+                DocLoad.Error, DocLoad.Legacy -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    EmptyState(Icons.Rounded.ErrorOutline, stringResource(if (l == DocLoad.Legacy) R.string.word_legacy else R.string.word_error)) {
+                        Button(onClick = { openExternally(ctx, file) }) { Text(stringResource(R.string.open_externally)) }
                     }
-                } else {
-                    Row(Modifier.fillMaxSize()) {
-                        DocumentList(l.doc, images, listState, scale, hits, Modifier.weight(1f).fillMaxHeight())
-                        if (expanded && outlinePanel && l.doc.headings.isNotEmpty()) {
+                }
+                is DocLoad.Ready -> {
+                    val d = l.doc
+                    val empty = d.blocks.isEmpty() && (d.sheet == null || d.sheet.rows.isEmpty())
+                    if (empty) {
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            EmptyState(Icons.Rounded.Description, stringResource(R.string.word_empty))
+                        }
+                    } else Row(Modifier.fillMaxSize()) {
+                        BoxWithConstraints(
+                            Modifier.weight(1f).fillMaxHeight().clipToBounds()
+                                .pinchToZoom(onPinch = { z, c -> pivot = c; live = (live * z).coerceIn(0.25f, 5f) },
+                                    onEnd = { val f = live; live = 1f; applyZoom(f, pivot) })
+                                .ctrlWheelZoom { f, at -> applyZoom(f, at) },
+                        ) {
+                            val w = maxWidth.value
+                            LaunchedEffect(w) {
+                                viewportW = w
+                                if (printZoom < 0f) printZoom = min(printFit(), 1f)
+                            }
+                            Box(Modifier.fillMaxSize().graphicsLayer {
+                                scaleX = live; scaleY = live
+                                transformOrigin = if (size.width > 0f && size.height > 0f)
+                                    TransformOrigin((pivot.x / size.width).coerceIn(0f, 1f), (pivot.y / size.height).coerceIn(0f, 1f)) else TransformOrigin.Center
+                            }) {
+                                when (mode) {
+                                    Mode.SHEET -> SheetView(d.sheet!!, sheetZoom, sheetList, sheetH, sheetHits, matches.getOrNull(current))
+                                    Mode.READ -> ReadView(d, images, readList, readScale, hits)
+                                    Mode.PRINT -> if (printZoom > 0f) PrintView(d, pages, layoutDone, printZoom, printList, printH, images, hits)
+                                }
+                            }
+                            if (mode == Mode.PRINT) PageCounter(printList, pages.size, layoutDone, Modifier.align(Alignment.TopCenter).padding(top = 12.dp))
+                            val pct = (zoomValue * live * 100).roundToInt()
+                            ZoomControls(
+                                percent = pct,
+                                onOut = { zoomTo(stepDown(if (mode == Mode.PRINT) PRINT_STEPS else READ_STEPS, zoomValue)) },
+                                onIn = { zoomTo(stepUp(if (mode == Mode.PRINT) PRINT_STEPS else READ_STEPS, zoomValue)) },
+                                onFit = { zoomTo(if (mode == Mode.PRINT) printFit() else 1f) },
+                                modifier = Modifier.align(Alignment.BottomStart).navigationBarsPadding().padding(16.dp),
+                            )
+                        }
+                        if (wideScreen && outlineOn && d.headings.isNotEmpty() && mode != Mode.SHEET) {
                             Box(Modifier.width(1.dp).fillMaxHeight().background(D.c.line))
                             Column(Modifier.width(280.dp).fillMaxHeight().background(D.c.surface)) {
                                 Text(stringResource(R.string.word_outline), style = MaterialTheme.typography.titleMedium, color = D.c.ink,
                                     modifier = Modifier.padding(start = 20.dp, end = 16.dp, top = 16.dp, bottom = 8.dp))
-                                OutlineList(l.doc.headings, Modifier.weight(1f)) { jump(it.blockIndex) }
+                                OutlineList(d.headings, Modifier.weight(1f)) { jump(it) }
                             }
                         }
                     }
-                    if (!expanded && outlineSheet) OutlineSheet(l.doc.headings, onDismiss = { outlineSheet = false }) {
-                        outlineSheet = false; jump(it.blockIndex)
-                    }
+                    if (outlineSheet) OutlineSheet(d.headings, onDismiss = { outlineSheet = false }) { outlineSheet = false; jump(it) }
                 }
             }
         }
     }
 }
 
-@Composable
-private fun MenuRow(text: String, icon: ImageVector, onClick: () -> Unit) {
-    DropdownMenuItem(text = { Text(text) }, onClick = onClick, leadingIcon = { Icon(icon, null, tint = D.c.muted) })
+/** Print layout by default for documents; long plain text and logs open in the read layout (smooth, no pagination wait). */
+private fun defaultPrint(doc: DocxDoc, f: File): Boolean = when (doc.kind) {
+    DocKind.DOCX, DocKind.DOC, DocKind.RTF, DocKind.MD -> true
+    DocKind.TXT -> f.length() < 512 * 1024
+    DocKind.LOG, DocKind.CSV -> false
+}
+
+private fun findAll(doc: DocxDoc, q: String): List<Match> {
+    val out = ArrayList<Match>()
+    val sheet = doc.sheet
+    if (sheet != null) {
+        for ((r, row) in sheet.rows.withIndex()) {
+            for ((c, s) in row.withIndex()) {
+                var i = s.indexOf(q, ignoreCase = true)
+                while (i >= 0 && out.size < 5000) { out.add(Match(r, i, i + q.length, r, c)); i = s.indexOf(q, i + q.length, ignoreCase = true) }
+            }
+            if (out.size >= 5000) break
+        }
+        return out
+    }
+    for ((p, top) in doc.paragraphs) {
+        var i = p.text.indexOf(q, ignoreCase = true)
+        while (i >= 0 && out.size < 5000) {
+            out.add(Match(p.pid, i, i + q.length, top))
+            i = p.text.indexOf(q, i + q.length, ignoreCase = true)
+        }
+        if (out.size >= 5000) break
+    }
+    return out
 }
 
 private fun copyText(ctx: Context, label: String, text: String) {
@@ -331,11 +509,133 @@ private fun copyText(ctx: Context, label: String, text: String) {
     }
 }
 
-private fun openLink(ctx: Context, url: String) {
-    val uri = if (Regex("^[a-zA-Z][a-zA-Z0-9+.-]*:").containsMatchIn(url)) Uri.parse(url) else Uri.parse("https://$url")
-    runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
-        .onFailure { toast(ctx, ctx.getString(R.string.no_app_found)) }
+@Composable
+private fun CheckRow(text: String, icon: ImageVector, checked: Boolean, onClick: () -> Unit) {
+    DropdownMenuItem(
+        text = { Text(text, color = if (checked) D.c.ink else D.c.ink) },
+        leadingIcon = { Icon(icon, null, tint = if (checked) D.c.accent else D.c.muted) },
+        trailingIcon = { if (checked) Icon(Icons.Rounded.Check, null, tint = D.c.accent) else Spacer(Modifier.size(24.dp)) },
+        onClick = onClick,
+    )
 }
+
+@Composable
+private fun Banner(text: String, action: String, onAction: () -> Unit) {
+    val c = D.c
+    Row(
+        Modifier.fillMaxWidth().background(c.surface).padding(start = 16.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.Rounded.Info, null, tint = c.muted, modifier = Modifier.size(20.dp))
+        Text(text, style = MaterialTheme.typography.bodyMedium, color = c.ink, modifier = Modifier.weight(1f).padding(horizontal = 12.dp))
+        TextButton(onClick = onAction) { Text(action, color = c.accent, maxLines = 1) }
+    }
+    Box(Modifier.fillMaxWidth().height(1.dp).background(c.line))
+}
+
+/** "Page 3 of 12" pill while scrolling the print layout. */
+@Composable
+private fun PageCounter(state: LazyListState, total: Int, done: Boolean, modifier: Modifier) {
+    val c = D.c
+    val page by remember(state) {
+        derivedStateOf {
+            val info = state.layoutInfo
+            val center = (info.viewportStartOffset + info.viewportEndOffset) / 2
+            (info.visibleItemsInfo.firstOrNull { it.offset <= center && it.offset + it.size >= center }?.index ?: state.firstVisibleItemIndex) + 1
+        }
+    }
+    var show by remember { mutableStateOf(false) }
+    LaunchedEffect(state.isScrollInProgress) {
+        if (state.isScrollInProgress) show = true else { delay(1200); show = false }
+    }
+    AnimatedVisibility(visible = show && total > 0, modifier = modifier, enter = fadeIn(), exit = fadeOut()) {
+        Text(
+            stringResource(if (done) R.string.word_page_of else R.string.word_page_of_more, page.coerceIn(1, max(total, 1)), total),
+            style = MaterialTheme.typography.labelMedium, color = c.ink,
+            modifier = Modifier.background(c.surface, RoundedCornerShape(12.dp)).border(1.dp, c.line, RoundedCornerShape(12.dp))
+                .padding(horizontal = 12.dp, vertical = 6.dp),
+        )
+    }
+}
+
+// ------------------------------------------------------------------ print layout view
+
+@Composable
+private fun PrintView(doc: DocxDoc, pages: List<LaidPage>, done: Boolean, zoom: Float, list: LazyListState, h: ScrollState, images: DocxImages, hits: Hits) {
+    val c = D.c
+    BoxWithConstraints(Modifier.fillMaxSize().background(c.bg)) {
+        val density = LocalDensity.current
+        val k = zoom * PRINT_DP_PER_PT * density.density
+        val scale = remember(k, density) { PaperScale(k, density.density, density.fontScale) }
+        val pageW = doc.page.w * zoom * PRINT_DP_PER_PT
+        val gutter = 16f
+        val contentW = max(maxWidth.value, pageW + 2 * gutter)
+        val scrollsX = pageW + 2 * gutter > maxWidth.value + 0.5f
+        SelectionContainer {
+            Box(Modifier.fillMaxSize().then(if (scrollsX) Modifier.horizontalScroll(h) else Modifier)) {
+                LazyColumn(
+                    state = list,
+                    modifier = Modifier.width(contentW.dp).fillMaxHeight(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    contentPadding = PaddingValues(top = 16.dp, bottom = 96.dp),
+                ) {
+                    items(count = pages.size, key = { it }) { i -> PrintPage(pages[i], doc.page, scale, images, hits) }
+                    if (!done) item(key = "more") {
+                        Row(Modifier.padding(24.dp), verticalAlignment = Alignment.CenterVertically) {
+                            CircularProgressIndicator(Modifier.size(20.dp), color = c.accent, strokeWidth = 2.dp)
+                            Spacer(Modifier.width(12.dp))
+                            Text(stringResource(R.string.word_paginating), color = c.muted, style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ------------------------------------------------------------------ read (web) layout view
+
+@Composable
+private fun ReadView(doc: DocxDoc, images: DocxImages, listState: LazyListState, scale: Float, hits: Hits) {
+    val c = D.c
+    BoxWithConstraints(Modifier.fillMaxSize().background(c.bg)) {
+        val card = maxWidth >= (MAX_TEXT_WIDTH + 48).dp
+        val gutter = if (card) 24.dp else 0.dp
+        val inner = if (card) 40.dp else if (maxWidth >= 600.dp) 24.dp else 16.dp
+        val pageWidth = min(maxWidth.value - gutter.value * 2, MAX_TEXT_WIDTH.toFloat() + if (card) inner.value * 2 else 0f).dp
+        val textWidth = pageWidth - inner * 2
+        val pageMod = Modifier.width(pageWidth)
+        SelectionContainer {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.fillMaxSize().background(if (card) c.bg else c.surface),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                contentPadding = PaddingValues(top = if (card) 24.dp else 0.dp, bottom = 96.dp),
+            ) {
+                item(key = "top") { Spacer(pageMod.height(if (card) 40.dp else 20.dp).pageSegment(c, card, top = true, bottom = false)) }
+                itemsIndexed(doc.blocks) { _, b ->
+                    Box(pageMod.pageSegment(c, card, top = false, bottom = false).padding(horizontal = inner)) {
+                        BlockView(b, images, scale, hits, textWidth, allowScroll = true)
+                    }
+                }
+                item(key = "bottom") { Spacer(pageMod.height(if (card) 48.dp else 32.dp).pageSegment(c, card, top = false, bottom = true)) }
+            }
+        }
+    }
+}
+
+/** Draws one horizontal slice of the reading card (surface + 1dp line border; rounded caps at the ends). */
+private fun Modifier.pageSegment(c: DaftarColors, card: Boolean, top: Boolean, bottom: Boolean): Modifier =
+    if (!card) this.background(c.surface) else this.drawBehind {
+        val r = 16.dp.toPx(); val sw = 1.dp.toPx()
+        val y0 = if (top) 0f else -r * 2
+        val y1 = if (bottom) size.height else size.height + r * 2
+        clipRect {
+            drawRoundRect(c.surface, Offset(0f, y0), Size(size.width, y1 - y0), CornerRadius(r))
+            drawRoundRect(c.line, Offset(sw / 2, y0 + sw / 2), Size(size.width - sw, y1 - y0 - sw), CornerRadius(r), style = Stroke(sw))
+        }
+    }
 
 // ------------------------------------------------------------------ find bar
 
@@ -381,7 +681,7 @@ private fun FindBar(query: String, onQuery: (String) -> Unit, count: Int, curren
 @Composable
 private fun OutlineList(headings: List<Heading>, modifier: Modifier = Modifier, onPick: (Heading) -> Unit) {
     val minLevel = headings.minOfOrNull { it.level } ?: 1
-    LazyColumn(modifier.fillMaxWidth(), contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 16.dp)) {
+    LazyColumn(modifier.fillMaxWidth(), contentPadding = PaddingValues(bottom = 16.dp)) {
         itemsIndexed(headings) { _, h ->
             val depth = (h.level - minLevel).coerceIn(0, 4)
             Text(
@@ -403,276 +703,7 @@ private fun OutlineSheet(headings: List<Heading>, onDismiss: () -> Unit, onPick:
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = state, containerColor = D.c.surface) {
         Text(stringResource(R.string.word_outline), style = MaterialTheme.typography.titleMedium, color = D.c.ink,
             modifier = Modifier.padding(start = 20.dp, end = 16.dp, bottom = 8.dp))
+        if (headings.isEmpty()) Text(stringResource(R.string.word_outline_empty), color = D.c.muted, modifier = Modifier.padding(20.dp))
         OutlineList(headings, Modifier.navigationBarsPadding(), onPick)
-    }
-}
-
-// ------------------------------------------------------------------ document
-
-@Composable
-private fun DocumentList(doc: DocxDoc, images: DocxImages, listState: LazyListState, scale: Float, hits: Hits, modifier: Modifier) {
-    val c = D.c
-    BoxWithConstraints(modifier.background(c.bg)) {
-        val card = maxWidth >= (MAX_TEXT_WIDTH + 48).dp
-        val gutter = if (card) 24.dp else 0.dp
-        val inner = if (card) 40.dp else if (maxWidth >= 600.dp) 24.dp else 16.dp
-        val pageWidth = min(maxWidth.value - gutter.value * 2, MAX_TEXT_WIDTH.toFloat() + if (card) inner.value * 2 else 0f).dp
-        val textWidth = pageWidth - inner * 2
-        val pageMod = Modifier.width(pageWidth)
-        SelectionContainer {
-            LazyColumn(
-                state = listState,
-                modifier = Modifier.fillMaxSize().background(if (card) c.bg else c.surface),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = if (card) 24.dp else 0.dp),
-            ) {
-                item(key = "top") { Spacer(pageMod.height(if (card) 40.dp else 20.dp).pageSegment(c, card, top = true, bottom = false)) }
-                itemsIndexed(doc.blocks) { _, b ->
-                    Box(pageMod.pageSegment(c, card, top = false, bottom = false).padding(horizontal = inner)) {
-                        BlockView(b, images, scale, hits, textWidth, allowScroll = true)
-                    }
-                }
-                item(key = "bottom") { Spacer(pageMod.height(if (card) 48.dp else 32.dp).pageSegment(c, card, top = false, bottom = true)) }
-            }
-        }
-    }
-}
-
-/** Draws one horizontal slice of the page card (surface + 1dp line border; rounded caps at the ends). */
-private fun Modifier.pageSegment(c: DaftarColors, card: Boolean, top: Boolean, bottom: Boolean): Modifier =
-    if (!card) this.background(c.surface) else this.drawBehind {
-        val r = 16.dp.toPx(); val sw = 1.dp.toPx()
-        val y0 = if (top) 0f else -r * 2
-        val y1 = if (bottom) size.height else size.height + r * 2
-        clipRect {
-            drawRoundRect(c.surface, Offset(0f, y0), Size(size.width, y1 - y0), CornerRadius(r))
-            drawRoundRect(c.line, Offset(sw / 2, y0 + sw / 2), Size(size.width - sw, y1 - y0 - sw), CornerRadius(r), style = Stroke(sw))
-        }
-    }
-
-@Composable
-private fun BlockView(b: DocBlock, images: DocxImages, scale: Float, hits: Hits, avail: Dp, allowScroll: Boolean) {
-    when (b) {
-        is DocBlock.Para -> ParaView(b, scale, hits)
-        is DocBlock.Image -> ImageBlockView(b, images)
-        is DocBlock.Table -> TableView(b, images, scale, hits, avail, allowScroll)
-        DocBlock.Divider -> Box(Modifier.fillMaxWidth().padding(vertical = 20.dp).height(1.dp).background(D.c.line))
-    }
-}
-
-@Composable
-private fun ParaView(p: DocBlock.Para, scale: Float, hits: Hits) {
-    val c = D.c
-    val ctx = LocalContext.current
-    val density = LocalDensity.current
-    val ranges = hits.byPid[p.pid]
-    val cur = hits.current?.takeIf { it.pid == p.pid }
-    val text = remember(p, c, ranges, cur) { buildText(ctx, p, c, ranges, cur) }
-    val baseSp = (p.basePt * SP_PER_PT * scale).let { if (p.heading > 0) min(it, 36f * scale) else it }
-    val lineH = if (p.heading > 0) 1.25f else max(1.3f, 1.25f * p.lineMult)
-    val hang = -min(0f, p.firstLine) * scale
-    val startPad = (p.indStart * scale - hang).coerceAtLeast(0f)
-    val indent = with(density) {
-        when {
-            p.firstLine > 0f -> TextIndent(firstLine = (p.firstLine * scale).dp.toSp())
-            hang > 0f -> TextIndent(firstLine = 0.sp, restLine = hang.dp.toSp())
-            else -> TextIndent.None
-        }
-    }
-    val style = TextStyle(
-        color = c.ink,
-        fontSize = baseSp.sp,
-        lineHeight = lineH.em,
-        textAlign = when (p.align) { 1 -> TextAlign.Center; 2 -> TextAlign.End; 3 -> TextAlign.Justify; else -> TextAlign.Start },
-        textDirection = if (p.rtl) TextDirection.Rtl else TextDirection.Content,
-        textIndent = indent,
-    )
-    val top = (p.before * scale).let { if (p.heading > 0) max(it, 14f * scale) else it }
-    CompositionLocalProvider(LocalLayoutDirection provides if (p.rtl) LayoutDirection.Rtl else LayoutDirection.Ltr) {
-        Row(Modifier.fillMaxWidth().padding(start = startPad.dp, end = (p.indEnd * scale).dp, top = top.dp, bottom = (p.after * scale).dp)) {
-            if (p.marker != null) {
-                val mf = p.markerFmt
-                Text(
-                    p.marker,
-                    style = style.copy(
-                        textAlign = TextAlign.Start, textIndent = TextIndent.None,
-                        fontWeight = if (mf?.bold == true) FontWeight.Bold else null,
-                        color = mf?.color?.let { docColor(Color(it), c) } ?: c.ink,
-                    ),
-                    maxLines = 1,
-                    modifier = Modifier.width((p.markerWidth * scale).dp),
-                )
-            }
-            Text(text, style = style, modifier = Modifier.weight(1f))
-        }
-    }
-}
-
-/** Document colours are designed for white paper: keep them readable on the dark theme. */
-private fun docColor(col: Color, c: DaftarColors): Color {
-    if (!c.dark) return if (col.luminance() > 0.92f) c.ink else col
-    val maxC = max(col.red, max(col.green, col.blue)); val minC = min(col.red, min(col.green, col.blue))
-    val grey = maxC - minC < 0.12f
-    return when {
-        grey && col.luminance() < 0.5f -> c.ink
-        col.luminance() < 0.35f -> lerp(col, Color.White, 0.5f)
-        else -> col
-    }
-}
-
-private fun docBackground(col: Color, c: DaftarColors): Color = if (c.dark) col.copy(alpha = 0.3f) else col
-
-private fun buildText(ctx: Context, p: DocBlock.Para, c: DaftarColors, ranges: List<IntRange>?, cur: Match?): AnnotatedString = buildAnnotatedString {
-    append(p.text)
-    val linkStyle = TextLinkStyles(SpanStyle(color = c.accent, textDecoration = TextDecoration.Underline))
-    for (s in p.spans) {
-        if (s.start >= s.end || s.end > p.text.length) continue
-        val f = s.fmt
-        val deco = when {
-            f.underline && f.strike -> TextDecoration.combine(listOf(TextDecoration.Underline, TextDecoration.LineThrough))
-            f.underline -> TextDecoration.Underline
-            f.strike -> TextDecoration.LineThrough
-            else -> null
-        }
-        val ratio = (f.sizePt / p.basePt).coerceIn(0.4f, 3f)
-        val sizeEm = when {
-            f.vert != 0 -> (ratio * 0.7f).em
-            kotlin.math.abs(ratio - 1f) > 0.01f -> ratio.em
-            else -> androidx.compose.ui.unit.TextUnit.Unspecified
-        }
-        addStyle(
-            SpanStyle(
-                color = f.color?.let { docColor(Color(it), c) } ?: Color.Unspecified,
-                fontSize = sizeEm,
-                fontWeight = if (f.bold) FontWeight.Bold else null,
-                fontStyle = if (f.italic) FontStyle.Italic else null,
-                fontFamily = if (f.mono) FontFamily.Monospace else null,
-                textDecoration = deco,
-                background = f.background?.let { docBackground(Color(it), c) } ?: Color.Unspecified,
-                baselineShift = when (f.vert) { 1 -> BaselineShift.Superscript; 2 -> BaselineShift.Subscript; else -> null },
-            ),
-            s.start, s.end,
-        )
-        if (s.link != null) {
-            val url = s.link
-            addLink(LinkAnnotation.Url(url, linkStyle) { openLink(ctx, url) }, s.start, s.end)
-        }
-    }
-    ranges?.forEach { r ->
-        if (r.first >= 0 && r.last < p.text.length) {
-            val isCur = cur != null && cur.start == r.first
-            addStyle(SpanStyle(background = c.accent.copy(alpha = if (isCur) 0.55f else 0.22f)), r.first, r.last + 1)
-        }
-    }
-}
-
-@Composable
-private fun ImageBlockView(b: DocBlock.Image, images: DocxImages) {
-    val density = LocalDensity.current
-    val w = b.widthDp.coerceAtLeast(8f)
-    val h = b.heightDp.coerceAtLeast(8f)
-    val targetPx = with(density) { min(w, MAX_TEXT_WIDTH.toFloat()).dp.roundToPx() }
-    val bmp by produceState<ImageBitmap?>(null, b.entry, targetPx) {
-        value = withContext(Dispatchers.IO) { images.load(b.entry, targetPx) }
-    }
-    val align = when (b.align) { 1 -> Alignment.Center; 2 -> Alignment.CenterEnd; else -> Alignment.CenterStart }
-    CompositionLocalProvider(LocalLayoutDirection provides if (b.rtl) LayoutDirection.Rtl else LocalLayoutDirection.current) {
-        Box(Modifier.fillMaxWidth().padding(vertical = 8.dp), contentAlignment = align) {
-            Box(Modifier.widthIn(max = w.dp).fillMaxWidth().aspectRatio(w / h), contentAlignment = Alignment.Center) {
-                val img = bmp
-                if (img != null) {
-                    Image(img, b.alt.ifBlank { stringResource(R.string.word_image) }, Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
-                } else {
-                    Box(Modifier.fillMaxSize().background(D.c.surfaceAlt, RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) {
-                        Icon(Icons.Rounded.Image, b.alt.ifBlank { stringResource(R.string.word_image) }, tint = D.c.muted)
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun TableView(t: DocBlock.Table, images: DocxImages, scale: Float, hits: Hits, avail: Dp, allowScroll: Boolean) {
-    val c = D.c
-    val lineColor = c.muted.copy(alpha = 0.45f)
-    val cols = max(t.grid.size, t.rows.maxOfOrNull { r -> r.cells.sumOf { it.span } } ?: 1).coerceAtLeast(1)
-    val natural = if (t.grid.isNotEmpty()) t.grid.sum() * scale else 0f
-    val scroll = allowScroll && natural > avail.value * 1.08f
-    val tableWidth = if (scroll) natural.dp else avail
-    val outer = if (scroll) Modifier.horizontalScroll(rememberScrollState()) else Modifier
-    CompositionLocalProvider(LocalLayoutDirection provides if (t.rtl) LayoutDirection.Rtl else LocalLayoutDirection.current) {
-        Box(Modifier.fillMaxWidth().padding(vertical = 8.dp).clipToBounds().then(outer)) {
-            Column(
-                (if (scroll) Modifier.width(tableWidth) else Modifier.fillMaxWidth())
-                    .then(if (t.borders) Modifier.border(0.5.dp, lineColor) else Modifier),
-            ) {
-                for (row in t.rows) {
-                    Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
-                        var col = 0
-                        for (cell in row.cells) {
-                            val weight = if (t.grid.size >= col + cell.span && t.grid.isNotEmpty()) {
-                                t.grid.subList(col, col + cell.span).sum().coerceAtLeast(1f)
-                            } else cell.span.toFloat() * (if (t.grid.isNotEmpty()) t.grid.average().toFloat() else 1f)
-                            col += cell.span
-                            val cellWidth = tableWidth * (weight / (if (t.grid.isNotEmpty()) max(t.grid.sum(), 1f) else cols.toFloat()))
-                            Column(
-                                Modifier.weight(weight).fillMaxHeight()
-                                    .then(cell.fill?.let { Modifier.background(docBackground(Color(it), c)) } ?: Modifier)
-                                    .then(if (t.borders) Modifier.border(0.5.dp, lineColor) else Modifier)
-                                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                            ) {
-                                for (b in cell.blocks) BlockView(b, images, scale, hits, (cellWidth - 16.dp).coerceAtLeast(24.dp), allowScroll = false)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-// ------------------------------------------------------------------ images inside the package
-
-/** Decodes pictures from the .docx zip on demand with sampling; small LRU cache bounded by bytes. */
-private class DocxImages(private val path: String) {
-    private var zip: ZipFile? = null
-    private val cache = object : LruCache<String, ImageBitmap>(48 * 1024 * 1024) {
-        override fun sizeOf(key: String, value: ImageBitmap) = value.width * value.height * 4
-    }
-    @Volatile private var closed = false
-
-    fun load(entry: String, targetPx: Int): ImageBitmap? {
-        val key = "$entry@$targetPx"
-        cache.get(key)?.let { return it }
-        val bytes = synchronized(this) {
-            if (closed) return null
-            runCatching {
-                val z = zip ?: ZipFile(path).also { zip = it }
-                val e = z.getEntry(entry) ?: return null
-                if (e.size > 64L * 1024 * 1024) return null
-                z.getInputStream(e).use { it.readBytes() }
-            }.getOrNull()
-        } ?: return null
-        return runCatching {
-            val o = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, o)
-            if (o.outWidth <= 0 || o.outHeight <= 0) return null
-            var sample = 1
-            val target = targetPx.coerceIn(64, 2048)
-            while (o.outWidth / (sample * 2) >= target && o.outHeight / (sample * 2) >= 32) sample *= 2
-            while (max(o.outWidth, o.outHeight) / sample > 4096) sample *= 2
-            val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample }) ?: return null
-            bmp.asImageBitmap().also { cache.put(key, it) }
-        }.getOrNull()
-    }
-
-    fun close() {
-        synchronized(this) {
-            closed = true
-            runCatching { zip?.close() }
-            zip = null
-        }
-        cache.evictAll()
     }
 }

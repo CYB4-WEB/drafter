@@ -130,7 +130,7 @@ fun HomeScreen() {
                     QuickAction(Icons.Rounded.CreateNewFolder, stringResource(R.string.new_folder), Color(0xFF10B981)) { actions.newFolder(Storage.root) }
                     QuickAction(Icons.Rounded.FileUpload, stringResource(R.string.import_file), Color(0xFFF59E0B)) { actions.quick("import", null) }
                     QuickAction(Icons.Rounded.Transform, stringResource(R.string.convert), Color(0xFFEF4444)) { Nav.tab(Screen.Convert()) }
-                    QuickAction(Icons.Rounded.EventAvailable, stringResource(R.string.add_event), Color(0xFF8B5CF6)) { Nav.push(Screen.EditEvent(null)) }
+                    QuickAction(Icons.Rounded.EventAvailable, stringResource(R.string.add_event), Color(0xFF8B5CF6)) { pane.push(Screen.EditEvent(null)) }
                 }
 
                 if (expanded) {
@@ -241,10 +241,10 @@ private fun UpcomingSection(items: List<Occurrence>) {
     }
     Column(Modifier.fillMaxWidth().card(c).padding(4.dp)) {
         if (items.isEmpty()) EmptyState(Icons.Rounded.EventAvailable, stringResource(R.string.nothing_upcoming)) {
-            OutlinedButton(onClick = { Nav.push(Screen.EditEvent(null)) }) { Text(stringResource(R.string.add_event)) }
+            OutlinedButton(onClick = { pane.push(Screen.EditEvent(null)) }) { Text(stringResource(R.string.add_event)) }
         }
         items.forEach { o ->
-            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { Nav.push(Screen.EditEvent(o.event.id)) }.padding(10.dp),
+            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { pane.push(Screen.EditEvent(o.event.id)) }.padding(10.dp),
                 verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.width(4.dp).height(38.dp).clip(RoundedCornerShape(2.dp)).background(eventColor(o.event.type)))
                 Spacer(Modifier.width(12.dp))
@@ -549,11 +549,7 @@ fun SettingsScreen() {
                     listOf("ar-SA" to "العربية", "en-US" to "English"), Prefs.speechLang) { Prefs.putSpeechLang(it) }
                 SwitchRow(Icons.Rounded.Link, stringResource(R.string.set_links_in_app), stringResource(R.string.set_links_in_app_desc), Prefs.linksInApp) { Prefs.putLinksInApp(it) }
             }
-            SettingsGroup(stringResource(R.string.planner)) {
-                SwitchRow(Icons.Rounded.WbSunny, stringResource(R.string.set_daily), stringResource(R.string.set_daily_desc), Prefs.dailySummary) {
-                    Prefs.putDaily(it)
-                }
-            }
+            com.daftar.app.planner.PlannerSettingsSection()
             SettingsGroup(stringResource(R.string.set_storage)) {
                 Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Rounded.Storage, null, tint = c.muted)

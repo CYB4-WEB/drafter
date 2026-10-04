@@ -140,21 +140,28 @@ internal fun PdfSearchOverlay(
         val q = state.submitted
         if (q.isEmpty()) { state.running = false; return@LaunchedEffect }
         state.running = true
+        // Like native readers: the first match shown is the first one at or after the page being read.
+        val startPage = ctl.currentPage
+        fun select(k: Int) {
+            state.active = k
+            val p = state.hits[k].page
+            if (p != ctl.currentPage) ctl.goToPage(p)
+        }
         try {
             session.textIndex.search(q).collect { ev ->
                 when (ev) {
                     is SearchEvent.Progress -> { state.done = ev.done; state.total = ev.total }
                     is SearchEvent.Hits -> {
-                        val first = state.hits.isEmpty()
+                        val from = state.hits.size
                         state.hits.addAll(ev.hits)
-                        if (first && state.active < 0) {
-                            state.active = 0
-                            val p = ev.hits[0].page
-                            if (p != ctl.currentPage) ctl.goToPage(p)
+                        if (state.active < 0) {
+                            val k = (from until state.hits.size).firstOrNull { state.hits[it].page >= startPage }
+                            if (k != null) select(k)
                         }
                     }
                 }
             }
+            if (state.active < 0 && state.hits.isNotEmpty()) select(0)
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (t: Throwable) {
@@ -227,12 +234,12 @@ internal fun PdfSearchOverlay(
                 if (state.submitted.isNotEmpty()) Text(
                     when {
                         state.hits.isEmpty() -> if (state.running) "…" else "0"
-                        else -> "${state.active + 1}/${state.hits.size}${if (state.hits.size >= PdfTextIndex.MAX_HITS) "+" else ""}"
+                        else -> "${if (state.active >= 0) state.active + 1 else "–"}/${state.hits.size}${if (state.hits.size >= PdfTextIndex.MAX_HITS) "+" else ""}"
                     },
                     style = MaterialTheme.typography.labelMedium, color = c.muted, maxLines = 1,
                     modifier = Modifier.padding(horizontal = 4.dp),
                 )
-                IconButton(onClick = { go(state.active - 1) }, enabled = state.hits.isNotEmpty()) {
+                IconButton(onClick = { go(if (state.active < 0) state.hits.size - 1 else state.active - 1) }, enabled = state.hits.isNotEmpty()) {
                     Icon(Icons.Rounded.KeyboardArrowUp, stringResource(R.string.pdf_search_prev), tint = if (state.hits.isNotEmpty()) c.ink else c.line)
                 }
                 IconButton(onClick = { go(state.active + 1) }, enabled = state.hits.isNotEmpty()) {

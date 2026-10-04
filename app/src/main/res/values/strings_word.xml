@@ -5,8 +5,6 @@
     <string name="word_error">This document could not be opened. It may be damaged.</string>
     <string name="word_legacy">Old .doc files and protected documents can\'t be shown here. Open it in another app, or save it as .docx.</string>
     <string name="word_empty">This document is empty</string>
-    <string name="word_text_smaller">Smaller text</string>
-    <string name="word_text_larger">Larger text</string>
     <string name="word_find">Find in document</string>
     <string name="word_find_hint">Find</string>
     <string name="word_find_count">%1$d of %2$d</string>
@@ -18,8 +16,15 @@
     <string name="word_outline_empty">This document has no headings</string>
     <string name="word_copy_all">Copy all text</string>
     <string name="word_copied">Text copied</string>
+    <string name="word_view">View</string>
+    <string name="word_layout_print">Print layout</string>
+    <string name="word_layout_read">Read layout</string>
+    <string name="word_page_of">Page %1$d of %2$d</string>
+    <string name="word_page_of_more">Page %1$d of %2$d+</string>
+    <string name="word_paginating">Laying out pages…</string>
+    <string name="word_doc_notice">Older Word file (.doc): only the text is shown, read-only. Open it in another app for the full layout.</string>
+    <string name="word_truncated">Large file: showing the first %1$s.</string>
     <string name="word_image">Image</string>
-    <string name="word_text_size">Text size %1$d%%</string>
 
     <!-- Image viewer -->
     <string name="word_img_error">This image could not be opened</string>

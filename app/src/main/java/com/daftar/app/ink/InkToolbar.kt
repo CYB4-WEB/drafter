@@ -265,7 +265,7 @@ internal fun InkToolbar(
     }
 
     BoxWithConstraints(Modifier.fillMaxWidth().background(c.bg).padding(vertical = 6.dp)) {
-        val wide = maxWidth >= 1000.dp
+        val wide = maxWidth >= 1200.dp
         if (wide) {
             Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                 ToolRow { Tools(); Divider(); Style(true); Divider(); Insert() }
