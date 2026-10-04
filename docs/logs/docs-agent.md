@@ -259,3 +259,6 @@ zoom/header/memory/region decode; R11 caches bounded; R12 en + ar strings; R13 c
 - **R11 DocxImages LRU ≤ 1/8 maxMemory: PASS** (min(48 MB, maxMemory/8), entries bucketed by size, cleared on dispose).
 - **R12 Strings en + real Arabic: PASS** (31 keys each, formats match, none unused/undefined).
 - **R13 Compiles: PASS** (`tools/compile.sh` BUILD OK, word/ classes verified rebuilt).
+- Final compile: the tree currently fails only in notes-agent's in-progress `ink/InkTextOverlay.kt` / `ink/InkView.kt` (missing
+  `ink_*` strings / members). A deliberate probe error in `word/Zoom.kt` was reported in the same run (then removed), so the
+  compiler does analyse word/ and **word/ has zero errors**. Earlier full-tree runs after each of my batches were BUILD OK.
