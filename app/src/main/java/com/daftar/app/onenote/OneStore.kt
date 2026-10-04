@@ -54,6 +54,12 @@ internal class Rd(private val b: ByteBuffer, var pos: Int, val end: Int) {
 
     companion object {
         private const val HEX = "0123456789ABCDEF"
+
+        /** GUID stored at [o] in a byte array, formatted like [guid]. */
+        fun guidAt(b: ByteArray, o: Int): String {
+            val bb = ByteBuffer.wrap(b).order(ByteOrder.LITTLE_ENDIAN)
+            return Rd(bb, o, o + 16).guid()
+        }
         fun hex(v: Long, digits: Int): String {
             val c = CharArray(digits)
             var x = v

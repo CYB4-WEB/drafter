@@ -66,8 +66,32 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 private val Papers = listOf("blank", "lined", "grid", "dots", "cornell")
+
+/**
+ * Serialized background saver shared by every open editor: JSON encoding + writing never runs on the main thread, saves
+ * of the same file are coalesced (only the newest snapshot is written) and never overlap.
+ */
+internal object InkSaver {
+    private val exec = Executors.newSingleThreadExecutor { r -> Thread(r, "ink-save").apply { priority = Thread.NORM_PRIORITY - 1 } }
+    private val latest = ConcurrentHashMap<String, () -> Unit>()
+
+    fun submit(key: String, job: () -> Unit) {
+        if (latest.put(key, job) == null) exec.execute { latest.remove(key)?.let { runCatching(it) } }
+    }
+
+    /** Waits (bounded) until everything submitted so far is written. */
+    fun flush(timeoutMs: Long = 4000) {
+        runCatching { exec.submit {}.get(timeoutMs, TimeUnit.MILLISECONDS) }
+    }
+}
+
+/** Change counter so unchanged documents are never re-written (plain fields: no Compose state, no recomposition). */
+private class SaveState { var changes = 0; var saved = 0; var job: Job? = null }
 
 private class EditorStateImpl(val view: InkView) : EditorController {
     override var currentPage by mutableIntStateOf(0)
@@ -130,39 +154,44 @@ internal fun InkEditorImpl(
     var showRecordings by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf<String?>(null) }
     var recognized by remember { mutableStateOf<String?>(null) }
-    var dirty by remember { mutableStateOf(false) }
+    val saveState = remember(inkFile) { SaveState() }
+    var textUi by remember { mutableStateOf<TextBoxUi?>(null) }
+    var textMenu by remember { mutableStateOf<Pair<Float, Float>?>(null) }
+    var colorForText by remember { mutableStateOf(false) }
+    var showExport by remember { mutableStateOf(false) }
+    var showPrint by remember { mutableStateOf(false) }
+    var exported by remember { mutableStateOf<List<File>?>(null) }
+    var workJob by remember { mutableStateOf<Job?>(null) }
     val wide = LocalWidthClass.current == WidthClass.Expanded
     // Window got narrow (split / pop-up): close the side panel rather than turning it into a sheet nobody asked for.
     LaunchedEffect(wide) { if (!wide) showPanel = false else if (sidePanelOpen) showPanel = true }
 
     // ---- persistence ----
-    fun saveBlocking() {
+    // The snapshot is immutable (pages, strokes and items are never mutated after creation), so it is taken on the main
+    // thread in O(1) and encoded / written on the saver thread. Nothing is written when nothing changed.
+    fun saveAsync() {
         if (!loaded) return
-        if (isNote && !inkFile.exists()) return   // renamed/moved away while open
+        saveState.job?.cancel(); saveState.job = null
+        if (saveState.changes == saveState.saved) return
+        saveState.saved = saveState.changes
         val d = view.doc
         val snap = InkDoc(d.pages, d.paperColor, d.recordings, d.infinite)
-        runCatching {
-            if (source != null && snap.pages.all { it.isEmpty() } && snap.recordings.isEmpty()) inkFile.delete() else snap.save(inkFile)
-        }
-        dirty = false
-    }
-    var saveJob by remember { mutableStateOf<Job?>(null) }
-    fun scheduleSave() {
-        dirty = true
-        saveJob?.cancel()
-        saveJob = scope.launch {
-            delay(700)
-            val d = view.doc
-            val snap = InkDoc(d.pages, d.paperColor, d.recordings, d.infinite)
-            withContext(Dispatchers.IO) {
-                if (isNote && !inkFile.exists()) return@withContext
-                runCatching {
-                    if (source != null && snap.pages.all { it.isEmpty() } && snap.recordings.isEmpty()) inkFile.delete() else snap.save(inkFile)
-                }
+        val file = inkFile
+        val main = android.os.Handler(android.os.Looper.getMainLooper())
+        InkSaver.submit(file.absolutePath) {
+            if (isNote && !file.exists()) return@submit   // renamed/moved away while open
+            runCatching {
+                if (source != null && snap.pages.all { it.isEmpty() } && snap.recordings.isEmpty()) file.delete() else snap.save(file)
             }
-            if (isNote) Storage.touch()
-            dirty = false
+            if (isNote) main.post { Storage.touch() }
         }
+    }
+    /** Saves and waits until the file is written (rename, host screens that read the file right away). */
+    fun saveBlocking() { saveAsync(); InkSaver.flush() }
+    fun scheduleSave() {
+        saveState.changes++
+        saveState.job?.cancel()
+        saveState.job = scope.launch { delay(800); saveState.job = null; saveAsync() }
     }
     ctl.saver = { saveBlocking() }
 
@@ -248,13 +277,14 @@ internal fun InkEditorImpl(
         whiteboard = d.infinite
         hasTapes = view.hasTapes()
         ctl.pageCount = d.pages.size
+        saveState.changes = 0; saveState.saved = 0
         loaded = true
     }
 
     view.listener = remember(view) {
         object : InkView.Listener {
             override fun onChanged() { ctl.pageCount = view.doc.pages.size; scheduleSave() }
-            override fun onLinkOpen(link: LinkItem) { view.commitSelection(); saveBlocking(); openLink(ctx, link) }
+            override fun onLinkOpen(link: LinkItem) { view.finishEditing(); saveAsync(); openLink(ctx, link) }
             override fun onLinkMenu(page: Int, link: LinkItem, x: Float, y: Float) { linkMenu = Triple(page, link, x to y) }
             override fun onDropFailed() { toast(ctx, ctx.getString(R.string.ink_drop_failed)) }
             override fun onPageChanged(current: Int, count: Int) { ctl.currentPage = current; ctl.pageCount = count }
@@ -267,6 +297,8 @@ internal fun InkEditorImpl(
             }
             override fun onUndoStateChanged(u: Boolean, r: Boolean) { canUndo = u; canRedo = r }
             override fun onZoomChanged(percent: Int) { ctl.zoomPercent = percent }
+            override fun onTextBox(ui: TextBoxUi?) { textUi = ui; if (ui == null) textMenu = null }
+            override fun onTextMenu(page: Int, item: TextItem, x: Float, y: Float) { textMenu = x to y }
         }
     }
     ctl.onImageAdded = { ts.selectTool(Tool.LASSO); view.tool = Tool.LASSO }
@@ -281,17 +313,20 @@ internal fun InkEditorImpl(
     view.penOnly = Prefs.penOnly && Prefs.stylusSeen
     view.stylusButtonTool = if (Prefs.stylusButton == 1) Tool.LASSO else Tool.ERASER
     view.bgColor = c.bg.toArgb()
+    view.textColor = ts.penColor
+    view.textHint = stringResource(R.string.ink_text_hint)
+    remember(view) { view.textFont = InkPrefs.textFont; view.textSize = InkPrefs.textSize; view.textBold = InkPrefs.textBold; true }
 
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     DisposableEffect(inkFile) {
-        val obs = LifecycleEventObserver { _, e -> if (e == Lifecycle.Event.ON_PAUSE) { view.commitSelection(); saveBlocking() } }
+        val obs = LifecycleEventObserver { _, e -> if (e == Lifecycle.Event.ON_PAUSE) { view.finishEditing(); saveAsync() } }
         lifecycle.addObserver(obs)
         onDispose {
             lifecycle.removeObserver(obs)
             if (recorder.active) stopRecording()
             stopPlayback()
-            view.commitSelection()
-            saveBlocking()
+            view.finishEditing()
+            saveAsync()
             view.release()
             source?.close()
         }
@@ -319,7 +354,7 @@ internal fun InkEditorImpl(
 
     // =========================== UI ===========================
     Column(Modifier.fillMaxSize().background(c.bg).imePadding()) {
-        ViewerTopBar(title, onBack = { view.commitSelection(); saveBlocking(); onBack() },
+        ViewerTopBar(title, onBack = { view.finishEditing(); saveAsync(); onBack() },
             onTitleClick = if (onRename != null) ({ showRename = true }) else null) {
             IconButton(onClick = { view.undo() }, enabled = canUndo) { Icon(Icons.AutoMirrored.Rounded.Undo, stringResource(R.string.ink_undo), tint = if (canUndo) c.ink else c.line) }
             IconButton(onClick = { view.redo() }, enabled = canRedo) { Icon(Icons.AutoMirrored.Rounded.Redo, stringResource(R.string.ink_redo), tint = if (canRedo) c.ink else c.line) }
@@ -393,7 +428,7 @@ internal fun InkEditorImpl(
         InkToolbar(
             st = ts,
             showAddPage = isNote && !whiteboard,
-            onToolChanged = { view.commitSelection() },
+            onToolChanged = { view.finishEditing() },
             onMoreColors = { showColors = true },
             onImage = { pickImage.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
             onLink = { linkEdit = ctl.currentPage to null },
@@ -469,8 +504,8 @@ internal fun InkEditorImpl(
                 }
                 linkMenu?.let { (page, link, pos) ->
                     LinkMenu(pos.first, pos.second, link, onDismiss = { linkMenu = null },
-                        onOpen = { linkMenu = null; view.commitSelection(); saveBlocking(); openLink(ctx, link) },
-                        onSideBySide = { linkMenu = null; view.commitSelection(); saveBlocking(); openLinkSideBySide(ctx, link, hostFile) },
+                        onOpen = { linkMenu = null; view.finishEditing(); saveAsync(); openLink(ctx, link) },
+                        onSideBySide = { linkMenu = null; view.finishEditing(); saveBlocking(); openLinkSideBySide(ctx, link, hostFile) },
                         onEdit = { linkMenu = null; linkEdit = page to link },
                         onDelete = { linkMenu = null; view.deleteLink(page, link.id) },
                     )
@@ -520,7 +555,7 @@ internal fun InkEditorImpl(
     }
 
     if (showRename && onRename != null) TextInputDialog(stringResource(R.string.rename), title, stringResource(R.string.save), { showRename = false }) {
-        saveBlocking(); showRename = false; onRename(it)
+        view.finishEditing(); saveBlocking(); showRename = false; onRename(it)
     }
 
     if (showDictation) DictationDialog(onDismiss = { showDictation = false }) { text ->
