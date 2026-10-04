@@ -38,7 +38,7 @@ import kotlin.math.sqrt
 internal object NoteExport {
 
     /** Pixels allowed for one rendered page (bounded by memory: ≤ 1/16 of the heap, ≤ 40 MP). */
-    private fun maxPixels(): Double = min(40_000_000.0, Runtime.getRuntime().maxMemory() / 16.0 / 4.0 * 4.0)
+    private fun maxPixels(): Double = min(40_000_000.0, Runtime.getRuntime().maxMemory() / 16.0 / 4.0)
 
     /**
      * Page [i] as a bitmap at [scale] × its size in points (2× ≈ 144 dpi). Whiteboards are cropped to their content
