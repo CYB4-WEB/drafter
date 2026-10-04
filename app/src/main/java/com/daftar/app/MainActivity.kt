@@ -298,5 +298,6 @@ fun Route(s: Screen) {
         Screen.Study -> com.daftar.app.study.StudyScreen()
         is Screen.Review -> com.daftar.app.study.ReviewScreen(s.deck)
         Screen.Trash -> com.daftar.app.ui.TrashScreen()
+        Screen.Grades -> com.daftar.app.grades.GradesScreen()
     }
 }
