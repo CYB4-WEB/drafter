@@ -173,3 +173,75 @@ R2-8 split pane / second window safe; R2-9 en + ar strings, compiles clean.
   `LocalPaneNav` back, Settings "keep screen on" honoured. Strings en + ar rewritten (38 keys each, unused ones removed).
 - 2026-10-04 — Compile: the capped error output is filled by convert-agent's missing `strings_convert` keys (`convert/*`), so my
   files' results are hidden; re-checking once their strings land.
+- 2026-10-04 — Optional `SlidesExport.toPdf(src, out, progress, isCancelled)` / `toImages(src, outDir, png, scale, progress, isCancelled)`
+  overloads (originals unchanged) so the converter can show per-slide progress and cancel. Part files moved to `Storage.cacheDir()`.
+- 2026-10-04 — Filmstrip numbers moved onto the thumbnails (short panes on landscape phones); pane caption hidden on narrow widths.
+- 2026-10-04 — `tools/compile.sh` → **BUILD OK** (whole module; no errors in slides files at any point once the other agents' errors
+  stopped hiding the end of the capped output).
+
+## Decisions & limits
+- **Width class from my own constraints.** The editor is wrapped in `BoxWithConstraints` and provides `LocalWidthClass` for the
+  scaffold, so a half-width split pane on the tablet behaves like a phone. Expanded (> 840 dp) → rail at the start, open unless the
+  deck is in a split pane (`LocalPaneNav.current.inPane`; toggle still available). Medium/Compact → no side panel at all; the notes
+  pane gets a first "Slides" filmstrip tab instead. Reasons: (1) the scaffold keeps `showPanel` when the window shrinks and would
+  pop a ModalBottomSheet uninvited; (2) on 360–384 dp phones one more header icon pushes the scaffold's ⋮ off the bar.
+  Header on Compact: Present icon + "Share and export" menu (Convert lives in that menu there); wider: Present pill + Convert + menu.
+- **Menu icon** = `Icons.Rounded.IosShare` ("Share and export"): Share, Convert (Compact only), Open side by side, Open in new window,
+  Open in another app (`ViewerMenuItems`) + Export slide notes. No extra zoom control (the scaffold's pill is used).
+- **Notes pane** starts collapsed (the scaffold owns its open state; PowerPoint also starts with notes hidden). Because the editor
+  does not resize for the keyboard, the pane slides up above the IME while "My notes" is focused (measured from the window, so it
+  also works in pop-up windows); it becomes a no-op if the scaffold later applies `imePadding()`.
+- **Present mode** runs in a full-screen `Dialog` window, so it covers the whole app window from a split pane or a second window.
+  In Samsung pop-up / freeform windows Android does not hide system bars for a windowed app; the show then fills the pop-up window.
+  Navigation: tap end 70 % = next, start 30 % = previous; swipe; both mirror in RTL (like the AutoMirrored chevrons). Hardware keys
+  stay physical (→/↓/Page Down/Space/Enter/N/volume-down/media-next = next; ←/↑/Page Up/Backspace/P/volume-up/media-previous =
+  previous) because clickers and the S Pen remote send those. Extras: Home/End, number + Enter, B/. black and W/, white screen, Esc,
+  mouse wheel. Hidden slides are skipped (PowerPoint behaviour); the viewer and exports still include them. After the last slide an
+  "End of slide show" screen; one more "next" exits. Exit returns the editor to the last presented slide.
+- **Laser**: pen / eraser end draws a 700 ms fading trail; a quick pen tap still advances; fingers get the laser after a long press
+  (haptic tick); S Pen hover shows the dot. The student's ink annotations are drawn over the slide in present mode (main thread,
+  separate layer from the per-frame laser layer, because `InkRender` shares Paint objects with the editor).
+- **Present memory**: ≤ 3 bitmaps (current, next, previous) pooled and reused, each ≤ maxMemory/16 (scaled down if the screen-size
+  frame would exceed it), rendered by one worker whose renders are never cancelled half-way; a cached thumbnail is shown scaled up
+  for the instant before a frame is ready. All recycled when the show closes.
+- **Caches**: thumbnails ≤ maxMemory/16, renderer pictures ≤ maxMemory/16 (→ 1/8 per deck screen). Evicted thumbnails are not
+  recycled (a list item may still draw them); everything is recycled on dispose/close.
+- **PDF export**: Android's `PdfDocument` holds every page (and the pictures it references) in memory until `writeTo`, so pages
+  are written in parts whenever the pictures held pass maxMemory/8 or 40 pages, and the parts are merged with PdfBox using temp
+  files. A normal deck is one part (no merge). Pictures are decoded at 2 px/pt (~144 dpi); Android's PDF backend embeds them
+  losslessly, so photo-heavy decks give larger PDFs than PowerPoint's JPEG ones. Text and shapes are vector. Ink is not exported
+  (the converter outputs the deck itself). Charts remain placeholders as in the viewer.
+- **Labels without a Context** (converter used before any deck was opened): `SlidesExport.bind()` from the screen, else
+  `ActivityThread.currentApplication()` by reflection, else captionless placeholder boxes (never untranslated text).
+- **Settings → keep screen on** is honoured while a deck is open (`View.keepScreenOn` with a per-view counter so two decks in two
+  panes don't switch it off for each other). Present mode always keeps the screen on (dialog window flag).
+
+## Requests to lead
+1. (notes-agent / `ink/InkEditorImpl.kt`) Add `.imePadding()` to the scaffold's root `Column(Modifier.fillMaxSize().background(c.bg))`
+   so bottom panels and the canvas sit above the on-screen keyboard. My pane already lifts itself; it adapts automatically.
+2. (notes-agent) When the window stops being wide, close the side panel instead of turning it into a sheet:
+   `LaunchedEffect(wide) { if (!wide) showPanel = false else if (sidePanelOpen) showPanel = true }`
+   (I avoid the problem by passing `sidePanel` only when Expanded.)
+3. (notes-agent, optional) `bottomPanelOpen: Boolean = false` parameter for the initial state of the bottom panel.
+4. (workspace-agent / `data/Storage.kt`) Expose the application context (e.g. `val appContext: Context get() = appCtx`), so
+   `SlidesExport` can drop its reflection fallback for localised placeholder labels.
+5. (convert-agent, FYI) `SlidesExport.toPdf(src, out, progress = { done, total -> }, isCancelled = { !isActive })` and the matching
+   `toImages(..., progress, isCancelled)` overloads report per-slide progress and stop on cancel; the 2-arg / default calls you use
+   today keep working unchanged.
+
+## Self-check (Round 2)
+Not run on a device (no emulator on this box); verified by compile + code review.
+- R2-1 Wide layout (start rail with numbered thumbnails, current outlined; centre canvas; collapsible notes pane with Speaker notes /
+  Comments / My notes) — PASS.
+- R2-2 Narrow screens / split panes collapse correctly — PASS: pane-aware width class; rail closed in panes; filmstrip tab when not
+  Expanded; header fits 360 dp; short panes handled (badged filmstrip, compact empty states); keyboard lift for My notes.
+- R2-3 Present mode — PASS: immersive (bars hidden via WindowInsetsControllerCompat, restored on exit), swipe/tap/keys/volume,
+  counter + exit + prev/next chrome, laser (pen trail, long-press finger, hover dot), next slide pre-rendered, ≤ 3 frames,
+  screen kept on. Limit: no bar hiding inside Samsung pop-up windows (platform).
+- R2-4 Header: Present, `ConvertButton(rememberViewerActions(file))`, distinct-icon menu with `ViewerMenuItems` + Export notes; no
+  duplicate zoom — PASS.
+- R2-5 `SlidesExport.toPdf`: vector pages at slide size in points, temp + rename, bounded memory, never throws, off-main — PASS.
+- R2-6 `SlidesExport.toImages`: `Slide 01.png` … (zero-padded), one reused bitmap ≤ 16 MP, recycled, never throws — PASS.
+- R2-7 Byte-bounded caches (thumbnails and renderer pictures, ≤ 1/8 maxMemory together) — PASS.
+- R2-8 Works in a split pane and a second window (LocalPaneNav back, dialog on the hosting window, no global screen state) — PASS.
+- R2-9 en + ar strings (38 keys each, real Arabic), `tools/compile.sh` BUILD OK — PASS.
