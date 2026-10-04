@@ -61,7 +61,6 @@ object Ics {
             if (e.location.isNotBlank()) line("LOCATION:" + text(e.location))
             if (e.link.isNotBlank()) line("URL:" + e.link.replace("\r", "").replace("\n", ""))
             line("CATEGORIES:" + text(c.getString(typeLabelRes(e.type))))
-            if (e.type == EventType.ASSIGNMENT && e.done) line("STATUS:CONFIRMED")
             line("TRANSP:OPAQUE")
             for (m in e.reminders.distinct().sorted()) {
                 // Daftar reminds all-day events relative to 09:00; triggers are relative to DTSTART (midnight).
