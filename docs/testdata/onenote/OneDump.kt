@@ -38,6 +38,19 @@ fun img(i: OneImage) = "${i.widthPt.toInt()}x${i.heightPt.toInt()}pt type=${i.da
 fun ink(k: OneInk) = "strokes=${k.strokes.size} bounds=${k.bounds.map { it.toInt() }} first=${k.strokes.first().let { s -> "w=%.2f c=%08X n=%d p0=(%.1f,%.1f)".format(s.width, s.color, s.pts.size / 2, s.pts[0], s.pts[1]) }}"
 
 fun main(args: Array<String>) {
+    if (args.firstOrNull() == "--jcids") {
+        for (a in args.drop(1)) {
+            val st = OneStore.open(File(a))
+            val hist = java.util.TreeMap<String, Int>()
+            for (sp in st.spaces.values) {
+                val f = sp.javaClass.getDeclaredField("revisions"); f.isAccessible = true
+                @Suppress("UNCHECKED_CAST") val revs = f.get(sp) as Map<Any, Revision>
+                for (r in revs.values) for (d in r.objects.values) { val k = "%08X".format(d.jcid); hist[k] = (hist[k] ?: 0) + 1 }
+            }
+            println("$a: spaces=${st.spaces.size} root=${st.rootGosid} $hist")
+        }
+        return
+    }
     for (a in args) {
         val f = File(a)
         println("==== ${f.name}")

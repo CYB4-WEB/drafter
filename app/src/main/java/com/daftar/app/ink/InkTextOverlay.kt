@@ -43,7 +43,7 @@ import com.daftar.app.ui.theme.D
 import kotlin.math.abs
 
 /** What the Compose layer needs to show the format bar for the selected / edited text box. */
-internal class TextBoxUi(val page: Int, val item: TextItem, val editing: Boolean)
+class TextBoxUi internal constructor(val page: Int, val item: TextItem, val editing: Boolean)
 
 /**
  * The on-canvas text editor: a native [EditText] that sits in the same [FrameLayout] as the [InkView] and is placed

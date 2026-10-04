@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.Notes
 import androidx.compose.material.icons.automirrored.rounded.Redo
 import androidx.compose.material.icons.automirrored.rounded.Undo
 import androidx.compose.material.icons.automirrored.rounded.ViewSidebar
@@ -352,6 +353,78 @@ internal fun InkEditorImpl(
 
     val actions = if (isNote) rememberViewerActions(hostFile) else null
 
+    // ---- export / print (notes) ----
+    /** Immutable copy of the document for background work (pages and items are never mutated in place). */
+    fun snapshot(): InkDoc { view.finishEditing(); val d = view.doc; return InkDoc(d.pages, d.paperColor, d.recordings, d.infinite) }
+    val baseName = inkFile.nameWithoutExtension
+    val outDir = inkFile.parentFile ?: Storage.root
+
+    /** Runs [work] off the main thread with a cancellable progress bar; [done] gets the files written (null = failed). */
+    fun runWork(work: suspend ((String) -> Unit) -> List<File>?, done: (List<File>?) -> Unit) {
+        workJob?.cancel()
+        busy = ctx.getString(R.string.ink_exporting)
+        workJob = scope.launch {
+            val r = try {
+                withContext(Dispatchers.IO) { work { msg -> scope.launch(Dispatchers.Main) { if (workJob?.isActive == true) busy = msg } } }
+            } catch (e: kotlinx.coroutines.CancellationException) { busy = null; workJob = null; throw e }
+            catch (e: Throwable) { null }
+            busy = null; workJob = null
+            done(r)
+        }
+    }
+    fun finished(files: List<File>?) {
+        if (files == null) { toast(ctx, ctx.getString(R.string.error_generic)); return }
+        if (files.isEmpty()) return
+        Storage.touch()
+        exported = files
+    }
+    fun exportPdf() {
+        val d = snapshot()
+        runWork({ val out = Storage.uniqueFile(outDir, baseName, "pdf"); exportNoteToPdf(d, out); listOf(out) }, ::finished)
+    }
+    fun exportImages(png: Boolean, all: Boolean) {
+        val d = snapshot()
+        val pages = if (all) d.pages.indices.toList() else listOf(ctl.currentPage.coerceIn(0, d.pages.size - 1))
+        runWork({ msg -> NoteExport.exportImages(d, pages, outDir, baseName, png) { k, n -> if (n > 1) msg(ctx.getString(R.string.ink_exporting_page, k, n)) } }, ::finished)
+    }
+    fun sharePageImage() {
+        val d = snapshot()
+        val i = ctl.currentPage.coerceIn(0, d.pages.size - 1)
+        runWork({
+            val name = if (d.pages.size > 1) "$baseName - ${i + 1}" else baseName
+            val f = File(Storage.cacheDir(), Storage.sanitize(name).ifBlank { "page" } + ".png")
+            val b = NoteExport.renderPage(d, i)
+            try { NoteExport.writeBitmap(b, f, true) } finally { b.recycle() }
+            listOf(f)
+        }) { files -> if (files != null) shareFiles(ctx, files) else toast(ctx, ctx.getString(R.string.error_generic)) }
+    }
+    fun exportText(docx: Boolean) {
+        val d = snapshot()
+        val lang = Prefs.inkLang
+        runWork({ msg ->
+            val (pages, hwMissing) = NoteExport.pageTexts(d, lang) { k, n -> msg(ctx.getString(R.string.ink_recognizing_page, k, n)) }
+            if (hwMissing) scope.launch(Dispatchers.Main) { toast(ctx, ctx.getString(R.string.ink_export_no_hw)) }
+            if (pages.all { it.isEmpty() }) { scope.launch(Dispatchers.Main) { toast(ctx, ctx.getString(R.string.ink_export_empty)) }; return@runWork emptyList() }
+            val out = Storage.uniqueFile(outDir, baseName, if (docx) "docx" else "txt")
+            if (docx) { if (!com.daftar.app.word.DocxExport.writeDocx(NoteExport.docxParagraphs(pages), out, baseName)) return@runWork null }
+            else out.writeText(NoteExport.plainText(pages))
+            listOf(out)
+        }, ::finished)
+    }
+    fun printPages(pages: List<Int>) {
+        val act = ctx.findActivityOrNull() ?: run { toast(ctx, ctx.getString(R.string.error_generic)); return }
+        val d = snapshot()
+        val sub = InkDoc(pages.filter { it in d.pages.indices }.map { d.pages[it] }, d.paperColor, emptyList(), d.infinite)
+        if (sub.pages.isEmpty()) return
+        runWork({ val f = File(Storage.cacheDir(), "print-" + Storage.sanitize(baseName).ifBlank { "note" } + ".pdf"); exportNoteToPdf(sub, f); listOf(f) }) { files ->
+            val f = files?.firstOrNull()
+            if (f == null) toast(ctx, ctx.getString(R.string.error_generic))
+            else runCatching { com.daftar.app.pdf.PdfTools.print(act, f, title) }.onFailure { toast(ctx, ctx.getString(R.string.error_generic)) }
+        }
+    }
+
+    androidx.activity.compose.BackHandler(enabled = textUi != null) { view.finishEditing() }
+
     // =========================== UI ===========================
     Column(Modifier.fillMaxSize().background(c.bg).imePadding()) {
         ViewerTopBar(title, onBack = { view.finishEditing(); saveAsync(); onBack() },
@@ -393,16 +466,12 @@ internal fun InkEditorImpl(
                         DropdownMenuItem({ Text(stringResource(R.string.ink_tapes_hide)) }, { showMore = false; view.setAllTapes(false) }, leadingIcon = { Icon(Icons.Rounded.VisibilityOff, null) })
                     }
                     if (isNote) {
-                        DropdownMenuItem({ Text(stringResource(R.string.ink_export_pdf)) }, {
+                        DropdownMenuItem({ Text(stringResource(R.string.ink_export)) }, { showMore = false; showExport = true },
+                            leadingIcon = { Icon(Icons.Rounded.IosShare, null) }, trailingIcon = { Icon(Icons.Rounded.ChevronRight, null) })
+                        DropdownMenuItem({ Text(stringResource(R.string.ink_print)) }, {
                             showMore = false
-                            scope.launch {
-                                view.commitSelection(); saveBlocking()
-                                val out = Storage.uniqueFile(inkFile.parentFile!!, inkFile.nameWithoutExtension, "pdf")
-                                val ok = withContext(Dispatchers.IO) { runCatching { exportNoteToPdf(view.doc, out) }.isSuccess }
-                                Storage.touch()
-                                toast(ctx, if (ok) ctx.getString(R.string.saved_to, out.name) else ctx.getString(R.string.error_generic))
-                            }
-                        }, leadingIcon = { Icon(Icons.Rounded.PictureAsPdf, null) })
+                            if (whiteboard || ctl.pageCount <= 1) printPages(listOf(0)) else showPrint = true
+                        }, leadingIcon = { Icon(Icons.Rounded.Print, null) })
                     }
                     DropdownMenuItem(
                         { Text(stringResource(if (Prefs.penOnly) R.string.ink_finger_draw_off else R.string.ink_finger_draw_on)) },
@@ -412,14 +481,33 @@ internal fun InkEditorImpl(
                     if (actions != null) {
                         HorizontalDivider(color = c.line)
                         ViewerMenuItems(actions, close = { showMore = false }, onShare = {
-                            scope.launch {
-                                view.commitSelection(); saveBlocking()
-                                val out = File(Storage.cacheDir(), inkFile.nameWithoutExtension + ".pdf")
-                                val ok = withContext(Dispatchers.IO) { runCatching { exportNoteToPdf(view.doc, out) }.isSuccess }
-                                if (ok) shareFiles(ctx, listOf(out)) else toast(ctx, ctx.getString(R.string.error_generic))
+                            val d = snapshot()
+                            runWork({ val out = File(Storage.cacheDir(), Storage.sanitize(baseName).ifBlank { "note" } + ".pdf"); exportNoteToPdf(d, out); listOf(out) }) { files ->
+                                if (files != null) shareFiles(ctx, files) else toast(ctx, ctx.getString(R.string.error_generic))
                             }
-                        })
+                        }, showPrint = false)
                     }
+                }
+                if (isNote) DropdownMenu(showExport, { showExport = false }) {
+                    Text(stringResource(R.string.ink_export), style = MaterialTheme.typography.labelMedium, color = c.muted,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
+                    @Composable
+                    fun Item(label: Int, icon: ImageVector, action: () -> Unit) =
+                        DropdownMenuItem({ Text(stringResource(label)) }, { showExport = false; action() }, leadingIcon = { Icon(icon, null) })
+                    Item(R.string.ink_export_pdf_short, Icons.Rounded.PictureAsPdf) { exportPdf() }
+                    val multi = !whiteboard && ctl.pageCount > 1
+                    if (multi) {
+                        Item(R.string.ink_export_png_page, Icons.Rounded.Image) { exportImages(png = true, all = false) }
+                        Item(R.string.ink_export_png_all, Icons.Rounded.Collections) { exportImages(png = true, all = true) }
+                        Item(R.string.ink_export_jpg_page, Icons.Rounded.Image) { exportImages(png = false, all = false) }
+                        Item(R.string.ink_export_jpg_all, Icons.Rounded.Collections) { exportImages(png = false, all = true) }
+                    } else {
+                        Item(R.string.ink_export_png_board, Icons.Rounded.Image) { exportImages(png = true, all = true) }
+                        Item(R.string.ink_export_jpg_board, Icons.Rounded.Image) { exportImages(png = false, all = true) }
+                    }
+                    Item(R.string.ink_share_page_image, Icons.Rounded.Share) { sharePageImage() }
+                    Item(R.string.ink_export_docx, Icons.Rounded.Description) { exportText(docx = true) }
+                    Item(R.string.ink_export_txt, Icons.AutoMirrored.Rounded.Notes) { exportText(docx = false) }
                 }
             }
         }
@@ -471,11 +559,16 @@ internal fun InkEditorImpl(
             }
             Column(Modifier.weight(1f).fillMaxHeight()) {
             Box(Modifier.weight(1f).fillMaxWidth()) {
-                AndroidView({ view }, Modifier.fillMaxSize().clipToBounds())
-                if (loaded) com.daftar.app.ui.ZoomControls(
-                    ctl.zoomPercent, onOut = { ctl.zoomOut() }, onIn = { ctl.zoomIn() }, onFit = { ctl.zoomFit() },
-                    modifier = Modifier.align(Alignment.BottomStart).padding(16.dp),
-                )
+                // the canvas and the on-canvas text editor share one FrameLayout (the editor is positioned by the view)
+                val host = remember(view) {
+                    android.widget.FrameLayout(ctx).apply {
+                        clipChildren = true
+                        addView(view, android.widget.FrameLayout.LayoutParams(-1, -1))
+                        addView(view.textOverlay.edit)
+                    }
+                }
+                AndroidView({ host }, Modifier.fillMaxSize().clipToBounds())
+                if (loaded) ZoomPill(ctl, Modifier.align(Alignment.BottomStart).padding(16.dp))
                 if (!loaded) CircularProgressIndicator(Modifier.align(Alignment.Center), color = c.accent)
 
                 if (hasSel) SelectionBar(
@@ -486,21 +579,42 @@ internal fun InkEditorImpl(
                     onDelete = { view.deleteSelection() },
                     onDone = { view.commitSelection() },
                 )
-                if (ctl.pageCount > 0 && !whiteboard) Text(
-                    stringResource(R.string.page_of, ctl.currentPage + 1, ctl.pageCount),
-                    style = MaterialTheme.typography.labelMedium, color = c.muted,
-                    modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(c.surface, RoundedCornerShape(10.dp)).border(1.dp, c.line, RoundedCornerShape(10.dp))
-                        .then(if (onPageChipClick != null) Modifier.clickable(onClick = onPageChipClick) else Modifier)
-                        .padding(horizontal = 10.dp, vertical = 4.dp),
-                )
+                textUi?.let { ui ->
+                    TextFormatBar(
+                        Modifier.align(Alignment.TopCenter).padding(top = 12.dp, start = 8.dp, end = 8.dp), ui,
+                        onFormat = { f ->
+                            view.formatText { t -> f(t).also { n -> InkPrefs.textFont = n.font; InkPrefs.textSize = n.size; InkPrefs.textBold = n.bold
+                                view.textFont = n.font; view.textSize = n.size; view.textBold = n.bold } }
+                        },
+                        onMoreColors = { colorForText = true; showColors = true },
+                        onDuplicate = { view.duplicateText() },
+                        onDelete = { view.deleteSelectedText() },
+                        onDone = { view.finishEditing() },
+                    )
+                }
+                if (!whiteboard) PageChip(ctl, onPageChipClick, Modifier.align(Alignment.BottomEnd).padding(16.dp))
                 busy?.let { msg ->
                     Row(Modifier.align(Alignment.BottomCenter).padding(24.dp).background(c.surface, RoundedCornerShape(12.dp))
-                        .border(1.dp, c.line, RoundedCornerShape(12.dp)).padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                        .border(1.dp, c.line, RoundedCornerShape(12.dp)).padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                         CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = c.accent)
-                        Spacer(Modifier.width(10.dp)); Text(msg, color = c.ink)
+                        Spacer(Modifier.width(10.dp)); Text(msg, color = c.ink, modifier = Modifier.padding(vertical = 8.dp))
+                        if (workJob != null) TextButton(onClick = { workJob?.cancel(); workJob = null; busy = null }) { Text(stringResource(R.string.cancel)) }
+                        else Spacer(Modifier.width(12.dp))
                     }
+                }
+                exported?.let { files ->
+                    LaunchedEffect(files) { delay(8000); if (exported === files) exported = null }
+                    ExportResultBar(Modifier.align(Alignment.BottomCenter).padding(24.dp), files,
+                        onOpen = { f -> exported = null; view.finishEditing(); saveAsync(); com.daftar.app.ui.pane.open(ctx, f) },
+                        onShare = { fs -> exported = null; shareFiles(ctx, fs) },
+                        onDismiss = { exported = null })
+                }
+                textMenu?.let { (x, y) ->
+                    TextBoxMenu(x, y, onDismiss = { textMenu = null },
+                        onEdit = { textMenu = null; view.editSelectedText() },
+                        onEditDialog = { textMenu = null; view.editSelectedTextInDialog() },
+                        onDuplicate = { textMenu = null; view.duplicateText() },
+                        onDelete = { textMenu = null; view.deleteSelectedText() })
                 }
                 linkMenu?.let { (page, link, pos) ->
                     LinkMenu(pos.first, pos.second, link, onDismiss = { linkMenu = null },
@@ -548,10 +662,14 @@ internal fun InkEditorImpl(
         view.setPaper(paper, all); if (!whiteboard) Prefs.putPaper(paper); showPaper = false
     }
 
-    if (showColors) ColorGridDialog(onDismiss = { showColors = false }) { col ->
-        ts.pickColor(col)
-        view.commitSelection()
-        showColors = false
+    if (showColors) ColorGridDialog(onDismiss = { showColors = false; colorForText = false }) { col ->
+        if (colorForText && textUi != null) view.formatText { it.copy(color = col) }
+        else { ts.pickColor(col); view.finishEditing() }
+        showColors = false; colorForText = false
+    }
+
+    if (showPrint) PrintDialog(ctl.pageCount, ctl.currentPage, onDismiss = { showPrint = false }) { pages ->
+        showPrint = false; printPages(pages)
     }
 
     if (showRename && onRename != null) TextInputDialog(stringResource(R.string.rename), title, stringResource(R.string.save), { showRename = false }) {
@@ -667,7 +785,29 @@ private fun SelectionBar(modifier: Modifier, onText: () -> Unit, onColor: (Int) 
     }
 }
 
-private fun fontFamilyOf(key: String): FontFamily = when (key) {
+/** Zoom pill reading the zoom state in its own scope: pinch-zoom recomposes only this, not the whole editor. */
+@Composable
+private fun ZoomPill(ctl: EditorController, modifier: Modifier) {
+    com.daftar.app.ui.ZoomControls(ctl.zoomPercent, onOut = { ctl.zoomOut() }, onIn = { ctl.zoomIn() }, onFit = { ctl.zoomFit() }, modifier = modifier)
+}
+
+/** "page x / y" chip; reads the page state in its own scope (scrolling recomposes only this). */
+@Composable
+private fun PageChip(ctl: EditorController, onClick: (() -> Unit)?, modifier: Modifier) {
+    val c = D.c
+    if (ctl.pageCount <= 0) return
+    Text(
+        stringResource(R.string.page_of, ctl.currentPage + 1, ctl.pageCount),
+        style = MaterialTheme.typography.labelMedium, color = c.muted,
+        modifier = modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(c.surface, RoundedCornerShape(10.dp)).border(1.dp, c.line, RoundedCornerShape(10.dp))
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+    )
+}
+
+internal fun fontFamilyOf(key: String): FontFamily = when (key) {
     "serif" -> FontFamily.Serif
     "mono" -> FontFamily.Monospace
     "cairo" -> FontFamily(Font(R.font.cairo))
@@ -677,7 +817,7 @@ private fun fontFamilyOf(key: String): FontFamily = when (key) {
     else -> FontFamily.SansSerif
 }
 
-private val FontLabels = mapOf("sans" to "Sans", "serif" to "Serif", "mono" to "Mono", "cairo" to "Cairo القاهرة", "amiri" to "Amiri أميري", "tehreer" to "Tehreer تحرير", "hand" to "Handwriting")
+internal val FontLabels = mapOf("sans" to "Sans", "serif" to "Serif", "mono" to "Mono", "cairo" to "Cairo القاهرة", "amiri" to "Amiri أميري", "tehreer" to "Tehreer تحرير", "hand" to "Handwriting")
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable

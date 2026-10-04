@@ -234,6 +234,8 @@ class InkView(context: Context) : View(context) {
     private var layerCheckPosted = false
     private val layerCheck = Runnable { layerCheckPosted = false; updateLayers() }
     private val layerPaint = Paint()
+    /** Pages for which caching was declined (only tapes, or too big at this zoom) — keyed by stroke list + zoom. */
+    private val noLayer = HashMap<Int, Pair<List<Stroke>, Float>>()
 
     // ---- paints & preallocated draw objects (no allocation in onDraw) ----
     private val pagePaint = Paint()
@@ -658,7 +660,7 @@ class InkView(context: Context) : View(context) {
             }
             from = l.count
             if (st.size > l.count) requestLayers(600)     // fold the new strokes into the layer once the pen rests
-        } else if (!ghosting && st.isNotEmpty()) requestLayers()
+        } else if (!ghosting && st.isNotEmpty() && noLayer[i]?.let { it.first === st && it.second == scale } != true) requestLayers()
         for (k in st.indices) {
             val s = st[k]
             if (s.isTape) { tapes++; continue }
@@ -677,7 +679,7 @@ class InkView(context: Context) : View(context) {
 
     private fun clearLayers() {
         layers.values.forEach { it.bmp.recycle() }
-        layers.clear(); layerJobs.clear()
+        layers.clear(); layerJobs.clear(); noLayer.clear()
     }
 
     /** Visible part of page [i] in page coordinates, or false when the page is off screen. */
@@ -710,13 +712,13 @@ class InkView(context: Context) : View(context) {
             if ((covering && l!!.strokes === st) || i in layerJobs) continue
             // still writing: keep blitting the old layer + new strokes as vectors; fold them in once the pen rests
             if (covering && mode == Mode.DRAW && isPrefix(l!!, st)) { requestLayers(600); continue }
-            if (st.none { !it.isTape }) { layers.remove(i)?.bmp?.recycle(); continue }
+            if (st.none { !it.isTape }) { layers.remove(i)?.bmp?.recycle(); noLayer[i] = st to scale; continue }
             // overscan: half a screen above/below, a quarter left/right (scroll direction is mostly vertical)
             val r = RectF(vis)
             var ex = vis.width() * 0.25f; var ey = vis.height() * 0.5f
             fun px(a: Float, b: Float) = ((vis.width() + 2 * a) * scale).toLong() * ((vis.height() + 2 * b) * scale).toLong()
             while (ex + ey > 1f && px(ex, ey) > maxPx) { ex *= 0.7f; ey *= 0.7f }
-            if (px(ex, ey) > maxPx) continue                     // even the visible area is too big: stay vector
+            if (px(ex, ey) > maxPx) { noLayer[i] = st to scale; continue }   // even the visible area is too big: stay vector
             r.inset(-ex, -ey)
             if (!doc.infinite) { if (!r.intersect(0f, 0f, page.w, page.h)) continue }
             val wpx = ceil(r.width() * scale).toInt(); val hpx = ceil(r.height() * scale).toInt()
