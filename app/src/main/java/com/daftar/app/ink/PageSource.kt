@@ -38,4 +38,10 @@ interface EditorController {
     fun zoomFit()
     /** Insert a picture on the current page; it floats selected so the user can move/resize it (e.g. a signature). */
     fun addImage(b: Bitmap)
+    /** Like [addImage] with a starting width in page points (e.g. a signature ≈ 160pt). */
+    fun addImage(b: Bitmap, widthPt: Float)
+    /** Go to page [i] and scroll point [yPt] (page points) into view (search matches when zoomed in). */
+    fun goToPage(i: Int, yPt: Float)
+    /** Re-render the fixed page backgrounds (the source changed what it draws, e.g. search highlights). */
+    fun refreshPages()
 }
