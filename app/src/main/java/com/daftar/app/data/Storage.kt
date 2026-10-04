@@ -2,6 +2,7 @@ package com.daftar.app.data
 
 import android.content.Context
 import android.net.Uri
+import android.provider.DocumentsContract
 import android.provider.OpenableColumns
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -11,6 +12,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.File
+import java.io.IOException
 
 /** TEXT = plain/markup text read in the Word viewer (txt, md, rtf, csv…). */
 enum class Kind { FOLDER, NOTE, PDF, PPTX, DOCX, TEXT, IMAGE, AUDIO, OTHER }
@@ -252,6 +254,131 @@ object Storage {
             if (it.isDirectory) folders++ else { files++; bytes += it.length() }
         }
         return Triple(folders, files, bytes)
+    }
+
+    // ---------------------------------------------------------------------------------
+    // Import helpers (files and whole folders from the Storage Access Framework)
+    // ---------------------------------------------------------------------------------
+
+    /** A document found under an imported folder; [rel] is its folder path relative to the picked folder ("" = top). */
+    data class TreeDoc(val uri: Uri, val name: String, val rel: String, val isDir: Boolean, val size: Long)
+
+    /** Unique file in [dir] for a full file name ("Lecture 1.pdf" -> "Lecture 1 (2).pdf" when taken). */
+    fun uniqueNamed(dir: File, fileName: String): File {
+        val clean = sanitize(fileName).ifBlank { "file" }
+        val dot = clean.lastIndexOf('.')
+        return if (dot > 0) uniqueFile(dir, clean.substring(0, dot), clean.substring(dot + 1)) else uniqueFile(dir, clean, "")
+    }
+
+    /**
+     * Copies [uri] into [destDir] as [name] (unique). [isActive] is polled between buffers so the copy can be cancelled;
+     * a partial file is removed on failure or cancel. Does not bump [version] (callers call [touch] once at the end).
+     */
+    fun copyIn(ctx: Context, uri: Uri, destDir: File, name: String, isActive: () -> Boolean = { true }): File? {
+        destDir.mkdirs()
+        val target = uniqueNamed(destDir, name)
+        return try {
+            val inp = ctx.contentResolver.openInputStream(uri) ?: return null
+            inp.use { input ->
+                target.outputStream().use { out ->
+                    val buf = ByteArray(64 * 1024)
+                    while (true) {
+                        if (!isActive()) throw IOException("cancelled")
+                        val n = input.read(buf)
+                        if (n < 0) break
+                        out.write(buf, 0, n)
+                    }
+                }
+            }
+            target
+        } catch (e: Exception) {
+            target.delete(); null
+        }
+    }
+
+    /** Display name of a document, adding an extension from its MIME type when the name has none. */
+    fun nameWithExt(ctx: Context, uri: Uri, name: String = displayName(ctx, uri)): String {
+        if (name.contains('.')) return name
+        val ext = ctx.contentResolver.getType(uri)?.let { android.webkit.MimeTypeMap.getSingleton().getExtensionFromMimeType(it) }
+        return if (ext.isNullOrEmpty()) name else "$name.$ext"
+    }
+
+    /** Name of the folder picked with OpenDocumentTree. */
+    fun treeName(ctx: Context, tree: Uri): String {
+        val doc = DocumentsContract.buildDocumentUriUsingTree(tree, DocumentsContract.getTreeDocumentId(tree))
+        var name: String? = null
+        runCatching {
+            ctx.contentResolver.query(doc, arrayOf(DocumentsContract.Document.COLUMN_DISPLAY_NAME), null, null, null)?.use {
+                if (it.moveToFirst()) name = it.getString(0)
+            }
+        }
+        return name ?: DocumentsContract.getTreeDocumentId(tree).substringAfterLast(':').substringAfterLast('/').ifBlank { "Folder" }
+    }
+
+    /** Document URI of the picked folder itself (for deleting it after a move). */
+    fun treeRootDoc(tree: Uri): Uri = DocumentsContract.buildDocumentUriUsingTree(tree, DocumentsContract.getTreeDocumentId(tree))
+
+    /**
+     * Walks a picked folder recursively (directories first, parents before children). Hidden entries (".name") are skipped.
+     * [isActive] lets a long scan be cancelled.
+     */
+    fun listTree(ctx: Context, tree: Uri, isActive: () -> Boolean = { true }): List<TreeDoc> {
+        val out = ArrayList<TreeDoc>()
+        val cols = arrayOf(
+            DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+            DocumentsContract.Document.COLUMN_MIME_TYPE, DocumentsContract.Document.COLUMN_SIZE,
+        )
+        fun walk(docId: String, rel: String, depth: Int) {
+            if (depth > 32 || !isActive()) return
+            val children = DocumentsContract.buildChildDocumentsUriUsingTree(tree, docId)
+            val dirs = ArrayList<Pair<String, String>>()
+            runCatching {
+                ctx.contentResolver.query(children, cols, null, null, null)?.use { c ->
+                    while (c.moveToNext()) {
+                        val id = c.getString(0) ?: continue
+                        val name = c.getString(1) ?: continue
+                        if (name.startsWith(".")) continue
+                        val mime = c.getString(2) ?: ""
+                        val size = if (c.isNull(3)) 0L else c.getLong(3)
+                        val uri = DocumentsContract.buildDocumentUriUsingTree(tree, id)
+                        if (mime == DocumentsContract.Document.MIME_TYPE_DIR) {
+                            out.add(TreeDoc(uri, name, rel, true, 0)); dirs.add(id to name)
+                        } else out.add(TreeDoc(uri, name, rel, false, size))
+                    }
+                }
+            }
+            for ((id, name) in dirs) walk(id, if (rel.isEmpty()) name else "$rel/$name", depth + 1)
+        }
+        walk(DocumentsContract.getTreeDocumentId(tree), "", 0)
+        return out
+    }
+
+    /** True when the provider says [uri] can be deleted (needed for "move"). */
+    fun canDelete(ctx: Context, uri: Uri): Boolean = runCatching {
+        if (!DocumentsContract.isDocumentUri(ctx, uri)) return false
+        ctx.contentResolver.query(uri, arrayOf(DocumentsContract.Document.COLUMN_FLAGS), null, null, null)?.use {
+            it.moveToFirst() && (it.getInt(0) and DocumentsContract.Document.FLAG_SUPPORTS_DELETE) != 0
+        } ?: false
+    }.getOrDefault(false)
+
+    /** Deletes a SAF document (a folder is deleted with its content). */
+    fun deleteDocument(ctx: Context, uri: Uri): Boolean = runCatching {
+        DocumentsContract.isDocumentUri(ctx, uri) && DocumentsContract.deleteDocument(ctx.contentResolver, uri)
+    }.getOrDefault(false)
+
+    /** Creates a library folder for an imported directory (unique name, given look). Does not bump [version]. */
+    fun makeImportedFolder(parent: File, name: String, meta: FolderMeta, unique: Boolean): File {
+        val d = if (unique) uniqueFile(parent, name, "") else File(parent, sanitize(name).ifBlank { "Folder" })
+        d.mkdirs()
+        val m = File(d, ".meta.json")
+        if (!m.exists()) runCatching { m.writeText(json.encodeToString(meta)) }
+        return d
+    }
+
+    /** Writes [text] as a new .txt file in [dir]. */
+    fun writeText(dir: File, base: String, text: String): File {
+        val f = uniqueFile(dir, base, "txt")
+        f.writeText(text); touch(); return f
     }
 
     fun cacheDir(): File = File(appCtx.cacheDir, "work").apply { mkdirs() }

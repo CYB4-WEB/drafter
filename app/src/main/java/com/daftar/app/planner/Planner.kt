@@ -124,14 +124,14 @@ object Planner {
         if (i >= 0) events[i] = merged else events.add(merged)
         val mirror = (merged.calendarSync || merged.deviceEventId != 0L) &&
             (old == null || old.calendarSync != merged.calendarSync || calendarFieldsDiffer(old, merged) || merged.deviceEventId == 0L)
-        changed(listOf(merged.id), mirror = if (mirror) listOf(merged.id) else emptyList())
+        changed(listOf(merged.id), mirrorIds = if (mirror) listOf(merged.id) else emptyList())
     }
 
     /** Adds many new events at once (calendar import). */
     fun addAll(list: List<PlanEvent>) {
         if (list.isEmpty()) return
         events.addAll(list)
-        changed(list.map { it.id }, mirror = list.filter { it.calendarSync }.map { it.id })
+        changed(list.map { it.id }, mirrorIds = list.filter { it.calendarSync }.map { it.id })
     }
 
     fun delete(id: Long) {
@@ -156,7 +156,7 @@ object Planner {
             if (events[i].calendarSync != on) events[i] = events[i].copy(calendarSync = on)
             touched.add(id)
         }
-        if (touched.isNotEmpty()) changed(touched, mirror = touched, reschedule = false)
+        if (touched.isNotEmpty()) changed(touched, mirrorIds = touched, reschedule = false)
     }
 
     fun setCalendarSync(id: Long, on: Boolean) = setCalendarSync(listOf(id), on)
@@ -194,11 +194,11 @@ object Planner {
     }
 
     /** Stores the phone-copy link written by the IO thread (no further sync). */
-    private fun setLink(id: Long, deviceId: Long, calendarId: Long, sync: Boolean? = null) {
+    private fun setLink(id: Long, deviceId: Long, calendarId: Long) {
         val i = events.indexOfFirst { it.id == id }
         if (i < 0) return
         val cur = events[i]
-        val next = cur.copy(deviceEventId = deviceId, deviceCalendarId = calendarId, calendarSync = sync ?: cur.calendarSync)
+        val next = cur.copy(deviceEventId = deviceId, deviceCalendarId = calendarId)
         if (next != cur) { events[i] = next; changed(emptyList(), reschedule = false) }
     }
 
@@ -243,7 +243,7 @@ object Planner {
 
     private fun changed(
         ids: List<Long>,
-        mirror: List<Long> = emptyList(),
+        mirrorIds: List<Long> = emptyList(),
         removedDevice: Map<Long, Long> = emptyMap(),
         reschedule: Boolean = true,
     ) {
@@ -268,7 +268,7 @@ object Planner {
                 val d = linkCache.remove(id) ?: dev
                 if (d != 0L && DeviceCalendar.permitted(c)) DeviceCalendar.delete(c, d)
             }
-            for (id in mirror) list.firstOrNull { it.id == id }?.let { runCatching { mirror(c, it) } }
+            for (id in mirrorIds) list.firstOrNull { it.id == id }?.let { runCatching { mirror(c, it) } }
         }
     }
 

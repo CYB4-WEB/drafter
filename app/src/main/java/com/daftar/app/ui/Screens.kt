@@ -39,6 +39,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.os.LocaleListCompat
 import com.daftar.app.MainActivity
 import com.daftar.app.R
@@ -578,13 +579,10 @@ fun SettingsScreen() {
                     }
                 }
             }
-            Row(Modifier.padding(vertical = 24.dp), verticalAlignment = Alignment.CenterVertically) {
-                DaftarLogo(28.dp)
-                Spacer(Modifier.width(10.dp))
-                Column {
-                    Text(stringResource(R.string.app_name) + " 1.1", color = c.ink, style = MaterialTheme.typography.labelLarge)
-                    Text(stringResource(R.string.app_tagline), color = c.muted, style = MaterialTheme.typography.bodySmall)
-                }
+            Column(Modifier.padding(vertical = 24.dp)) {
+                DaftarBrand(28.dp, 20.sp)
+                Text(stringResource(R.string.app_tagline) + " · 1.1", color = c.muted, style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(top = 4.dp))
             }
         }
     }
