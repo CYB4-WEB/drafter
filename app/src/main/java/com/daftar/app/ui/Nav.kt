@@ -43,6 +43,8 @@ sealed class Screen {
     data class Review(val deck: String? = null) : Screen()
     /** Recycle bin (files-agent). */
     data object Trash : Screen()
+    /** GPA / grades tracker (grades-agent). */
+    data object Grades : Screen()
 
     val isTopLevel get() = this is Home || this is Planner || this is Settings || this is Notes || this is Search || this is Convert || this is Study || (this is Library && dir == Storage.root.absolutePath)
 }
