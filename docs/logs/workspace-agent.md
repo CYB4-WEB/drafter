@@ -88,7 +88,7 @@ Convert tab present.
 - `AndroidManifest.xml`: `WindowActivity` (standard, resizeable, not exported, autoRemoveFromRecents, same configChanges) and a
   SEND_MULTIPLE filter (documents, images, text).
 - `res/values{,-ar}/strings_workspace.xml`: all strings incl. Arabic plurals (zero/one/two/few/many/other).
-- Compiled with the shared lock many times: **0 errors in my files**. The build still fails only on other agents' in-progress
+- Compiled with the shared lock many times: **0 errors in my files**; final `tools/compile.sh` = **BUILD OK** (whole app). Earlier runs failed only on other agents' in-progress
   files (convert/*, ink/*, pdf/*, word/WordScreen.kt — mostly string resources they haven't added yet).
 
 ## Decisions & limits
