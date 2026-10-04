@@ -61,6 +61,8 @@ class SearchHit(val page: Int, val snippet: String, val boldStart: Int, val bold
 sealed class SearchEvent {
     class Hits(val hits: List<SearchHit>) : SearchEvent()
     class Progress(val done: Int, val total: Int) : SearchEvent()
+    /** End of a complete scan; [hasText] is false when no page has a text layer (scanned PDF). */
+    class Finished(val hasText: Boolean) : SearchEvent()
 }
 
 /**
@@ -122,6 +124,7 @@ class PdfTextIndex(private val file: File, private val budgetBytes: Long) {
             isCancelled = { job?.isActive == false },
             onProgress = { d, t -> trySend(SearchEvent.Progress(d, t)) },
             onHits = { trySend(SearchEvent.Hits(it)) },
+            onFinished = { trySend(SearchEvent.Finished(it)) },
         )
     }.buffer(Channel.UNLIMITED).flowOn(Dispatchers.IO)
 
@@ -132,18 +135,21 @@ class PdfTextIndex(private val file: File, private val budgetBytes: Long) {
         isCancelled: () -> Boolean,
         onProgress: (done: Int, total: Int) -> Unit,
         onHits: (List<SearchHit>) -> Unit,
+        onFinished: (hasText: Boolean) -> Unit = {},
     ) {
         val q = TextFold.query(query)
-        if (q.isEmpty()) return
+        if (q.isEmpty()) { onFinished(true); return }
         PDDocument.load(file, MemoryUsageSetting.setupMixed(16L shl 20)).use { doc ->
             val total = doc.numberOfPages
             var found = 0
+            var hasText = false
             onProgress(0, total)
             val stripper = IndexStripper(
                 cached = ::cached,
                 isCancelled = isCancelled,
             ) { idx, text ->
                 keep(idx, text)
+                if (text.norm.isNotBlank()) hasText = true
                 if (found < maxHits) {
                     val hits = matches(idx, text, q, maxHits - found)
                     found += hits.size
@@ -155,8 +161,10 @@ class PdfTextIndex(private val file: File, private val budgetBytes: Long) {
             try {
                 stripper.writeText(doc, NullWriter)
             } catch (_: StopSearch) {
+                hasText = true
             }
             onProgress(total, total)
+            onFinished(hasText)
         }
     }
 

@@ -113,3 +113,104 @@ new file; signature can be drawn, reused, redrawn, cleared; EXIF-only rotated ph
   overwrite the remapped ink), header actions + tools menu with a Pages sub-level.
 - `pdf/PdfSource.kt` — search marks drawn into rendered pages (multiply blend) when the editor can re-render pages.
 - `pdf/PdfTools.kt` — EXIF orientation.
+
+## Progress
+- 2026-10-04 — Read round2b/round2 briefs, AGENT_RULES, DESIGN, SPEC R2.x, my round-1 log/code, ink API (InkEditor, PageSource/EditorController,
+  InkEditorImpl, InkView caching, InkModel, InkRender), ViewerActions, FilePicker, Common, Nav, Storage. Checked pdfbox-android 2.0.27 APIs with javap
+  (PDPageTree, PDFMergerUtility.appendDocument, MemoryUsageSetting, TextPosition, PDOutlineItem).
+- `PdfSearch.kt`: `TextFold` (أإآٱ→ا, ى→ي, ة→ه, Arabic-Indic digits→ASCII, tashkeel/tatweel/bidi marks dropped, Latin lower-cased, NFKC for presentation
+  forms/ligatures); `IndexStripper` (PDFTextStripper subclass, sortByPosition, one pass over the document, per-page cancellation check, glyphs reordered per
+  line with java.text.Bidi at glyph granularity so Arabic comes out in reading order, glyph boxes mapped to displayed page points through /Rotate);
+  `PdfTextIndex` (progressive `Flow<SearchEvent>` on IO, ≤ 999 hits, page-text cache bounded by bytes, "no text layer" detection).
+- `PdfSearchUi.kt`: search bar that covers the editor header while searching (back closes, field, clear, "3/27" counter, previous/next, results-list
+  toggle, thin progress bar), results card (page + 2-line snippet with the match in bold), first match = first one at/after the current page,
+  debounced live search (2+ chars, Enter for 1 char / next match), Back key closes search; highlights via `PdfSource.marks` (see Decisions).
+- `PdfPages.kt`: `PageSpec` plan model; `rebuild` (flat page-tree rewrite, inherited attributes materialised, blank pages, rotation, outline links to
+  deleted pages cleared, temp file → PdfRenderer validation → atomic rename; ink serialised beside it and swapped in right after), ink remap
+  (reorder/insert/delete, `rotateInkPage`: strokes & pictures rotated exactly, text boxes/links re-centred upright), `merge`
+  (PDFMergerUtility.appendDocument, sources kept open until saved, ink sidecars concatenated so the merged file's notes stay editable), `loadOutline`
+  (cycle/size-guarded walk, page indices via identity map), stale temp cleanup.
+- `PdfSession.kt`: per-version holder (editor renderer, thumbnail renderer, RGB_565 thumbnail LRU ≤ 1/16 heap/32 MB, search index ≤ 1/32 heap/8 MB,
+  outline); dispose closes renderers and recycles cached bitmaps after the frame.
+- `PdfPanels.kt`: side panel with tabs Pages | Outline; thumbnails grid (adaptive columns: 1 in the 260 dp start panel, 2+ in the sheet) with the user's
+  ink drawn live on top (vector, polled every 500 ms by page-list identity), long-press page menu (insert blank, rotate, move, delete); outline tree with
+  indentation, expand/collapse (initial state from the PDF), current section highlighted, unresolved entries muted, "No outline" empty state.
+- `PdfPageDialogs.kt`: Organize pages (full-screen; multi-select; rotate L/R, earlier/later, insert blank, delete; live preview incl. rotation; one
+  rewrite on Apply; delete confirmation with plural count), Merge order dialog (reorder/remove, file name), Saved dialog with Open.
+- `SignatureDialog.kt`: draw pad (finger/pen, 2 ink colours, clear), cropped transparent PNG saved to `filesDir/pdf_signature.png`, reuse dialog
+  (Place / Draw new / Delete), placed with `ctl.addImage`.
+- `PdfScreen.kt`: rewritten around sessions — page edits dispose the editor first (its own dispose-save commits a floating selection), then rebuild from the
+  on-disk ink, then reopen at the right page; header = Search, Convert (hidden on narrow; it is in the menu then), Tools (HomeRepairService) menu with a
+  "Pages ›" sub-level; `ViewerMenuItems(actions, …, onShare = annotated share)`; failed state has the standard menu too. Duplicate "x / y" removed.
+- `PdfSource.kt`: `marks` drawn into rendered pages with a multiply blend (highlighter look). `PdfTools.kt`: EXIF orientation (all 8 values incl. mirrored)
+  via platform `android.media.ExifInterface(InputStream)`, MediaStore column as fallback.
+- strings_pdf.xml en + ar: 58 new strings + 3 plurals (Arabic plurals with zero/one/two/few/many/other).
+- Compiled with `tools/compile.sh`: BUILD OK (whole app). Confirmed pdf/ is analysed by planting and removing a probe error.
+
+## Decisions & limits
+- **Search highlights need one editor call.** I can map every match to page rectangles (done, all rotations), and `PdfSource` draws them into the
+  rendered page. But InkView caches page bitmaps and has no public way to re-render them, so new/cleared highlights would show only on pages rendered
+  later (stale on cached ones). I therefore draw highlights only when `EditorController.refreshPages()` exists (requested below; looked up on the
+  public interface by reflection so this compiles today). Until it is added, search works fully (list, counter, prev/next, go to page) without on-page
+  highlights — never with stale ones.
+- **Search UI replaces the header while active** (Acrobat/Xodo style) instead of a side tab: the scaffold's side/bottom panels can only be opened by
+  its own buttons, so a Search button could not open them. The overlay measures its real width (works in split panes) and blocks touches only where it is drawn.
+- Search uses `sortByPosition = true` + line-level bidi (PDFBox's own extraction reverses Arabic word order per line). Multi-column pages are read
+  line-by-line across columns; a phrase broken across a column/line break is still matched when it continues on the next line (line breaks fold to spaces).
+- `goToPage` scrolls to the top of the match's page (no API to scroll to a point); when the next match is on the page already shown, no scroll happens.
+- Page edits rewrite the whole PDF (PDFBox full save): digital signatures in the file become invalid, owner-password security is removed, deleted pages'
+  objects may stay referenced by named destinations / structure trees (harmless, file size not reduced). Bookmarks pointing at deleted pages are cleared.
+- No undo for page edits (they rewrite the file); deletes are confirmed. A failed edit leaves the original PDF and ink untouched (validated temp file).
+- If the same PDF is open in the other split pane while it is edited, that pane keeps showing the old version until reopened.
+- Rotating a page keeps text boxes and links upright (they have no rotation field) at the same spot; strokes and pictures rotate exactly.
+- Signature: `addImage` places pictures at 60 % of the page width (max), so the signature starts large and floats selected for the user to resize;
+  a width parameter is requested below. The PNG is cropped to the strokes, 1–2× the pad resolution (≤ 1600 px).
+- Thumbnails now show ink (round 1 did not): the page render is cached once; ink is drawn as vectors at display time, so drawing never invalidates the cache.
+- Merge output keeps every source's annotations editable (concatenated sidecars) rather than burning them in; "Export annotated PDF" still burns in.
+- Kept `PdfTools.extractText` (Copy text) on round-1 settings (sortByPosition = false) to avoid changing column order for English papers.
+
+## Requests to lead
+1. **Re-render pages for search highlights** (owner of ink/**). Suggested:
+   ```kotlin
+   // PageSource.kt — interface EditorController
+   /** Re-render background pages (the source changed what it draws, e.g. PDF search highlights). */
+   fun refreshPages()
+   // InkEditorImpl.kt — EditorStateImpl
+   override fun refreshPages() = view.refreshBackground()
+   // InkView.kt — keep the old bitmaps on screen until the new renders arrive (no white flash)
+   private val stale = HashSet<Int>()
+   fun refreshBackground() {
+       stale.addAll(bgCache.keys); pending.clear()
+       tiles.values.forEach { it.bmp.recycle() }; tiles.clear()
+       settleSoon(); invalidate()
+   }
+   // in drawBackground():  if (bmp == null || i in stale || (!scaling && abs(bmp.width - want) > want * 0.2f)) requestPage(i, want)
+   // in requestPage()'s main.post, after bgCache.put(i, b):  stale.remove(i)
+   ```
+   Then in `pdf/PdfSearchUi.kt` the body of `refreshPagesCompat()` can become `refreshPages(); return true` and `canRefreshPages()` `true`
+   (or keep the reflection and add to proguard-rules.pro: `-keepclassmembers interface com.daftar.app.ink.EditorController { void refreshPages(); }`
+   so R8 does not rename it in release).
+2. **Tappable page chip**: `InkEditorScaffold(..., onPageChipClick: (() -> Unit)? = null)`; in InkEditorImpl add
+   `.clickable(enabled = onPageChipClick != null) { onPageChipClick?.invoke() }` (and ≥ 48 dp touch area) to the bottom-end "x / y" chip.
+   I will pass "open Go to page" from PdfScreen.
+3. Optional: `EditorController.addImage(b: Bitmap, widthPt: Float? = null)` so the signature can be placed at ~30 % of the page width.
+4. Optional: `EditorController.goToPage(i: Int, yPt: Float)` to scroll a search match into view on zoomed-in pages.
+5. Note for workspace: `InkEditorScaffold` decides side panel vs bottom sheet from `LocalWidthClass` (window width). If panes don't provide their own
+   `LocalWidthClass`, a narrow pane on a tablet shows the 260 dp start panel inside the pane.
+
+## Self-check
+1. Header: duplicate "x / y" removed; Search; `ConvertButton(rememberViewerActions(file))` (in the menu instead on narrow widths); distinct Tools icon
+   (HomeRepairService); menu has go-to-page, tools, Pages sub-menu and `ViewerMenuItems(actions, close, onShare = annotated share)`; zoom left to the
+   scaffold pill — **PASS**. Page chip tappable — **PARTIAL**: chip lives in InkEditorImpl (request 2).
+2. Search: PDFTextStripper per page on IO, cancellable, progressive results list (page + bold snippet), tap → `ctl.goToPage`, next/previous, Arabic-aware
+   + case-insensitive Latin — **PASS**. On-page highlights — **PARTIAL**: positions mapped and drawn by PdfSource; activates when the editor gets
+   `refreshPages()` (request 1).
+3. Outline tab next to Thumbnails, indented tree, tap → page, "No outline" empty state — **PASS**.
+4. Page management with safe rewrite (temp → validate → replace, reload) and ink remap: insert blank after current, delete page(s) with confirm,
+   rotate left/right (ink rotated), move up/down + organize/reorder dialog, extract (kept), merge with library PDFs → new file, Sign (draw once, PNG in
+   filesDir, `ctl.addImage`, re-draw/clear) — **PASS** (code-level; no device here).
+5. `imagesToPdf` honours EXIF orientation via platform ExifInterface(InputStream) — **PASS**.
+6. Thumbnails show the user's ink; caches bounded by bytes (≤ 1/16 + 1/32 of heap); released on dispose — **PASS**.
+7. Split pane / narrow window: side panel goes to the scaffold's sheet (scaffold logic), my overlays/dialogs measure real width, Convert moves into
+   the menu when narrow — **PASS** (see request 5 for panes on wide windows).
+8. Strings en + real Arabic for every new text; compiles (`tools/compile.sh` BUILD OK) — **PASS**.

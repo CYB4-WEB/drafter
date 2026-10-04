@@ -82,6 +82,8 @@ internal class PdfSearchState {
     var total by mutableIntStateOf(0)
     var running by mutableStateOf(false)
     var showList by mutableStateOf(true)
+    /** False after a full scan found no text layer at all (scanned PDF). */
+    var hasText by mutableStateOf(true)
 
     fun close() {
         open = false; query = ""; submitted = ""; hits.clear(); active = -1; running = false
@@ -136,7 +138,7 @@ internal fun PdfSearchOverlay(
         if (q.length >= 2) state.submitted = q
     }
     LaunchedEffect(state.submitted) {
-        state.hits.clear(); state.active = -1; state.done = 0; state.total = 0
+        state.hits.clear(); state.active = -1; state.done = 0; state.total = 0; state.hasText = true
         val q = state.submitted
         if (q.isEmpty()) { state.running = false; return@LaunchedEffect }
         state.running = true
@@ -151,6 +153,7 @@ internal fun PdfSearchOverlay(
             session.textIndex.search(q).collect { ev ->
                 when (ev) {
                     is SearchEvent.Progress -> { state.done = ev.done; state.total = ev.total }
+                    is SearchEvent.Finished -> state.hasText = ev.hasText
                     is SearchEvent.Hits -> {
                         val from = state.hits.size
                         state.hits.addAll(ev.hits)
@@ -268,6 +271,7 @@ internal fun PdfSearchOverlay(
                 ) {
                     val status = when {
                         state.running && state.hits.isEmpty() -> stringResource(R.string.pdf_searching, state.done, state.total)
+                        state.hits.isEmpty() && !state.hasText -> stringResource(R.string.pdf_search_no_text)
                         state.hits.isEmpty() -> stringResource(R.string.pdf_search_none)
                         state.hits.size >= PdfTextIndex.MAX_HITS -> stringResource(R.string.pdf_search_capped, state.hits.size)
                         state.running -> stringResource(R.string.pdf_search_count_running, state.hits.size, state.done, state.total)

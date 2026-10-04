@@ -59,6 +59,7 @@
     <string name="pdf_search_next">Next match</string>
     <string name="pdf_search_results">Results list</string>
     <string name="pdf_searching">Searching… page %1$d of %2$d</string>
+    <string name="pdf_search_no_text">This PDF has no searchable text (scanned pages)</string>
     <string name="pdf_search_none">No matches</string>
     <string name="pdf_search_capped">Showing the first %1$d matches</string>
     <string name="pdf_search_count_running">Found %1$d · page %2$d of %3$d</string>

@@ -132,7 +132,7 @@ fun PdfScreen(path: String) {
                 Log.e(TAG, "open $path", it)
                 state = LoadState.Failed(password = it is SecurityException)
             }
-        withContext(Dispatchers.IO) { cleanWorkFiles() }
+        withContext(Dispatchers.IO) { cleanWorkFiles(); PdfPages.cleanStaleTemps(file) }
     }
 
     /**

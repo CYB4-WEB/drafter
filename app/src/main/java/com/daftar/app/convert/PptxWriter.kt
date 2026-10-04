@@ -298,7 +298,7 @@ class PptxWriter(private val out: File, aspectW: Float, aspectH: Float, private 
                 ch == '"' -> append("&quot;")
                 ch == '\'' -> append("&apos;")
                 ch == '\t' || ch == '\n' || ch == '\r' -> append(ch)
-                ch < ' ' || ch == '￾' || ch == '￿' -> {}
+                ch < ' ' || ch == '\uFFFE' || ch == '\uFFFF' -> {}
                 else -> append(ch)
             }
         }
