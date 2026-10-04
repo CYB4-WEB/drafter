@@ -1,12 +1,20 @@
 package com.daftar.app.pdf
 
 import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.graphics.Matrix
+import android.graphics.Paint
+import android.graphics.PorterDuff
+import android.graphics.PorterDuffXfermode
+import android.graphics.RectF
 import android.graphics.pdf.PdfRenderer
 import android.os.ParcelFileDescriptor
 import com.daftar.app.ink.PageSource
 import java.io.File
 import java.io.IOException
+
+/** Search highlights drawn into rendered pages: every match per page, plus the active match drawn stronger. */
+class SearchMarks(val byPage: Map<Int, List<RectF>>, val activePage: Int, val active: List<RectF>)
 
 /**
  * PDF pages for the ink editor, backed by the platform [PdfRenderer].
@@ -22,6 +30,11 @@ class PdfSource(val file: File) : PageSource {
     private val sizes: List<Pair<Float, Float>>
     private val lock = Any()
     @Volatile private var closed = false
+
+    /** Transient search highlights (displayed page points). Set from the UI, read by the render thread. */
+    @Volatile var marks: SearchMarks? = null
+    private val markPaint = Paint().apply { color = 0xFFFFE27A.toInt(); xfermode = PorterDuffXfermode(PorterDuff.Mode.MULTIPLY) }
+    private val activePaint = Paint().apply { color = 0xFFFFA94D.toInt(); xfermode = PorterDuffXfermode(PorterDuff.Mode.MULTIPLY) }
 
     init {
         try {
@@ -48,7 +61,19 @@ class PdfSource(val file: File) : PageSource {
             renderer.openPage(i).use { page ->
                 page.render(dest, null, m, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
             }
+            drawMarks(i, dest, m)
         }
+    }
+
+    /** Highlighter look: multiply blend keeps the text dark and tints only the paper. */
+    private fun drawMarks(i: Int, dest: Bitmap, m: Matrix) {
+        val mk = marks ?: return
+        val rs = mk.byPage[i]
+        if (rs.isNullOrEmpty() && mk.activePage != i) return
+        val c = Canvas(dest)
+        c.concat(m)
+        rs?.forEach { c.drawRect(it, markPaint) }
+        if (mk.activePage == i) mk.active.forEach { c.drawRect(it, activePaint) }
     }
 
     /** Renders page [i] scaled to fit [maxW]×[maxH] pixels (white background). Null if closed. */

@@ -153,3 +153,23 @@ R2-8 split pane / second window safe; R2-9 en + ar strings, compiles clean.
 - 2026-10-04 — Read round2b, AGENT_RULES, DESIGN, SPEC (Round 2), round2 brief, my log, my slides code, InkEditor/InkEditorImpl,
   PageSource, ViewerActions, Common, Nav, Workspace, Prefs, MainActivity, InkRender/InkModel. Verified APIs in the local Gradle cache
   (DialogProperties.decorFitsSystemWindows, DialogWindowProvider, Compose `Key.*`, PdfBox `PDFMergerUtility` + `MemoryUsageSetting`).
+- 2026-10-04 — `PptxRenderer.ImageCache`: bound = maxMemory/16 (≤ 64 MB) by `allocationByteCount`; evicted bitmaps are not recycled
+  (PDF pages keep references until written), `clear(recycle = true)` only from `PptxSource.close()`. Opt-in drawn-picture accounting
+  (`markImages` / `imageBytesSinceMark`) for export batching — off for the viewer so nothing is pinned.
+- 2026-10-04 — `PptxSource`: `drawVector(i, canvas, detailPxPerPt)` for PDF canvases, `isClosed`, recycle on close, save/restore
+  around every draw.
+- 2026-10-04 — `SlidesExport.toPdf` (PdfDocument batches flushed to hidden part files when the pictures they hold pass maxMemory/8
+  or 40 pages; parts merged with PdfBox `PDFMergerUtility` + temp-file memory; atomic rename) and `toImages` (one reused bitmap,
+  ≤ 16 MP, `Slide 01.png`, `.part` + rename, recycled; unique names; everything deleted on failure). Both interrupt-aware, never throw.
+- 2026-10-04 — `SlidesPanels.kt`: byte-bounded `Thumbs` (maxMemory/16, recycled on dispose), `SlideRail` (numbers, outlined
+  current, hidden-slide badge, follows the current slide), `SlideStrip` filmstrip, `NotesPane` (chips Slides? / Speaker notes /
+  Comments (n) / My notes, compact empty states, keyboard lift for My notes).
+- 2026-10-04 — `SlidesPresent.kt`: dialog-window slideshow, immersive bars, keep-screen-on flag, ≤ 3 pooled frames + never-cancelled
+  render worker (current → next → previous), thumbnail placeholder while rendering, ink overlay, laser trail + S Pen hover dot,
+  swipe / tap zones (mirrored in RTL) / pen tap, keys (arrows, Page Up/Down, Space, Enter, N/P, volume, media, Home/End,
+  number+Enter, B/W blank screens, Esc), mouse wheel, hidden slides skipped, end-of-show screen, auto-hiding chrome, first-run hint.
+- 2026-10-04 — `SlidesScreen.kt`: pane-aware width class, rail (Expanded, open unless in a pane) / filmstrip tab (narrower),
+  Present pill (icon on Compact) + Convert + "Share and export" menu (IosShare icon) with `ViewerMenuItems` + Export slide notes,
+  `LocalPaneNav` back, Settings "keep screen on" honoured. Strings en + ar rewritten (38 keys each, unused ones removed).
+- 2026-10-04 — Compile: the capped error output is filled by convert-agent's missing `strings_convert` keys (`convert/*`), so my
+  files' results are hidden; re-checking once their strings land.

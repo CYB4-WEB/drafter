@@ -27,6 +27,7 @@ import com.daftar.app.R
 import com.daftar.app.data.FolderMeta
 import com.daftar.app.data.Storage
 import com.daftar.app.ui.PaneNav
+import com.daftar.app.ui.RootPaneNav
 import com.daftar.app.ui.theme.D
 import com.daftar.app.ui.theme.FolderPalette
 import com.daftar.app.ui.toast
@@ -34,12 +35,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
-import kotlin.coroutines.coroutineContext
 
 /** What the user picked to import. */
 sealed class ImportSource {
@@ -85,10 +83,27 @@ object Importer {
 
     val running get() = progress != null
 
-    /** Asks Copy or Move (dialog in [ImportHost]), then imports. */
-    fun ask(source: ImportSource, dest: File, nav: PaneNav?) { request = ImportRequest(source, dest, nav) }
+    /** Window (RootPaneNav for the main window, or a [WindowNav]) whose [ImportHost] shows the dialogs. */
+    internal var owner: Any by mutableStateOf<Any>(RootPaneNav)
+        private set
 
-    fun cancel() { job?.cancel() }
+    /** The window a pane / window navigation belongs to. */
+    fun windowOf(nav: PaneNav?): Any = when (nav) {
+        is WindowNav -> nav
+        is SplitPane -> (nav.controller.host as? WindowNav) ?: RootPaneNav
+        else -> RootPaneNav
+    }
+
+    /** Asks Copy or Move (dialog in [ImportHost]), then imports. */
+    fun ask(source: ImportSource, dest: File, nav: PaneNav?) {
+        if (!running) owner = windowOf(nav)
+        request = ImportRequest(source, dest, nav)
+    }
+
+    @Volatile private var cancelRequested = false
+    private val live: Boolean get() = !cancelRequested
+
+    fun cancel() { cancelRequested = true }
 
     /**
      * Imports [source] into [dest]. [move] removes the originals after a successful copy.
@@ -96,18 +111,20 @@ object Importer {
      */
     fun start(ctx: Context, source: ImportSource, dest: File, move: Boolean, onDone: (ImportResult) -> Unit = {}) {
         if (running) { toast(ctx, ctx.getString(R.string.ws_import_busy)); return }
+        if (ctx is com.daftar.app.MainActivity) owner = RootPaneNav
         val app = ctx.applicationContext
         val p = Progress(Phase.SCANNING, 0, 0, "")
         progress = p
+        cancelRequested = false
         job = scope.launch {
-            val res = runCatching {
-                withContext(Dispatchers.IO) {
+            val res = withContext(Dispatchers.IO) {
+                runCatching {
                     when (source) {
                         is ImportSource.Docs -> importDocs(app, source.uris, dest, move, p)
                         is ImportSource.Tree -> importTree(app, source.uri, dest, move, p)
                     }
-                }
-            }.getOrElse { ImportResult(emptyList(), null, emptyList(), emptyList(), cancelled = true, move = move) }
+                }.getOrElse { ImportResult(emptyList(), null, emptyList(), emptyList(), cancelled = true, move = move) }
+            }
             Storage.touch()
             progress = null
             job = null
@@ -119,35 +136,36 @@ object Importer {
         }
     }
 
-    private suspend fun importDocs(ctx: Context, uris: List<Uri>, dest: File, move: Boolean, p: Progress): ImportResult {
-        val ctxJob = coroutineContext
+    /** Progress fields are snapshot state; writing them from the IO thread is safe and never suspends (cancel keeps partial results). */
+    private inline fun progressUpdate(block: () -> Unit) = block()
+
+    private fun importDocs(ctx: Context, uris: List<Uri>, dest: File, move: Boolean, p: Progress): ImportResult {
         val files = ArrayList<File>(); val failed = ArrayList<String>(); val copied = ArrayList<Pair<Uri, String>>()
-        withContext(Dispatchers.Main) { p.phase = Phase.COPYING; p.total = uris.size }
+        progressUpdate { p.phase = Phase.COPYING; p.total = uris.size }
         var cancelled = false
         for ((i, uri) in uris.withIndex()) {
-            if (!ctxJob.isActive) { cancelled = true; break }
+            if (!live) { cancelled = true; break }
             val name = Storage.nameWithExt(ctx, uri)
-            withContext(Dispatchers.Main) { p.current = name; p.done = i }
-            val f = Storage.copyIn(ctx, uri, dest, name) { ctxJob.isActive }
-            if (f != null) { files.add(f); copied.add(uri to name) } else if (ctxJob.isActive) failed.add(name) else { cancelled = true; break }
+            progressUpdate { p.current = name; p.done = i }
+            val f = Storage.copyIn(ctx, uri, dest, name) { live }
+            if (f != null) { files.add(f); copied.add(uri to name) } else if (live) failed.add(name) else { cancelled = true; break }
         }
         val notRemoved = ArrayList<String>()
         if (move && !cancelled && copied.isNotEmpty()) {
-            withContext(Dispatchers.Main) { p.phase = Phase.REMOVING; p.done = 0; p.total = copied.size }
+            progressUpdate { p.phase = Phase.REMOVING; p.done = 0; p.total = copied.size }
             for ((i, c) in copied.withIndex()) {
-                withContext(Dispatchers.Main) { p.current = c.second; p.done = i }
+                progressUpdate { p.current = c.second; p.done = i }
                 if (!Storage.deleteDocument(ctx, c.first)) notRemoved.add(c.second)
             }
         }
         return ImportResult(files, null, failed, notRemoved, cancelled, move)
     }
 
-    private suspend fun importTree(ctx: Context, tree: Uri, dest: File, move: Boolean, p: Progress): ImportResult {
-        val ctxJob = coroutineContext
+    private fun importTree(ctx: Context, tree: Uri, dest: File, move: Boolean, p: Progress): ImportResult {
         val rootName = Storage.treeName(ctx, tree)
-        withContext(Dispatchers.Main) { p.phase = Phase.SCANNING; p.current = rootName }
-        val docs = Storage.listTree(ctx, tree) { ctxJob.isActive }
-        ctxJob.ensureActive()
+        progressUpdate { p.phase = Phase.SCANNING; p.current = rootName }
+        val docs = Storage.listTree(ctx, tree) { live }
+        if (!live) return ImportResult(emptyList(), null, emptyList(), emptyList(), cancelled = true, move = move)
         val fileDocs = docs.filter { !it.isDir }
         val color = (Storage.countItems(dest) * 5) % FolderPalette.size
         val meta = FolderMeta(color = color, icon = "folder")
@@ -159,24 +177,24 @@ object Importer {
             Storage.makeImportedFolder(parent, rel.substringAfterLast('/'), meta, unique = false)
         }
         docs.filter { it.isDir }.forEach { dirFor(if (it.rel.isEmpty()) it.name else it.rel + "/" + it.name) }
-        withContext(Dispatchers.Main) { p.phase = Phase.COPYING; p.total = fileDocs.size; p.done = 0 }
+        progressUpdate { p.phase = Phase.COPYING; p.total = fileDocs.size; p.done = 0 }
         val files = ArrayList<File>(); val failed = ArrayList<String>(); val copied = ArrayList<Storage.TreeDoc>()
         var cancelled = false
         for ((i, d) in fileDocs.withIndex()) {
-            if (!ctxJob.isActive) { cancelled = true; break }
-            withContext(Dispatchers.Main) { p.current = d.name; p.done = i }
-            val f = Storage.copyIn(ctx, d.uri, dirFor(d.rel), d.name) { ctxJob.isActive }
+            if (!live) { cancelled = true; break }
+            progressUpdate { p.current = d.name; p.done = i }
+            val f = Storage.copyIn(ctx, d.uri, dirFor(d.rel), d.name) { live }
             val shown = if (d.rel.isEmpty()) d.name else d.rel + "/" + d.name
-            if (f != null) { files.add(f); copied.add(d) } else if (ctxJob.isActive) failed.add(shown) else { cancelled = true; break }
+            if (f != null) { files.add(f); copied.add(d) } else if (live) failed.add(shown) else { cancelled = true; break }
         }
         val notRemoved = ArrayList<String>()
         if (move && !cancelled) {
-            withContext(Dispatchers.Main) { p.phase = Phase.REMOVING; p.done = 0; p.total = copied.size; p.current = rootName }
+            progressUpdate { p.phase = Phase.REMOVING; p.done = 0; p.total = copied.size; p.current = rootName }
             // everything copied: remove the picked folder in one go; otherwise only the files that made it
             val wholeOk = failed.isEmpty() && Storage.deleteDocument(ctx, Storage.treeRootDoc(tree))
             if (!wholeOk) {
                 for ((i, d) in copied.withIndex()) {
-                    withContext(Dispatchers.Main) { p.current = d.name; p.done = i }
+                    progressUpdate { p.current = d.name; p.done = i }
                     if (!Storage.deleteDocument(ctx, d.uri)) notRemoved.add(if (d.rel.isEmpty()) d.name else d.rel + "/" + d.name)
                 }
             }
@@ -190,9 +208,9 @@ object Importer {
  * Hosted once per window (MainActivity, WindowActivity).
  */
 @Composable
-fun ImportHost() {
-    val ctx = LocalContext.current
+fun ImportHost(window: Any = RootPaneNav) {
     val c = D.c
+    if (Importer.owner !== window) return
     Importer.request?.let { req -> CopyMoveDialog(req) }
 
     Importer.progress?.let { p ->

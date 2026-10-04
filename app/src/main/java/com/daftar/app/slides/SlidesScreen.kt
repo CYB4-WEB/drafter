@@ -1,45 +1,29 @@
 package com.daftar.app.slides
 
-import com.daftar.app.ui.pane
 import android.content.Context
-import android.graphics.Bitmap
-import android.util.LruCache
-import androidx.compose.foundation.Image
+import android.view.View
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
-import androidx.compose.material.icons.rounded.ChatBubbleOutline
-import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.FileDownload
-import androidx.compose.material.icons.rounded.MoreVert
-import androidx.compose.material.icons.rounded.Share
+import androidx.compose.material.icons.rounded.IosShare
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Slideshow
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -48,17 +32,13 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -66,41 +46,39 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.daftar.app.R
+import com.daftar.app.data.Prefs
 import com.daftar.app.data.Storage
-import com.daftar.app.data.json
 import com.daftar.app.ink.EditorController
 import com.daftar.app.ink.InkEditorScaffold
-import com.daftar.app.ui.Chip
-import com.daftar.app.ui.EmptyState
-import com.daftar.app.ui.Nav
+import com.daftar.app.ui.ConvertButton
+import com.daftar.app.ui.LocalPaneNav
+import com.daftar.app.ui.LocalWidthClass
+import com.daftar.app.ui.ViewerMenuItems
 import com.daftar.app.ui.ViewerTopBar
-import com.daftar.app.ui.card
+import com.daftar.app.ui.WidthClass
 import com.daftar.app.ui.openExternally
-import com.daftar.app.ui.shareFiles
+import com.daftar.app.ui.rememberViewerActions
 import com.daftar.app.ui.theme.D
 import com.daftar.app.ui.toast
+import com.daftar.app.ui.widthClassOf
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.encodeToString
 import java.io.File
-import java.text.DateFormat
-import java.util.Date
+import java.util.WeakHashMap
 
 // ------------------------------------------------------------------ state holders
 
@@ -123,60 +101,23 @@ private class Holder {
     @Synchronized fun dispose() { disposed = true; src?.close(); src = null }
 }
 
-/** Student's typed notes per slide, persisted as JSON (slide index -> text) in a sidecar. */
-private class MyNotes(private val file: File) {
-    val map = mutableStateMapOf<Int, String>()
-    var version by mutableIntStateOf(0)
-        private set
-
-    fun load() {
-        if (!file.exists()) return
-        runCatching { json.decodeFromString<Map<Int, String>>(file.readText()) }.getOrNull()?.let { map.putAll(it) }
-    }
-
-    fun set(i: Int, text: String) { map[i] = text; version++ }
-
-    fun snapshot(): Map<Int, String> = map.filterValues { it.isNotBlank() }.toSortedMap()
-
-    /** Writes atomically; called off the main thread. */
-    @Synchronized fun save(data: Map<Int, String>) {
-        runCatching {
-            if (data.isEmpty()) { file.delete(); return }
-            val tmp = File(file.parentFile, file.name + ".tmp")
-            tmp.writeText(json.encodeToString(data))
-            if (!tmp.renameTo(file)) { file.delete(); tmp.renameTo(file) }
-        }
-    }
-}
-
-/** Thumbnails rendered one at a time off the UI thread, cached in memory. */
-private class Thumbs(private val src: PptxSource) {
-    private val cache = LruCache<Int, ImageBitmap>(160)
-    @OptIn(ExperimentalCoroutinesApi::class)
-    private val dispatcher = Dispatchers.Default.limitedParallelism(1)
-
-    fun cached(i: Int): ImageBitmap? = cache.get(i)
-
-    suspend fun load(i: Int): ImageBitmap? = cache.get(i) ?: withContext(dispatcher) {
-        cache.get(i) ?: src.thumbnail(i, THUMB_PX)?.let { b: Bitmap -> b.asImageBitmap().also { cache.put(i, it) } }
-    }
-
-    companion object { const val THUMB_PX = 320 }
-}
-
 // ------------------------------------------------------------------ screen
 
 @Composable
 fun SlidesScreen(path: String) {
     val ctx = LocalContext.current
+    val nav = LocalPaneNav.current
     val file = remember(path) { File(path) }
     val labels = Labels(
         stringResource(R.string.slides_chart), stringResource(R.string.slides_diagram),
         stringResource(R.string.slides_object), stringResource(R.string.slides_image),
     )
+    // Thumbnails are rendered at about the rail's width in pixels (sharp on the tablet, small on phones).
+    val thumbPx = with(LocalDensity.current) { 216.dp.roundToPx() }.coerceIn(200, 480)
     val holder = remember(path) { Holder() }
     var state by remember(path) { mutableStateOf<LoadState>(LoadState.Loading) }
 
+    LaunchedEffect(Unit) { SlidesExport.bind(ctx) }
     LaunchedEffect(path) {
         state = withContext(Dispatchers.IO) {
             if (!file.isFile) return@withContext LoadState.Error(R.string.slides_err_missing)
@@ -184,7 +125,7 @@ fun SlidesScreen(path: String) {
                 val src = PptxSource.open(file, labels)
                 if (!holder.adopt(src)) return@withContext LoadState.Loading
                 val notes = MyNotes(Storage.sidecar(file, "mynotes.json")).also { it.load() }
-                LoadState.Ready(src, notes, Thumbs(src))
+                LoadState.Ready(src, notes, Thumbs(src, thumbPx))
             } catch (e: PptxException) {
                 LoadState.Error(
                     when (e.kind) {
@@ -202,7 +143,7 @@ fun SlidesScreen(path: String) {
 
     when (val s = state) {
         LoadState.Loading -> Column(Modifier.fillMaxSize().background(D.c.bg)) {
-            ViewerTopBar(file.nameWithoutExtension, onBack = { pane.back() })
+            ViewerTopBar(file.nameWithoutExtension, onBack = { nav.back() })
             Column(
                 Modifier.fillMaxSize().padding(24.dp),
                 verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally,
@@ -215,7 +156,7 @@ fun SlidesScreen(path: String) {
             }
         }
         is LoadState.Error -> Column(Modifier.fillMaxSize().background(D.c.bg)) {
-            ViewerTopBar(file.nameWithoutExtension, onBack = { pane.back() })
+            ViewerTopBar(file.nameWithoutExtension, onBack = { nav.back() })
             Column(
                 Modifier.fillMaxSize().padding(24.dp),
                 verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally,
@@ -241,12 +182,18 @@ fun SlidesScreen(path: String) {
                 }
             }
         }
-        is LoadState.Ready -> SlidesEditor(file, s)
+        is LoadState.Ready -> SlidesEditor(file, s, onBack = { nav.back() })
     }
 }
 
+/**
+ * PowerPoint-like editor. The scaffold sees the width class of THIS screen (not of the whole window), so a narrow
+ * split pane behaves like a phone even on the tablet:
+ * - Expanded: slide rail on the start side (open unless shown in a split pane) + notes pane (Speaker notes / Comments / My notes).
+ * - Medium / Compact: no rail; the notes pane starts with a Slides filmstrip tab.
+ */
 @Composable
-private fun SlidesEditor(file: File, s: LoadState.Ready) {
+private fun SlidesEditor(file: File, s: LoadState.Ready, onBack: () -> Unit) {
     val notes = s.notes
     // Debounced autosave of "My notes" (~600 ms after the last keystroke) + a final save on exit.
     LaunchedEffect(notes) {
@@ -264,44 +211,73 @@ private fun SlidesEditor(file: File, s: LoadState.Ready) {
             }
         }
     }
+    DisposableEffect(s) { onDispose { s.thumbs.dispose() } }
+    KeepScreenOn(Prefs.keepScreenOn)
 
-    InkEditorScaffold(
-        title = file.nameWithoutExtension,
-        inkFile = Storage.sidecar(file, "ink.json"),
-        source = s.src,
-        isNote = false,
-        onBack = { pane.back() },
-        extraActions = { controller -> SlidesMenu(file, s, controller) },
-        sidePanel = { controller -> SlidesPanel(s, controller) },
-        sidePanelLabel = stringResource(R.string.slides_panel),
-    )
+    val inPane = LocalPaneNav.current.inPane
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val width = widthClassOf(maxWidth)
+        val expanded = width == WidthClass.Expanded
+        var tab by rememberSaveable { mutableStateOf(if (expanded) PaneTab.SPEAKER else PaneTab.SLIDES) }
+        val railLabel = stringResource(R.string.slides_rail)
+        val paneLabel = stringResource(if (expanded) R.string.slides_notes_pane else R.string.slides_slides_and_notes)
+        CompositionLocalProvider(LocalWidthClass provides width) {
+            InkEditorScaffold(
+                title = file.nameWithoutExtension,
+                inkFile = Storage.sidecar(file, "ink.json"),
+                source = s.src,
+                isNote = false,
+                onBack = onBack,
+                extraActions = { controller -> SlidesHeaderActions(file, s, controller, compact = width == WidthClass.Compact) },
+                sidePanel = if (expanded) ({ controller -> SlideRail(s.src.deck, s.thumbs, controller) }) else null,
+                sidePanelLabel = railLabel,
+                sidePanelAtStart = true,
+                sidePanelOpen = !inPane,
+                bottomPanel = { controller -> NotesPane(s.src.deck, s.thumbs, notes, controller, tab, { tab = it }, withSlides = !expanded) },
+                bottomPanelLabel = paneLabel,
+            )
+        }
+    }
 }
 
-// ------------------------------------------------------------------ overflow menu
+// ------------------------------------------------------------------ header
 
+/** Present, Convert and the "Share and export" menu (its own icon; the scaffold already has a ⋮ menu). */
 @Composable
-private fun SlidesMenu(file: File, s: LoadState.Ready, controller: EditorController) {
+private fun SlidesHeaderActions(file: File, s: LoadState.Ready, controller: EditorController, compact: Boolean) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
-    var open by remember { mutableStateOf(false) }
+    val c = D.c
+    val actions = rememberViewerActions(file)
+    var presentFrom by remember { mutableStateOf<Int?>(null) }
+    var menu by remember { mutableStateOf(false) }
+
+    if (compact) {
+        IconButton(onClick = { presentFrom = controller.currentPage }) {
+            Icon(Icons.Rounded.Slideshow, stringResource(R.string.slides_present_from_current), tint = c.accent)
+        }
+    } else {
+        Row(
+            Modifier.padding(horizontal = 4.dp).height(36.dp).clip(RoundedCornerShape(12.dp)).background(c.accent)
+                .clickable(onClickLabel = stringResource(R.string.slides_present_from_current), role = Role.Button) { presentFrom = controller.currentPage }
+                .padding(start = 10.dp, end = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(Icons.Rounded.PlayArrow, null, tint = c.onAccent, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(6.dp))
+            Text(stringResource(R.string.slides_present), color = c.onAccent, style = MaterialTheme.typography.labelLarge, maxLines = 1)
+        }
+        ConvertButton(actions)
+    }
     Box {
-        IconButton(onClick = { open = true }) { Icon(Icons.Rounded.MoreVert, stringResource(R.string.slides_more), tint = D.c.ink) }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.open_externally)) },
-                leadingIcon = { Icon(Icons.AutoMirrored.Rounded.OpenInNew, null, tint = D.c.muted) },
-                onClick = { open = false; controller.saveNow(); openExternally(ctx, file) },
-            )
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.share)) },
-                leadingIcon = { Icon(Icons.Rounded.Share, null, tint = D.c.muted) },
-                onClick = { open = false; shareFiles(ctx, listOf(file)) },
-            )
+        IconButton(onClick = { menu = true }) { Icon(Icons.Rounded.IosShare, stringResource(R.string.slides_file_menu), tint = c.ink) }
+        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+            ViewerMenuItems(actions, close = { menu = false }, showConvert = compact)
             DropdownMenuItem(
                 text = { Text(stringResource(R.string.slides_export_notes)) },
-                leadingIcon = { Icon(Icons.Rounded.FileDownload, null, tint = D.c.muted) },
+                leadingIcon = { Icon(Icons.Rounded.FileDownload, null, tint = c.muted) },
                 onClick = {
-                    open = false
+                    menu = false
                     val mine = s.notes.snapshot()
                     scope.launch {
                         val out = withContext(Dispatchers.IO) { runCatching { exportNotes(ctx, file, s.src.deck, mine) }.getOrNull() }
@@ -312,9 +288,19 @@ private fun SlidesMenu(file: File, s: LoadState.Ready, controller: EditorControl
             )
         }
     }
+
+    presentFrom?.let { from ->
+        PresentMode(
+            src = s.src, thumbs = s.thumbs, start = from,
+            inkPage = { i -> controller.doc().pages.getOrNull(i) },
+        ) { last ->
+            presentFrom = null
+            controller.goToPage(last)
+        }
+    }
 }
 
-/** Writes "<deck> - notes.txt" next to the deck: per slide, speaker notes and my notes. */
+/** Writes "<deck> - notes.txt" next to the deck: per slide, speaker notes, my notes and comments. */
 private fun exportNotes(ctx: Context, file: File, deck: Pptx, mine: Map<Int, String>): File {
     val out = Storage.uniqueFile(file.parentFile!!, ctx.getString(R.string.slides_export_file, file.nameWithoutExtension), "txt")
     val sb = StringBuilder()
@@ -339,157 +325,34 @@ private fun exportNotes(ctx: Context, file: File, deck: Pptx, mine: Map<Int, Str
         }
         sb.append('\n')
     }
-    out.writeText(sb.toString())
+    val tmp = File(out.parentFile, ".${out.name}.part")
+    tmp.writeText(sb.toString())
+    if (!tmp.renameTo(out)) { tmp.copyTo(out, overwrite = true); tmp.delete() }
     return out
 }
 
-// ------------------------------------------------------------------ side panel
+// ------------------------------------------------------------------ keep screen on (Settings option)
 
+/** Honours Settings → "Keep the screen on" while the deck is open (counted per view, several decks can be open). */
 @Composable
-private fun SlidesPanel(s: LoadState.Ready, controller: EditorController) {
-    var tab by rememberSaveable { mutableIntStateOf(0) }
-    val c = D.c
-    Column(Modifier.fillMaxSize().background(c.surface)) {
-        Row(
-            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Chip(stringResource(R.string.slides_tab_slides), tab == 0, { tab = 0 })
-            Chip(stringResource(R.string.slides_tab_notes), tab == 1, { tab = 1 })
-            val count = s.src.deck.slides.getOrNull(controller.currentPage)?.comments?.let { l -> l.size + l.sumOf { it.replies.size } } ?: 0
-            Chip(stringResource(R.string.slides_tab_comments) + if (count > 0) " ($count)" else "", tab == 2, { tab = 2 })
-            Chip(stringResource(R.string.slides_tab_mynotes), tab == 3, { tab = 3 })
-        }
-        Box(Modifier.fillMaxWidth().height(1.dp).background(c.line))
-        Box(Modifier.fillMaxSize()) {
-            when (tab) {
-                0 -> ThumbList(s, controller)
-                1 -> SpeakerNotes(s, controller.currentPage)
-                2 -> CommentList(s, controller.currentPage)
-                else -> MyNotesEditor(s.notes, controller.currentPage)
-            }
-        }
+private fun KeepScreenOn(on: Boolean) {
+    val view = LocalView.current
+    DisposableEffect(view, on) {
+        if (on) ScreenOn.acquire(view)
+        onDispose { if (on) ScreenOn.release(view) }
     }
 }
 
-@Composable
-private fun ThumbList(s: LoadState.Ready, controller: EditorController) {
-    val deck = s.src.deck
-    val list = rememberLazyListState(initialFirstVisibleItemIndex = controller.currentPage.coerceIn(0, deck.slides.lastIndex))
-    val cur = controller.currentPage
-    LaunchedEffect(cur) {
-        val visible = list.layoutInfo.visibleItemsInfo
-        val fully = visible.filter { it.offset >= 0 && it.offset + it.size <= list.layoutInfo.viewportEndOffset }.map { it.index }
-        if (cur !in fully) list.animateScrollToItem(cur.coerceIn(0, deck.slides.lastIndex))
-    }
-    val ratio = (deck.widthPt / deck.heightPt).coerceIn(0.3f, 4f)
-    LazyColumn(
-        state = list, modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        items(deck.slides, key = { it.index }) { slide ->
-            val i = slide.index
-            val selected = i == cur
-            val bmp by produceState(s.thumbs.cached(i), i) { if (value == null) value = s.thumbs.load(i) }
-            Row(verticalAlignment = Alignment.Top) {
-                Text(
-                    "${i + 1}", style = MaterialTheme.typography.labelMedium,
-                    color = if (selected) D.c.accent else D.c.muted, modifier = Modifier.width(28.dp).padding(top = 2.dp),
-                )
-                val shape = RoundedCornerShape(8.dp)
-                Box(
-                    Modifier.weight(1f).aspectRatio(ratio).clip(shape)
-                        .border(if (selected) 2.dp else 1.dp, if (selected) D.c.accent else D.c.line, shape)
-                        .background(D.c.surfaceAlt)
-                        .clickable { controller.goToPage(i) }
-                        .alpha(if (slide.hidden) 0.5f else 1f),
-                ) {
-                    bmp?.let { Image(it, contentDescription = stringResource(R.string.slides_slide_n, i + 1), modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Fit) }
-                }
-            }
-        }
-    }
-}
+private object ScreenOn {
+    private val counts = WeakHashMap<View, Int>()
 
-@Composable
-private fun SpeakerNotes(s: LoadState.Ready, page: Int) {
-    val slide = s.src.deck.slides.getOrNull(page) ?: return
-    if (slide.notes.isBlank()) {
-        EmptyState(Icons.Rounded.Description, stringResource(R.string.slides_no_notes))
-        return
+    fun acquire(v: View) {
+        counts[v] = (counts[v] ?: 0) + 1
+        v.keepScreenOn = true
     }
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
-        Text(stringResource(R.string.slides_slide_n, page + 1), style = MaterialTheme.typography.labelMedium, color = D.c.muted)
-        Spacer(Modifier.height(8.dp))
-        SelectionContainer {
-            Text(slide.notes, style = MaterialTheme.typography.bodyLarge, color = D.c.ink, modifier = Modifier.fillMaxWidth())
-        }
-    }
-}
 
-@Composable
-private fun CommentList(s: LoadState.Ready, page: Int) {
-    val slide = s.src.deck.slides.getOrNull(page) ?: return
-    if (slide.comments.isEmpty()) {
-        EmptyState(Icons.Rounded.ChatBubbleOutline, stringResource(R.string.slides_no_comments))
-        return
-    }
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        items(slide.comments) { cm ->
-            Column(Modifier.fillMaxWidth().card(D.c, 12.dp).padding(12.dp)) {
-                CommentBody(cm)
-                if (cm.replies.isNotEmpty()) {
-                    Spacer(Modifier.height(8.dp))
-                    for (r in cm.replies) {
-                        Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min).padding(top = 6.dp)) {
-                            Box(Modifier.width(2.dp).fillMaxHeight().background(D.c.line))
-                            Column(Modifier.padding(start = 10.dp)) { CommentBody(r) }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun CommentBody(cm: Comment) {
-    val date = remember(cm.time) { cm.time?.let { DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(it)) } }
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            cm.author.ifBlank { stringResource(R.string.slides_unknown_author) }, style = MaterialTheme.typography.labelLarge,
-            color = D.c.ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false),
-        )
-        if (cm.resolved) {
-            Spacer(Modifier.width(8.dp))
-            Text(
-                stringResource(R.string.slides_resolved), style = MaterialTheme.typography.bodySmall, color = D.c.muted,
-                modifier = Modifier.background(D.c.surfaceAlt, RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 2.dp),
-            )
-        }
-    }
-    if (date != null) Text(date, style = MaterialTheme.typography.bodySmall, color = D.c.muted)
-    Spacer(Modifier.height(4.dp))
-    SelectionContainer { Text(cm.text, style = MaterialTheme.typography.bodyMedium, color = D.c.ink) }
-}
-
-@Composable
-private fun MyNotesEditor(notes: MyNotes, page: Int) {
-    val c = D.c
-    Column(Modifier.fillMaxSize().padding(12.dp)) {
-        OutlinedTextField(
-            value = notes.map[page] ?: "",
-            onValueChange = { notes.set(page, it) },
-            modifier = Modifier.fillMaxWidth().weight(1f),
-            placeholder = { Text(stringResource(R.string.slides_mynotes_hint, page + 1), color = c.muted) },
-            textStyle = MaterialTheme.typography.bodyLarge.copy(color = c.ink),
-            shape = RoundedCornerShape(12.dp),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = c.accent, unfocusedBorderColor = c.line, cursorColor = c.accent,
-                focusedContainerColor = c.surface, unfocusedContainerColor = c.surface,
-            ),
-        )
-        Spacer(Modifier.height(6.dp))
-        Text(stringResource(R.string.slides_mynotes_saved), style = MaterialTheme.typography.bodySmall, color = c.muted)
+    fun release(v: View) {
+        val n = (counts[v] ?: 1) - 1
+        if (n <= 0) { counts.remove(v); v.keepScreenOn = false } else counts[v] = n
     }
 }

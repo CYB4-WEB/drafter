@@ -8,6 +8,7 @@ import android.graphics.Color
 import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.pdf.PdfDocument
+import android.media.ExifInterface
 import android.net.Uri
 import android.os.Bundle
 import android.os.CancellationSignal
@@ -89,7 +90,7 @@ object PdfTools {
         }
     }
 
-    /** Decodes [uri] downsampled so the long side is ≤ [maxSide], rotated upright using the MediaStore orientation. */
+    /** Decodes [uri] downsampled so the long side is ≤ [maxSide], turned upright (EXIF orientation, else MediaStore). */
     fun decodeImage(ctx: Context, uri: Uri, maxSide: Int): Bitmap? = runCatching {
         val cr = ctx.contentResolver
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
@@ -106,14 +107,41 @@ object PdfTools {
             val scaled = Bitmap.createScaledBitmap(bmp, (bmp.width * s).roundToInt().coerceAtLeast(1), (bmp.height * s).roundToInt().coerceAtLeast(1), true)
             if (scaled != bmp) { bmp.recycle(); bmp = scaled }
         }
-        val deg = orientationOf(ctx, uri)
-        if (deg != 0) {
-            val m = Matrix().apply { postRotate(deg.toFloat()) }
+        val m = orientationMatrix(ctx, uri)
+        if (m != null) {
             val r = Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, m, true)
             if (r != bmp) { bmp.recycle(); bmp = r }
         }
         bmp
     }.onFailure { Log.e(TAG, "decode $uri", it) }.getOrNull()
+
+    /**
+     * Transform that turns the decoded pixels upright, or null when none is needed. The EXIF orientation tag
+     * (read from the stream itself, so it works for any provider and for files whose rotation lives only in EXIF)
+     * wins; the MediaStore column is the fallback for providers that strip EXIF but report the orientation.
+     */
+    private fun orientationMatrix(ctx: Context, uri: Uri): Matrix? {
+        val exif = runCatching {
+            ctx.contentResolver.openInputStream(uri)?.use { ExifInterface(it).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_UNDEFINED) }
+        }.getOrNull() ?: ExifInterface.ORIENTATION_UNDEFINED
+        val m = Matrix()
+        when (exif) {
+            ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> m.setScale(-1f, 1f)
+            ExifInterface.ORIENTATION_ROTATE_180 -> m.setRotate(180f)
+            ExifInterface.ORIENTATION_FLIP_VERTICAL -> { m.setRotate(180f); m.postScale(-1f, 1f) }
+            ExifInterface.ORIENTATION_TRANSPOSE -> { m.setRotate(90f); m.postScale(-1f, 1f) }
+            ExifInterface.ORIENTATION_ROTATE_90 -> m.setRotate(90f)
+            ExifInterface.ORIENTATION_TRANSVERSE -> { m.setRotate(-90f); m.postScale(-1f, 1f) }
+            ExifInterface.ORIENTATION_ROTATE_270 -> m.setRotate(-90f)
+            ExifInterface.ORIENTATION_NORMAL -> return null
+            else -> {
+                val deg = orientationOf(ctx, uri)
+                if (deg == 0) return null
+                m.setRotate(deg.toFloat())
+            }
+        }
+        return m
+    }
 
     /** Orientation in degrees from the MediaStore column when the provider exposes it, else 0. */
     @Suppress("DEPRECATION")

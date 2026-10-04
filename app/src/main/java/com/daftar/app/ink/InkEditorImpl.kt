@@ -49,7 +49,10 @@ import androidx.lifecycle.LifecycleEventObserver
 import com.daftar.app.R
 import com.daftar.app.data.Prefs
 import com.daftar.app.data.Storage
+import com.daftar.app.ui.ConvertButton
 import com.daftar.app.ui.LocalWidthClass
+import com.daftar.app.ui.ViewerMenuItems
+import com.daftar.app.ui.rememberViewerActions
 import com.daftar.app.ui.TextInputDialog
 import com.daftar.app.ui.ViewerTopBar
 import com.daftar.app.ui.WidthClass
@@ -64,17 +67,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
-private val PenColors = listOf(
-    0xFF1F2937, 0xFF3B82F6, 0xFFE5484D, 0xFF2F9E6E, 0xFF8B6CE0, 0xFFF59E42,
-).map { it.toInt() }
-private val MoreColors = listOf(
-    0xFF000000, 0xFF4B5563, 0xFF9CA3AF, 0xFF1E40AF, 0xFF0EA5E9, 0xFF14B8A6,
-    0xFF15803D, 0xFF84CC16, 0xFFEAB308, 0xFFF97316, 0xFFB91C1C, 0xFFDB2777,
-    0xFF7C3AED, 0xFF92400E, 0xFFFFFFFF,
-).map { it.toInt() }
-private val HlColors = listOf(0x66F2C94C, 0x664CC38A, 0x6660A5FA, 0x66F472B6, 0x66F59E42).map { it.toInt() }
-private val PenWidths = listOf(1.2f, 2.2f, 4f)
-private val HlWidths = listOf(10f, 16f, 24f)
 private val Papers = listOf("blank", "lined", "grid", "dots", "cornell")
 
 private class EditorStateImpl(val view: InkView) : EditorController {
@@ -109,11 +101,15 @@ internal fun InkEditorImpl(
     val ctl = remember(view) { EditorStateImpl(view) }
 
     var loaded by remember(inkFile) { mutableStateOf(false) }
-    var tool by remember { mutableIntStateOf(Tool.PEN) }
-    var penColor by remember { mutableIntStateOf(PenColors[0]) }
-    var penWidth by remember { mutableFloatStateOf(PenWidths[1]) }
-    var hlColor by remember { mutableIntStateOf(HlColors[0]) }
-    var hlWidth by remember { mutableFloatStateOf(HlWidths[1]) }
+    val ts = remember { InkPrefs.init(ctx); InkToolState() }
+    var whiteboard by remember(inkFile) { mutableStateOf(false) }
+    var linkEdit by remember { mutableStateOf<Pair<Int, LinkItem?>?>(null) }   // (page, link) — link null = new
+    var linkMenu by remember { mutableStateOf<Triple<Int, LinkItem, Pair<Float, Float>>?>(null) }
+    var hasTapes by remember { mutableStateOf(false) }
+    /** The document this ink belongs to: the note itself, or the PDF/PPTX next to its `.name.ink.json` sidecar. */
+    val hostFile = remember(inkFile) {
+        if (isNote) inkFile else File(inkFile.parentFile, inkFile.name.removePrefix(".").removeSuffix(".ink.json"))
+    }
     var canUndo by remember { mutableStateOf(false) }
     var canRedo by remember { mutableStateOf(false) }
     var hasSel by remember { mutableStateOf(false) }
@@ -137,7 +133,7 @@ internal fun InkEditorImpl(
         if (!loaded) return
         if (isNote && !inkFile.exists()) return   // renamed/moved away while open
         val d = view.doc
-        val snap = InkDoc(d.pages, d.paperColor, d.recordings)
+        val snap = InkDoc(d.pages, d.paperColor, d.recordings, d.infinite)
         runCatching {
             if (source != null && snap.pages.all { it.isEmpty() } && snap.recordings.isEmpty()) inkFile.delete() else snap.save(inkFile)
         }
@@ -150,7 +146,7 @@ internal fun InkEditorImpl(
         saveJob = scope.launch {
             delay(700)
             val d = view.doc
-            val snap = InkDoc(d.pages, d.paperColor, d.recordings)
+            val snap = InkDoc(d.pages, d.paperColor, d.recordings, d.infinite)
             withContext(Dispatchers.IO) {
                 if (isNote && !inkFile.exists()) return@withContext
                 runCatching {
@@ -230,7 +226,7 @@ internal fun InkEditorImpl(
     val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri: Uri? ->
         if (uri != null) scope.launch {
             val b = withContext(Dispatchers.IO) { loadBitmap(ctx, uri, 2000) }
-            if (b != null) { view.addImage(b); tool = Tool.LASSO; view.tool = Tool.LASSO } else toast(ctx, ctx.getString(R.string.error_generic))
+            if (b != null) { view.addImage(b); ts.selectTool(Tool.LASSO); view.tool = Tool.LASSO } else toast(ctx, ctx.getString(R.string.error_generic))
         }
     }
 
@@ -242,6 +238,8 @@ internal fun InkEditorImpl(
             else existing ?: InkDoc.newNote(Prefs.defaultPaper)
         }
         view.setDocument(d, source)
+        whiteboard = d.infinite
+        hasTapes = view.hasTapes()
         ctl.pageCount = d.pages.size
         loaded = true
     }
@@ -249,6 +247,9 @@ internal fun InkEditorImpl(
     view.listener = remember(view) {
         object : InkView.Listener {
             override fun onChanged() { ctl.pageCount = view.doc.pages.size; scheduleSave() }
+            override fun onLinkOpen(link: LinkItem) { view.commitSelection(); saveBlocking(); openLink(ctx, link) }
+            override fun onLinkMenu(page: Int, link: LinkItem, x: Float, y: Float) { linkMenu = Triple(page, link, x to y) }
+            override fun onDropFailed() { toast(ctx, ctx.getString(R.string.ink_drop_failed)) }
             override fun onPageChanged(current: Int, count: Int) { ctl.currentPage = current; ctl.pageCount = count }
             override fun onTextRequest(page: Int, x: Float, y: Float, existing: TextItem?) { textReq = Triple(page, x to y, existing) }
             override fun onSelectionChanged(active: Boolean) { hasSel = active }
@@ -261,11 +262,14 @@ internal fun InkEditorImpl(
             override fun onZoomChanged(percent: Int) { ctl.zoomPercent = percent }
         }
     }
-    ctl.onImageAdded = { tool = Tool.LASSO; view.tool = Tool.LASSO }
+    ctl.onImageAdded = { ts.selectTool(Tool.LASSO); view.tool = Tool.LASSO }
 
     // keep the view in sync with toolbar & settings
-    view.tool = tool; view.penColor = penColor; view.penWidth = penWidth; view.hlColor = hlColor; view.hlWidth = hlWidth
-    view.shapeColor = penColor
+    view.tool = ts.tool; view.penColor = ts.penColor; view.penWidth = ts.penWidth; view.penStyle = ts.penStyle
+    view.hlColor = ts.hlColor; view.hlWidth = ts.hlWidth; view.eraserRadiusDp = ts.eraserRadius
+    view.tapeColor = ts.tapeColor; view.tapeWidth = ts.tapeWidth
+    view.shapeColor = ts.penColor
+    view.keepScreenOn = Prefs.keepScreenOn
     view.penOnly = Prefs.penOnly
     view.stylusButtonTool = if (Prefs.stylusButton == 1) Tool.LASSO else Tool.ERASER
     view.bgColor = c.bg.toArgb()
@@ -303,6 +307,8 @@ internal fun InkEditorImpl(
         }
     }
 
+    val actions = if (isNote) rememberViewerActions(hostFile) else null
+
     // =========================== UI ===========================
     Column(Modifier.fillMaxSize().background(c.bg)) {
         ViewerTopBar(title, onBack = { view.commitSelection(); saveBlocking(); onBack() },
@@ -319,6 +325,7 @@ internal fun InkEditorImpl(
                     IconButton(onClick = { showRecordings = true }) { Icon(Icons.Rounded.GraphicEq, stringResource(R.string.ink_recordings), tint = if (playing != null) c.accent else c.ink) }
                 }
             }
+            if (actions != null) ConvertButton(actions)
             extraActions(ctl)
             if (bottomPanel != null) IconButton(onClick = { showBottom = !showBottom }) {
                 Icon(Icons.Rounded.ViewAgenda, bottomPanelLabel, tint = if (showBottom) c.accent else c.ink)
@@ -327,54 +334,63 @@ internal fun InkEditorImpl(
                 Icon(Icons.AutoMirrored.Rounded.ViewSidebar, sidePanelLabel, tint = if (showPanel) c.accent else c.ink)
             }
             Box {
-                IconButton(onClick = { showMore = true }) { Icon(Icons.Rounded.MoreVert, stringResource(R.string.more), tint = c.ink) }
+                IconButton(onClick = { showMore = true; hasTapes = view.hasTapes() }) { Icon(Icons.Rounded.MoreVert, stringResource(R.string.more), tint = c.ink) }
                 DropdownMenu(showMore, { showMore = false }) {
-                    if (isNote) {
+                    if (isNote && !whiteboard) {
                         DropdownMenuItem({ Text(stringResource(R.string.ink_add_page)) }, { showMore = false; view.addPage(ctl.currentPage, view.doc.pages.getOrNull(ctl.currentPage)?.paper ?: Prefs.defaultPaper) }, leadingIcon = { Icon(Icons.Rounded.NoteAdd, null) })
-                        DropdownMenuItem({ Text(stringResource(R.string.ink_paper)) }, { showMore = false; showPaper = true }, leadingIcon = { Icon(Icons.Rounded.GridOn, null) })
-                        if (ctl.pageCount > 1) DropdownMenuItem({ Text(stringResource(R.string.ink_delete_page)) }, { showMore = false; view.deletePage(ctl.currentPage) }, leadingIcon = { Icon(Icons.Rounded.DeleteSweep, null) })
                     }
-                    DropdownMenuItem({ Text(stringResource(R.string.ink_clear_page)) }, { showMore = false; view.clearPage(ctl.currentPage) }, leadingIcon = { Icon(Icons.Rounded.LayersClear, null) })
-                    DropdownMenuItem({ Text(stringResource(R.string.ink_recognize_page)) }, { showMore = false; recognize(view.pageStrokes(ctl.currentPage), false) }, leadingIcon = { Icon(Icons.Rounded.TextFields, null) })
+                    if (isNote) DropdownMenuItem({ Text(stringResource(R.string.ink_paper)) }, { showMore = false; showPaper = true }, leadingIcon = { Icon(Icons.Rounded.GridOn, null) })
+                    if (isNote && !whiteboard && ctl.pageCount > 1) {
+                        DropdownMenuItem({ Text(stringResource(R.string.ink_delete_page)) }, { showMore = false; view.deletePage(ctl.currentPage) }, leadingIcon = { Icon(Icons.Rounded.DeleteSweep, null) })
+                    }
+                    DropdownMenuItem({ Text(stringResource(if (whiteboard) R.string.ink_clear_board else R.string.ink_clear_page)) }, { showMore = false; view.clearPage(ctl.currentPage) }, leadingIcon = { Icon(Icons.Rounded.LayersClear, null) })
+                    DropdownMenuItem({ Text(stringResource(if (whiteboard) R.string.ink_recognize_board else R.string.ink_recognize_page)) }, { showMore = false; recognize(view.pageStrokes(ctl.currentPage), false) }, leadingIcon = { Icon(Icons.Rounded.TextFields, null) })
+                    if (hasTapes) {
+                        DropdownMenuItem({ Text(stringResource(R.string.ink_tapes_reveal)) }, { showMore = false; view.setAllTapes(true) }, leadingIcon = { Icon(Icons.Rounded.Visibility, null) })
+                        DropdownMenuItem({ Text(stringResource(R.string.ink_tapes_hide)) }, { showMore = false; view.setAllTapes(false) }, leadingIcon = { Icon(Icons.Rounded.VisibilityOff, null) })
+                    }
                     if (isNote) {
                         DropdownMenuItem({ Text(stringResource(R.string.ink_export_pdf)) }, {
                             showMore = false
                             scope.launch {
-                                saveBlocking()
+                                view.commitSelection(); saveBlocking()
                                 val out = Storage.uniqueFile(inkFile.parentFile!!, inkFile.nameWithoutExtension, "pdf")
                                 val ok = withContext(Dispatchers.IO) { runCatching { exportNoteToPdf(view.doc, out) }.isSuccess }
                                 Storage.touch()
                                 toast(ctx, if (ok) ctx.getString(R.string.saved_to, out.name) else ctx.getString(R.string.error_generic))
                             }
                         }, leadingIcon = { Icon(Icons.Rounded.PictureAsPdf, null) })
-                        DropdownMenuItem({ Text(stringResource(R.string.share)) }, {
-                            showMore = false
-                            scope.launch {
-                                val out = File(Storage.cacheDir(), inkFile.nameWithoutExtension + ".pdf")
-                                val ok = withContext(Dispatchers.IO) { runCatching { exportNoteToPdf(view.doc, out) }.isSuccess }
-                                if (ok) shareFiles(ctx, listOf(out))
-                            }
-                        }, leadingIcon = { Icon(Icons.Rounded.Share, null) })
                     }
                     DropdownMenuItem(
                         { Text(stringResource(if (Prefs.penOnly) R.string.ink_finger_draw_off else R.string.ink_finger_draw_on)) },
                         { showMore = false; Prefs.putPenOnly(!Prefs.penOnly) },
                         leadingIcon = { Icon(Icons.Rounded.TouchApp, null) },
                     )
+                    if (actions != null) {
+                        HorizontalDivider(color = c.line)
+                        ViewerMenuItems(actions, close = { showMore = false }, onShare = {
+                            scope.launch {
+                                view.commitSelection(); saveBlocking()
+                                val out = File(Storage.cacheDir(), inkFile.nameWithoutExtension + ".pdf")
+                                val ok = withContext(Dispatchers.IO) { runCatching { exportNoteToPdf(view.doc, out) }.isSuccess }
+                                if (ok) shareFiles(ctx, listOf(out)) else toast(ctx, ctx.getString(R.string.error_generic))
+                            }
+                        })
+                    }
                 }
             }
         }
 
         // ---- toolbar ----
-        Toolbar(
-            tool = tool, onTool = { tool = it; view.commitSelection() },
-            penColor = penColor, hlColor = hlColor, penWidth = penWidth, hlWidth = hlWidth,
-            onColor = { col -> if (tool == Tool.HIGHLIGHTER) hlColor = col else penColor = col; if (tool == Tool.ERASER || tool == Tool.LASSO || tool == Tool.HAND) tool = Tool.PEN },
-            onWidth = { w -> if (tool == Tool.HIGHLIGHTER) hlWidth = w else penWidth = w },
+        InkToolbar(
+            st = ts,
+            showAddPage = isNote && !whiteboard,
+            onToolChanged = { view.commitSelection() },
             onMoreColors = { showColors = true },
             onImage = { pickImage.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+            onLink = { linkEdit = ctl.currentPage to null },
             onDictate = { if (hasMic()) showDictation = true else dictPermission.launch(Manifest.permission.RECORD_AUDIO) },
-            onAddPage = if (isNote) ({ view.addPage(ctl.currentPage, view.doc.pages.getOrNull(ctl.currentPage)?.paper ?: Prefs.defaultPaper) }) else null,
+            onAddPage = { view.addPage(ctl.currentPage, view.doc.pages.getOrNull(ctl.currentPage)?.paper ?: Prefs.defaultPaper) },
         )
 
         if (recording) {
@@ -427,7 +443,7 @@ internal fun InkEditorImpl(
                     onDelete = { view.deleteSelection() },
                     onDone = { view.commitSelection() },
                 )
-                if (ctl.pageCount > 0) Text(
+                if (ctl.pageCount > 0 && !whiteboard) Text(
                     stringResource(R.string.page_of, ctl.currentPage + 1, ctl.pageCount),
                     style = MaterialTheme.typography.labelMedium, color = c.muted,
                     modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp)
@@ -440,6 +456,14 @@ internal fun InkEditorImpl(
                         CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = c.accent)
                         Spacer(Modifier.width(10.dp)); Text(msg, color = c.ink)
                     }
+                }
+                linkMenu?.let { (page, link, pos) ->
+                    LinkMenu(pos.first, pos.second, link, onDismiss = { linkMenu = null },
+                        onOpen = { linkMenu = null; view.commitSelection(); saveBlocking(); openLink(ctx, link) },
+                        onSideBySide = { linkMenu = null; view.commitSelection(); saveBlocking(); openLinkSideBySide(ctx, link, hostFile) },
+                        onEdit = { linkMenu = null; linkEdit = page to link },
+                        onDelete = { linkMenu = null; view.deleteLink(page, link.id) },
+                    )
                 }
             }
             if (bottomPanel != null && showBottom) {
@@ -463,23 +487,25 @@ internal fun InkEditorImpl(
     }
 
     textReq?.let { (page, pos, existing) ->
-        TextBoxDialog(existing, penColor,
+        TextBoxDialog(existing, ts.penColor,
             onDismiss = { textReq = null },
             onDelete = { existing?.let { view.deleteText(page, it.id) }; textReq = null },
             onSave = { text, size, font, bold, color ->
                 val p = view.doc.pages[page]
                 val item = existing?.copy(text = text, size = size, font = font, bold = bold, color = color)
-                    ?: TextItem(System.nanoTime(), pos.first, pos.second, (p.w - pos.first - 24f).coerceAtLeast(140f), text, size, color, font, bold)
+                    ?: TextItem(System.nanoTime(), pos.first, pos.second, (if (whiteboard) 360f else (p.w - pos.first - 24f).coerceAtLeast(140f)), text, size, color, font, bold)
                 view.upsertText(page, item)
                 textReq = null
             })
     }
 
-    if (showPaper) PaperDialog(onDismiss = { showPaper = false }) { paper, all -> view.setPaper(paper, all); Prefs.putPaper(paper); showPaper = false }
+    if (showPaper) PaperDialog(showAllPages = !whiteboard, onDismiss = { showPaper = false }) { paper, all ->
+        view.setPaper(paper, all); if (!whiteboard) Prefs.putPaper(paper); showPaper = false
+    }
 
     if (showColors) ColorGridDialog(onDismiss = { showColors = false }) { col ->
-        if (tool == Tool.HIGHLIGHTER) hlColor = (col and 0x00FFFFFF) or 0x66000000 else penColor = col
-        if (tool == Tool.ERASER || tool == Tool.LASSO || tool == Tool.HAND) tool = Tool.PEN
+        ts.pickColor(col)
+        view.commitSelection()
         showColors = false
     }
 
@@ -489,7 +515,7 @@ internal fun InkEditorImpl(
 
     if (showDictation) DictationDialog(onDismiss = { showDictation = false }) { text ->
         showDictation = false
-        if (text.isNotBlank()) view.addTextAtCenter(text, 16f, penColor, "sans")
+        if (text.isNotBlank()) view.addTextAtCenter(text, 16f, ts.penColor, "sans")
     }
 
     if (showRecordings) AlertDialog(
@@ -521,6 +547,14 @@ internal fun InkEditorImpl(
         confirmButton = { TextButton(onClick = { showRecordings = false }) { Text(stringResource(R.string.close)) } },
     )
 
+    linkEdit?.let { (page, existing) ->
+        LinkDialog(existing, exclude = hostFile, onDismiss = { linkEdit = null }) { target, label ->
+            linkEdit = null
+            if (existing == null) { view.addLink(target, label); ts.selectTool(Tool.LASSO); view.tool = Tool.LASSO }
+            else view.updateLink(page, existing.id, target, label)
+        }
+    }
+
     recognized?.let { text ->
         val clip = androidx.compose.ui.platform.LocalClipboardManager.current
         AlertDialog(
@@ -531,7 +565,7 @@ internal fun InkEditorImpl(
                 TextButton(onClick = { clip.setText(androidx.compose.ui.text.AnnotatedString(text)); toast(ctx, ctx.getString(R.string.copied)); recognized = null }) { Text(stringResource(R.string.copy)) }
             },
             dismissButton = {
-                TextButton(onClick = { view.addTextAtCenter(text, 16f, penColor, "sans"); recognized = null }) { Text(stringResource(R.string.ink_insert_as_text)) }
+                TextButton(onClick = { view.addTextAtCenter(text, 16f, ts.penColor, "sans"); recognized = null }) { Text(stringResource(R.string.ink_insert_as_text)) }
             },
         )
     }
@@ -561,71 +595,6 @@ fun loadBitmap(ctx: android.content.Context, uri: Uri, maxSide: Int): Bitmap? = 
 // =====================================================================================
 // Toolbar & dialogs
 // =====================================================================================
-
-@Composable
-private fun Toolbar(
-    tool: Int, onTool: (Int) -> Unit, penColor: Int, hlColor: Int, penWidth: Float, hlWidth: Float,
-    onColor: (Int) -> Unit, onWidth: (Float) -> Unit, onMoreColors: () -> Unit,
-    onImage: () -> Unit, onDictate: () -> Unit, onAddPage: (() -> Unit)?,
-) {
-    val c = D.c
-    Box(Modifier.fillMaxWidth().background(c.bg).padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
-        Row(
-            Modifier.padding(horizontal = 12.dp).horizontalScroll(rememberScrollState())
-                .background(c.surface, RoundedCornerShape(16.dp)).border(1.dp, c.line, RoundedCornerShape(16.dp))
-                .padding(horizontal = 6.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            val tools = listOf(
-                Triple(Tool.PEN, Icons.Rounded.Edit, R.string.ink_tool_pen),
-                Triple(Tool.HIGHLIGHTER, Icons.Rounded.BorderColor, R.string.ink_tool_highlighter),
-                Triple(Tool.ERASER, Icons.Rounded.CleaningServices, R.string.ink_tool_eraser),
-                Triple(Tool.LASSO, Icons.Rounded.Gesture, R.string.ink_tool_lasso),
-                Triple(Tool.TEXT, Icons.Rounded.TextFields, R.string.ink_tool_text),
-                Triple(Tool.SHAPE, Icons.Rounded.Category, R.string.ink_tool_shape),
-                Triple(Tool.HAND, Icons.Rounded.PanTool, R.string.ink_tool_hand),
-            )
-            tools.forEach { (t, icon, label) -> ToolButton(icon, stringResource(label), tool == t) { onTool(t) } }
-            Divider()
-            val hl = tool == Tool.HIGHLIGHTER
-            (if (hl) HlColors else PenColors).forEach { col ->
-                val sel = (if (hl) hlColor else penColor) == col && (tool == Tool.PEN || tool == Tool.HIGHLIGHTER || tool == Tool.SHAPE || tool == Tool.TEXT)
-                Box(
-                    Modifier.padding(horizontal = 3.dp).size(30.dp).clip(CircleShape)
-                        .border(2.dp, if (sel) c.accent else Color.Transparent, CircleShape)
-                        .clickable { onColor(col) }.padding(4.dp).clip(CircleShape).background(Color(col or 0xFF000000.toInt())),
-                )
-            }
-            ToolButton(Icons.Rounded.Palette, stringResource(R.string.ink_more_colors), false, onMoreColors)
-            Divider()
-            (if (hl) HlWidths else PenWidths).forEachIndexed { i, w ->
-                val sel = (if (hl) hlWidth else penWidth) == w
-                Box(
-                    Modifier.padding(horizontal = 2.dp).size(36.dp).clip(RoundedCornerShape(10.dp))
-                        .background(if (sel) c.accent.copy(alpha = 0.12f) else Color.Transparent).clickable { onWidth(w) },
-                    contentAlignment = Alignment.Center,
-                ) { Box(Modifier.size((6 + i * 5).dp).clip(CircleShape).background(if (sel) c.accent else c.muted)) }
-            }
-            Divider()
-            ToolButton(Icons.Rounded.AddPhotoAlternate, stringResource(R.string.ink_insert_image), false, onImage)
-            ToolButton(Icons.Rounded.KeyboardVoice, stringResource(R.string.ink_dictate), false, onDictate)
-            if (onAddPage != null) ToolButton(Icons.Rounded.NoteAdd, stringResource(R.string.ink_add_page), false, onAddPage)
-        }
-    }
-}
-
-@Composable
-private fun Divider() = Box(Modifier.padding(horizontal = 6.dp).width(1.dp).height(28.dp).background(D.c.line))
-
-@Composable
-private fun ToolButton(icon: ImageVector, label: String, selected: Boolean, onClick: () -> Unit) {
-    val c = D.c
-    Box(
-        Modifier.padding(horizontal = 1.dp).size(42.dp).clip(RoundedCornerShape(12.dp))
-            .background(if (selected) c.accent.copy(alpha = 0.12f) else Color.Transparent).clickable(onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) { Icon(icon, label, tint = if (selected) c.accent else c.ink, modifier = Modifier.size(22.dp)) }
-}
 
 @Composable
 private fun SelectionBar(modifier: Modifier, onText: () -> Unit, onColor: (Int) -> Unit, onDuplicate: () -> Unit, onDelete: () -> Unit, onDone: () -> Unit) {
@@ -658,11 +627,12 @@ private fun fontFamilyOf(key: String): FontFamily = when (key) {
     "mono" -> FontFamily.Monospace
     "cairo" -> FontFamily(Font(R.font.cairo))
     "amiri" -> FontFamily(Font(R.font.amiri))
+    "tehreer" -> FontFamily(Font(R.font.tehreer))
     "hand" -> FontFamily(Font(R.font.caveat))
     else -> FontFamily.SansSerif
 }
 
-private val FontLabels = mapOf("sans" to "Sans", "serif" to "Serif", "mono" to "Mono", "cairo" to "Cairo القاهرة", "amiri" to "Amiri أميري", "hand" to "Handwriting")
+private val FontLabels = mapOf("sans" to "Sans", "serif" to "Serif", "mono" to "Mono", "cairo" to "Cairo القاهرة", "amiri" to "Amiri أميري", "tehreer" to "Tehreer تحرير", "hand" to "Handwriting")
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -716,7 +686,7 @@ private fun TextBoxDialog(existing: TextItem?, defaultColor: Int, onDismiss: () 
 }
 
 @Composable
-private fun PaperDialog(onDismiss: () -> Unit, onPick: (String, Boolean) -> Unit) {
+private fun PaperDialog(showAllPages: Boolean, onDismiss: () -> Unit, onPick: (String, Boolean) -> Unit) {
     val c = D.c
     var all by remember { mutableStateOf(false) }
     val labels = mapOf("blank" to R.string.ink_paper_blank, "lined" to R.string.ink_paper_lined, "grid" to R.string.ink_paper_grid,
@@ -732,7 +702,7 @@ private fun PaperDialog(onDismiss: () -> Unit, onPick: (String, Boolean) -> Unit
                         Spacer(Modifier.width(12.dp)); Text(stringResource(labels[p]!!), color = c.ink)
                     }
                 }
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                if (showAllPages) Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(all, { all = it }); Text(stringResource(R.string.ink_apply_all_pages), color = c.ink)
                 }
             }

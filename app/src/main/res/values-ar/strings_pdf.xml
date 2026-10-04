@@ -41,4 +41,95 @@
     <string name="pdf_file_pages">%1$s (الصفحات %2$s)</string>
     <string name="pdf_folder_images">صور %1$s</string>
     <string name="pdf_image_name">صفحة %1$s</string>
+
+    <!-- Round 2: header, panel -->
+    <string name="pdf_search">بحث</string>
+    <string name="pdf_panel">الصفحات والفهرس</string>
+    <string name="pdf_outline">الفهرس</string>
+    <string name="pdf_no_outline">لا يحتوي ملف PDF هذا على فهرس</string>
+    <string name="pdf_expand">توسيع</string>
+    <string name="pdf_collapse">طي</string>
+    <string name="pdf_untitled_bookmark">بلا عنوان</string>
+
+    <!-- Round 2: search -->
+    <string name="pdf_search_hint">ابحث في المستند</string>
+    <string name="pdf_search_close">إغلاق البحث</string>
+    <string name="pdf_search_clear">مسح</string>
+    <string name="pdf_search_prev">النتيجة السابقة</string>
+    <string name="pdf_search_next">النتيجة التالية</string>
+    <string name="pdf_search_results">قائمة النتائج</string>
+    <string name="pdf_searching">جارٍ البحث… الصفحة %1$d من %2$d</string>
+    <string name="pdf_search_none">لا توجد نتائج</string>
+    <string name="pdf_search_capped">تُعرض أول %1$d نتيجة</string>
+    <string name="pdf_search_count_running">وُجد %1$d · الصفحة %2$d من %3$d</string>
+    <plurals name="pdf_search_count">
+        <item quantity="zero">لا توجد نتائج</item>
+        <item quantity="one">نتيجة واحدة</item>
+        <item quantity="two">نتيجتان</item>
+        <item quantity="few">%1$d نتائج</item>
+        <item quantity="many">%1$d نتيجة</item>
+        <item quantity="other">%1$d نتيجة</item>
+    </plurals>
+
+    <!-- Round 2: pages -->
+    <string name="pdf_pages_menu">الصفحات</string>
+    <string name="pdf_insert_blank">إدراج صفحة فارغة بعدها</string>
+    <string name="pdf_insert_blank_short">صفحة فارغة</string>
+    <string name="pdf_rotate_right">تدوير لليمين</string>
+    <string name="pdf_rotate_left">تدوير لليسار</string>
+    <string name="pdf_move_up">نقل للأعلى</string>
+    <string name="pdf_move_down">نقل للأسفل</string>
+    <string name="pdf_move_earlier">تقديم</string>
+    <string name="pdf_move_later">تأخير</string>
+    <string name="pdf_delete_page">حذف الصفحة…</string>
+    <string name="pdf_delete_page_title">حذف الصفحة %1$d؟</string>
+    <string name="pdf_delete_page_text">ستُحذف الصفحة وملاحظاتك عليها من ملف PDF هذا. لا يمكن التراجع عن ذلك.</string>
+    <string name="pdf_delete_pages_title">حذف الصفحات؟</string>
+    <plurals name="pdf_delete_pages_text">
+        <item quantity="zero">لن تُحذف أي صفحة.</item>
+        <item quantity="one">ستُحذف صفحة واحدة وملاحظاتك عليها من ملف PDF هذا. لا يمكن التراجع عن ذلك.</item>
+        <item quantity="two">ستُحذف صفحتان وملاحظاتك عليهما من ملف PDF هذا. لا يمكن التراجع عن ذلك.</item>
+        <item quantity="few">ستُحذف %1$d صفحات وملاحظاتك عليها من ملف PDF هذا. لا يمكن التراجع عن ذلك.</item>
+        <item quantity="many">ستُحذف %1$d صفحة وملاحظاتك عليها من ملف PDF هذا. لا يمكن التراجع عن ذلك.</item>
+        <item quantity="other">ستُحذف %1$d صفحة وملاحظاتك عليها من ملف PDF هذا. لا يمكن التراجع عن ذلك.</item>
+    </plurals>
+    <string name="pdf_organize_pages">ترتيب الصفحات</string>
+    <string name="pdf_organize_hint">انقر على الصفحات لتحديدها</string>
+    <plurals name="pdf_selected_pages">
+        <item quantity="zero">لم تُحدَّد أي صفحة</item>
+        <item quantity="one">صفحة واحدة محددة</item>
+        <item quantity="two">صفحتان محددتان</item>
+        <item quantity="few">%1$d صفحات محددة</item>
+        <item quantity="many">%1$d صفحة محددة</item>
+        <item quantity="other">%1$d صفحة محددة</item>
+    </plurals>
+    <string name="pdf_select_all">تحديد الكل</string>
+    <string name="pdf_select_none">إلغاء التحديد</string>
+    <string name="pdf_apply">تطبيق</string>
+    <string name="pdf_blank_page">فارغة</string>
+    <string name="pdf_page_moved">%1$d (كانت %2$d)</string>
+    <string name="pdf_updating_pages">جارٍ تحديث الصفحات…</string>
+    <string name="pdf_page_edit_failed">تعذّر تعديل الصفحات. لم يتغيّر الملف.</string>
+
+    <!-- Round 2: merge -->
+    <string name="pdf_merge">دمج مع ملفات PDF…</string>
+    <string name="pdf_merge_pick">اختر ملفات PDF لإضافتها</string>
+    <string name="pdf_merge_order">ترتيب الصفحات في ملف PDF الجديد</string>
+    <string name="pdf_merge_action">دمج</string>
+    <string name="pdf_merging">جارٍ دمج ملفات PDF…</string>
+    <string name="pdf_remove">إزالة</string>
+    <string name="pdf_file_name">اسم الملف</string>
+    <string name="pdf_file_merged">%1$s (مدمج)</string>
+    <string name="pdf_saved_title">تم الحفظ</string>
+
+    <!-- Round 2: signature -->
+    <string name="pdf_sign">توقيع…</string>
+    <string name="pdf_signature">توقيعك</string>
+    <string name="pdf_sign_place">وضعه على الصفحة</string>
+    <string name="pdf_sign_redraw">رسم توقيع جديد</string>
+    <string name="pdf_sign_delete">حذف</string>
+    <string name="pdf_sign_draw_title">ارسم توقيعك</string>
+    <string name="pdf_sign_here">وقّع هنا</string>
+    <string name="pdf_sign_clear">مسح</string>
+    <string name="pdf_sign_save_place">حفظ ووضع</string>
 </resources>

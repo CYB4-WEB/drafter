@@ -6,9 +6,6 @@ import java.io.File
 import java.io.InputStream
 import java.util.zip.ZipFile
 
-/** Thrown for files that are not OOXML packages (legacy .doc, encrypted documents). */
-class LegacyDocException : Exception()
-
 /**
  * Streaming .docx parser: ZipFile + XmlPullParser, no POI. Produces [DocxDoc] blocks in reading order.
  * Element names are matched by local name (namespace-aware parser), so both transitional and strict OOXML work.
