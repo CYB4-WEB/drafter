@@ -60,16 +60,7 @@ internal fun openLink(ctx: Context, link: String) {
 
 /** Current time, ticking on each minute boundary while composed. */
 @Composable
-internal fun rememberNow(): Long {
-    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            delay(MINUTE - System.currentTimeMillis() % MINUTE + 50)
-            now = System.currentTimeMillis()
-        }
-    }
-    return now
-}
+internal fun rememberNow(): Long = com.daftar.app.ui.rememberTickingNow(MINUTE)
 
 @Composable
 fun PlannerScreen() {
