@@ -1,6 +1,9 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
-    <path android:fillColor="#1E5FD0" android:pathData="M30,38a4,4 0,0 1,4 -4h14l5,5h21a4,4 0,0 1,4 4v28a4,4 0,0 1,-4 4H34a4,4 0,0 1,-4 -4z"/>
-    <path android:fillColor="#FFFFFF" android:pathData="M40,36l30,-5 3,18 -30,5z"/>
-    <path android:fillColor="#5B9BF8" android:pathData="M30,48a4,4 0,0 1,4 -4h40a4,4 0,0 1,4 4l-2,23a4,4 0,0 1,-4 4H36a4,4 0,0 1,-4 -4z"/>
+    <!-- Daftar folder mark (brand sheet), scaled into the adaptive-icon safe zone -->
+    <group android:scaleX="0.5" android:scaleY="0.5" android:translateX="14.5" android:translateY="18.6">
+        <path android:fillColor="#2563EB" android:pathData="M24,38C24,31.3 29.3,26 36,26L124,26C130.7,26 136,31.3 136,38L136,106C136,112.7 130.7,118 124,118L36,118C29.3,118 24,112.7 24,106Z"/>
+        <path android:fillColor="#3B82F6" android:pathData="M22,46C22,41.5 25.5,37.8 30,37.2L126,24.2C131.2,23.5 136,27.5 136,32.8L136,106C136,112.7 130.7,118 124,118L34,118C27.3,118 22,112.7 22,106Z"/>
+        <path android:fillColor="#60A5FA" android:fillAlpha="0.9" android:pathData="M32,38L128,25C132,24.5 134.5,27 134.5,30L134.5,38L32,50Z"/>
+    </group>
 </vector>

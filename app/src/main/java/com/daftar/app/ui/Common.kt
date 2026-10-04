@@ -108,13 +108,13 @@ fun kindIcon(k: Kind): ImageVector = when (k) {
 
 /** Distinct but quiet colour per file type (badge on file tiles). */
 fun kindColor(k: Kind): Color = when (k) {
-    Kind.NOTE -> Color(0xFF2F6FB0)
-    Kind.PDF -> Color(0xFFC8553D)
-    Kind.PPTX -> Color(0xFFD9822B)
-    Kind.DOCX -> Color(0xFF4B5BA8)
+    Kind.NOTE -> Color(0xFF6366F1)
+    Kind.PDF -> Color(0xFFEF4444)
+    Kind.PPTX -> Color(0xFFF97316)
+    Kind.DOCX -> Color(0xFF3B82F6)
     Kind.TEXT -> Color(0xFF10B981)
     Kind.IMAGE -> Color(0xFF3F8F5B)
-    Kind.AUDIO -> Color(0xFF7B5BA6)
+    Kind.AUDIO -> Color(0xFF8B5CF6)
     else -> Color(0xFF5E6B78)
 }
 
