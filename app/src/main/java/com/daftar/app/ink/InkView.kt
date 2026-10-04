@@ -347,6 +347,26 @@ class InkView(context: Context) : View(context) {
         if (cur != currentPage) { currentPage = cur; listener?.onPageChanged(cur, doc.pages.size) }
     }
 
+    /** Scroll so point [yPt] (page points) of page [i] sits in the upper third of the view (search matches). */
+    fun goToPage(i: Int, yPt: Float) {
+        if (i !in pageTops.indices) return
+        commitSelection()
+        scroller.forceFinished(true)
+        sy = (pageTops[i] + yPt) * scale - height / 3f
+        clamp(); updateCurrentPage()
+        settleSoon(); invalidate()
+    }
+
+    /** Pages whose cached background must be re-rendered (e.g. search highlights changed); old bitmap stays until then. */
+    private val staleBg = HashSet<Int>()
+
+    /** Re-render every page background from the source (keeps showing the old bitmaps meanwhile, no flicker). */
+    fun refreshBackground() {
+        staleBg.addAll(bgCache.keys)
+        tiles.values.forEach { it.bmp.recycle() }; tiles.clear()
+        settleSoon(); invalidate()
+    }
+
     fun goToPage(i: Int) {
         if (i !in pageTops.indices) return
         commitSelection()
@@ -640,7 +660,10 @@ class InkView(context: Context) : View(context) {
         val want = min((doc.pages[i].w * scale).toInt(), maxCacheWidth(i)).coerceAtLeast(64)
         val bmp = bgCache[i]
         if (bmp != null && !bmp.isRecycled) c.drawBitmap(bmp, null, r, bmpPaint)
-        if (bmp == null || (!scaling && abs(bmp.width - want) > want * 0.2f)) requestPage(i, want)
+        if (bmp == null || (!scaling && abs(bmp.width - want) > want * 0.2f) || (i in staleBg && !scaling)) {
+            if (i in staleBg) { staleBg.remove(i); pending.removeAll { it.startsWith("$i:") } }
+            requestPage(i, want)
+        }
         val t = tiles[i]
         if (t != null && t.scale == scale && !scaling) {
             val pl = r.left; val pt = r.top
@@ -733,7 +756,9 @@ class InkView(context: Context) : View(context) {
 
     private fun isPen(e: MotionEvent, idx: Int = 0): Boolean {
         val t = e.getToolType(idx)
-        return t == MotionEvent.TOOL_TYPE_STYLUS || t == MotionEvent.TOOL_TYPE_ERASER
+        if (t == MotionEvent.TOOL_TYPE_STYLUS || t == MotionEvent.TOOL_TYPE_ERASER) { com.daftar.app.data.Prefs.markStylusSeen(); return true }
+        // A mouse (emulator, DeX, Bluetooth mouse) writes like a pen; fingers are never pens.
+        return t == MotionEvent.TOOL_TYPE_MOUSE
     }
 
     @SuppressLint("ClickableViewAccessibility")
@@ -1447,11 +1472,11 @@ class InkView(context: Context) : View(context) {
     }
 
     /** Insert a picture at the visible centre; it floats selected so the user can move/resize it. */
-    fun addImage(b: Bitmap) {
+    fun addImage(b: Bitmap, widthPt: Float = 0f) {
         commitSelection()
         val i = currentPage.coerceIn(0, doc.pages.size - 1)
         val p = doc.pages[i]
-        val maxW = if (doc.infinite) width / scale * 0.6f else p.w * 0.6f
+        val maxW = if (widthPt > 0f) widthPt else if (doc.infinite) width / scale * 0.6f else p.w * 0.6f
         val w = min(maxW, b.width.toFloat())
         val h = w * b.height / b.width
         val (cx, cy) = visibleCenter(i)

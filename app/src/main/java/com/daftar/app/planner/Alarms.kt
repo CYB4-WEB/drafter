@@ -59,7 +59,8 @@ internal object Alarms {
     }
 
     fun scheduleEvent(c: Context, e: PlanEvent, now: Long = System.currentTimeMillis()) {
-        val skip = e.type == EventType.ASSIGNMENT && e.done
+        // Events copied to the phone calendar are reminded by the calendar app only (no double notifications).
+        val skip = (e.type == EventType.ASSIGNMENT && e.done) || e.deviceEventId != 0L
         val mins = e.reminders.distinct().take(MAX_SLOTS)
         for (slot in 0 until MAX_SLOTS) {
             val m = mins.getOrNull(slot)

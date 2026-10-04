@@ -199,7 +199,8 @@ object Planner {
         if (i < 0) return
         val cur = events[i]
         val next = cur.copy(deviceEventId = deviceId, deviceCalendarId = calendarId)
-        if (next != cur) { events[i] = next; changed(emptyList(), reschedule = false) }
+        // Reschedule this event: once it has a phone-calendar copy, the calendar app reminds instead of Daftar (user's choice).
+        if (next != cur) { events[i] = next; changed(emptyList(), reschedule = false); afterIo { Alarms.scheduleEvent(appCtx, next) } }
     }
 
     // ---------- phone calendar mirror (IO thread only) ----------
