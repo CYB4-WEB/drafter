@@ -277,6 +277,27 @@ internal fun InkEditorImpl(
         loaded = true
     }
 
+    /**
+     * Recognizes [strokes] as a calculation and solves it: (answer, the user wrote "="). Tries the handwriting language,
+     * then English digits; candidates beyond the first are tried too. [download] = may fetch the model (explicit Solve).
+     */
+    suspend fun solveInk(strokes: List<Stroke>, requireEquals: Boolean, download: Boolean): Pair<String, Boolean>? {
+        if (strokes.isEmpty()) return null
+        val langs = listOf(Prefs.inkLang, "en-US").distinct()
+        for ((k, lang) in langs.withIndex()) {
+            if (!Handwriting.isReady(lang)) {
+                if (!download || k > 0) continue
+                busy = ctx.getString(R.string.ink_downloading_model)
+                try { Handwriting.download(lang) } finally { busy = null }
+            }
+            for (t in Handwriting.candidates(lang, strokes)) {
+                val a = MathEval.answerFor(t, requireEquals) ?: continue
+                return a to t.contains('=')
+            }
+        }
+        return null
+    }
+
     view.listener = remember(view) {
         object : InkView.Listener {
             override fun onChanged() { ctl.pageCount = view.doc.pages.size; scheduleSave() }
@@ -349,27 +370,6 @@ internal fun InkEditorImpl(
                 toast(ctx, ctx.getString(R.string.ink_model_failed))
             }
         }
-    }
-
-    /**
-     * Recognizes [strokes] as a calculation and solves it: (answer, the user wrote "="). Tries the handwriting language,
-     * then English digits; candidates beyond the first are tried too. [download] = may fetch the model (explicit Solve).
-     */
-    suspend fun solveInk(strokes: List<Stroke>, requireEquals: Boolean, download: Boolean): Pair<String, Boolean>? {
-        if (strokes.isEmpty()) return null
-        val langs = listOf(Prefs.inkLang, "en-US").distinct()
-        for ((k, lang) in langs.withIndex()) {
-            if (!Handwriting.isReady(lang)) {
-                if (!download || k > 0) continue
-                busy = ctx.getString(R.string.ink_downloading_model)
-                try { Handwriting.download(lang) } finally { busy = null }
-            }
-            for (t in Handwriting.candidates(lang, strokes)) {
-                val a = MathEval.answerFor(t, requireEquals) ?: continue
-                return a to t.contains('=')
-            }
-        }
-        return null
     }
 
     fun solveSelection() {
