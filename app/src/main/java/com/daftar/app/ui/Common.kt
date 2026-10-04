@@ -47,6 +47,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.repeatOnLifecycle
 import com.daftar.app.R
 import com.daftar.app.data.Kind
 import com.daftar.app.ui.theme.D
@@ -216,4 +217,21 @@ fun ZoomControls(percent: Int, onOut: () -> Unit, onIn: () -> Unit, onFit: () ->
         IconButton(onClick = onIn, modifier = Modifier.size(40.dp)) { Icon(Icons.Rounded.Add, stringResource(R.string.zoom_in), tint = c.ink) }
         IconButton(onClick = onFit, modifier = Modifier.size(40.dp)) { Icon(Icons.Rounded.FitScreen, stringResource(R.string.zoom_fit), tint = c.muted) }
     }
+}
+
+/**
+ * Wall-clock time that updates every [periodMs] (aligned to the period) — but only while the screen is visible
+ * (lifecycle STARTED), so countdowns never wake the CPU in the background.
+ */
+@Composable
+fun rememberTickingNow(periodMs: Long): Long {
+    val owner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    return androidx.compose.runtime.produceState(System.currentTimeMillis(), owner, periodMs) {
+        owner.lifecycle.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
+            while (true) {
+                value = System.currentTimeMillis()
+                kotlinx.coroutines.delay(periodMs - System.currentTimeMillis() % periodMs + 50)
+            }
+        }
+    }.value
 }

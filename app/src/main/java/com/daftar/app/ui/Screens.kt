@@ -241,7 +241,7 @@ private fun UpcomingSection(items: List<Occurrence>) {
         TextButton(onClick = { Nav.tab(Screen.Planner) }) { Text(stringResource(R.string.see_all)) }
     }
     // Ticks every 20 s so the countdowns stay live (minutes resolution).
-    val now by produceState(System.currentTimeMillis()) { while (true) { kotlinx.coroutines.delay(20_000); value = System.currentTimeMillis() } }
+    val now = rememberTickingNow(60_000)
     Column(Modifier.fillMaxWidth().card(c).padding(4.dp)) {
         if (items.isEmpty()) EmptyState(Icons.Rounded.EventAvailable, stringResource(R.string.nothing_upcoming)) {
             OutlinedButton(onClick = { pane.push(Screen.EditEvent(null)) }) { Text(stringResource(R.string.add_event)) }
