@@ -151,3 +151,111 @@ zoom/header/memory/region decode; R11 caches bounded; R12 en + ar strings; R13 c
   background pagination, page counter, zoom pill + pinch + Ctrl+wheel, find (scrolls to page), outline, .doc / truncation banners.
 - `ImageScreen.kt`: hoisted zoom (pill / pinch / double-tap / Ctrl+wheel), base decode ≤ 2× view pixels (≤ heap/16), region tiles.
 - First `tools/compile.sh`: BUILD OK (verified the word/ classes were rebuilt).
+- Fixes after review: zoom-pill pivot in px (was dp); print layout runs under `Density(density, fontScale = 1)` so Android 14's
+  non-linear font scaling / the app text-size setting can't distort page geometry (UI labels keep the user scale);
+  continuation slices of LTR paragraphs keep LTR (`textDir`, shared by engine + renderer); CSV grid width capped below the
+  Compose constraint limit; `toPdf` rethrows `LegacyDocException` (convert-agent already maps it to its legacy-doc message).
+- Pen: `Modifier.stylusDoubleTap` (observe-only, stylus pointers) — S Pen double-tap toggles fit ↔ 2× in print layout,
+  100% ↔ 160% in read layout / CSV; the image viewer's double-tap works with pen and finger.
+- **Verification on the JVM** (scratchpad harness: kxml2 for android.util.Xml, test doubles for android.text / graphics / pdf):
+  - Test files (scratchpad `td/make_round2_testdata.py`): spec-built Word 97 `.doc` (OLE2 with the 1Table stream in the mini
+    stream, one CP1252-compressed piece + one UTF-16 piece, table, HYPERLINK field, page break, Arabic) and an encrypted one;
+    RTF in English (styles, colours, `\'e9`, `荤`, Symbol bullets, table, `\page`, field result) and Arabic (`\ansicpg1256`
+    `\'hh` bytes + `\uN`); Markdown (headings, emphasis, code, links, nested/task lists, quote, table, rule, Arabic, image);
+    CSV with quotes/commas/newlines/Arabic, `;`-CSV, TSV; Windows-1256 and UTF-16 text; a 12.8 MB log; a 20 000-row CSV.
+    (LibreOffice here has no Writer module, so it could not convert real files.)
+  - Readers: every file parses as expected (Arabic decoded from 1256 bytes / UTF-16 pieces, fields reduced to their result,
+    table cells/rows, headings → outline, encrypted .doc and the round-1 `legacy.doc` stub → old message, corrupt.docx → error).
+    Round-1 DOCX files still parse identically in the new point units (lab sheet: Letter page + margins from sectPr, page break
+    before the appendix). The 12.8 MB log is read in ~0.2 s as 3 275 chunks with the "first 8 MB" notice.
+  - Paginator invariants on all files: every paragraph covered exactly once by its slices (contiguous offsets, first/last flags),
+    no page over its content height, every table row placed once and header rows repeated: large_120_pages → 120 pages
+    (60–250 ms), big.csv → 466 pages, big.log → 2 047 pages.
+  - Export: toPdf drives the paginator + painter on every file (text, tables, the docx and Markdown pictures drawn), cancel
+    deletes the partial file, corrupt input returns false. writeDocx output checked with python3 (zipfile.testzip, every part
+    parsed, content types and relationships resolve, Title/Heading1 styles, 2 bidi paragraphs, 5 rtl runs, page break, line
+    break, tab) and round-tripped through DocLoader.
+- `tools/compile.sh`: BUILD OK after every batch (last run after all changes).
+
+## Decisions & limits
+- **One model, one paginator.** Geometry is in points. The print view and the PDF share `Paginator` (StaticLayout, linear +
+  sub-pixel metrics, BREAK_STRATEGY_SIMPLE, no hyphenation, fixed line pitch snapped to 1/8 pt). Compose renders the same
+  slices with TextMotion.Animated + LineBreak.Simple + LineHeightStyle(Proportional, Trim.None) and a floored pixel line height;
+  pagination measures 0.75 pt narrower than it draws, so a drawn slice is never taller than predicted (greedy breaking ⇒ a
+  narrower column never needs fewer lines). Pages are a min-height A4/Letter sheet, so a rare rounding mismatch only makes one
+  page a little taller instead of losing text. Slices are character ranges, not line indices, for the same reason.
+- **Page size** comes from the DOCX body `sectPr` (pgSz/pgMar, gutter added to the left) and RTF `\paperw…\margb`; text formats
+  use A4 with 2 cm margins. Pages are paper-white in both themes (like Word's print view); the read layout follows the theme.
+  100% = 96-dpi desktop size (A4 ≈ 794 dp); the first open is fit-width capped at 100%.
+- **Pagination rules:** widow/orphan control (no lone first/last line), headings keep with the next block, 1–2 line paragraphs
+  move whole, space-before dropped at the top of a page, tables split between rows with `w:tblHeader` / CSV header rows repeated,
+  a row taller than a page is placed alone (the sheet grows). Section breaks other than "continuous" start a new page.
+- **Tabs** have no tab stops in Compose, so in print/PDF a tab is drawn as one em space (offsets kept for find/highlights);
+  txt/log tabs are expanded to spaces at load time. The read layout keeps real tabs.
+- **Defaults:** print layout for docx/doc/rtf/md and txt < 512 KB; read layout for logs and bigger text (no pagination wait);
+  CSV/TSV always use the grid. Pagination runs on Dispatchers.Default, publishes pages progressively (first pages appear at
+  once, "Laying out pages…" row + "Page 3 of 12+" until done) and falls back to the read layout if it ever fails.
+- **Zoom:** print = page scale 20–400% (steps 25…400%, fit = width − 32 dp); read = text scale 50–250% (session-wide); CSV
+  50–300%. Pinch shows a graphicsLayer preview and reflows once at the end, keeping the point under the fingers; Ctrl+wheel and the
+  pill apply directly. The pinch detector only acts and consumes while ≥ 2 pointers are down, so one-finger scroll/fling, links
+  and long-press selection are untouched; a finger left down after a pinch is swallowed until lifted (no scroll jump).
+- **Large files:** txt/md/log read at most 8 MB, CSV 12 MB / 200 000 rows / 400 columns (notice banner with the shown size and
+  "Open in another app"); txt/log lines are grouped into ≤ 40-line paragraphs so lists stay lazy and light.
+- **Encodings:** BOM (UTF-8/16), BOM-less UTF-16 by zero-byte parity, strict UTF-8, otherwise Windows-1256 when high bytes are
+  dense (Arabic) else Windows-1252. RTF: font `\fcharset` / `\cpg` first, then `\ansicpg`; Symbol/Wingdings bytes mapped to bullets.
+- **Markdown:** CommonMark-style blocks (ATX/setext headings, fenced/indented code, quotes with nesting, lists with nesting,
+  ordered start numbers, task boxes, GFM tables with alignment, rules, local images next to the file) and inline emphasis,
+  strike, code, links, autolinks, bare URLs, `<br>`. Raw HTML other than `<br>` is shown as text.
+- **RTF limits:** pictures, headers/footers, footnotes and nested tables (`\nestcell`) are skipped; old-style `\pntext` bullets are
+  kept as text (bullet + tab); hyperlinks show their result text (not clickable).
+- **.doc limits:** text only (no styles, images or headings — so no outline); cell/row marks become a grid, but a cell with
+  several paragraphs at the start of a row, or an empty cell (indistinguishable from a row mark without the paragraph
+  properties), can shift cells to a new row. Word 6/95 files use fcMin..fcMac. If the piece table looks wrong, printable
+  UTF-16/CP1252 runs are used; under 20 letters → the old "can't be shown" message. Encrypted files (fEncrypted or an
+  EncryptedPackage stream) → old message. Shown read-only with a banner and "Open in another app".
+- **PDF:** PdfDocument + StaticLayout gives real, selectable text with the system fonts (Arabic shaped, RTL). Links are drawn
+  underlined but are not clickable (PdfDocument has no annotation API). Pictures are decoded per page at ~180 dpi and recycled.
+  `toPdf(src, out, onPage)` overload reports pages done and cancels when it returns false.
+- **writeDocx:** A4 with 1" margins, Normal/Title/Heading1/Heading2 styles, settings + app props; a paragraph is RTL (`w:bidi`)
+  when Arabic letters ≥ Latin; runs are split by direction and Arabic runs get `w:rtl`; '\n' → `w:br`, '\t' → `w:tab`,
+  "\u000C" (alone or inside a paragraph) → page break; illegal XML characters and lone surrogates are dropped.
+- **Image viewer memory:** base decode ≤ 2 × view pixels and ≤ heap/16 (power-of-two sampling, EXIF applied); when the shown
+  scale exceeds the base resolution, the visible region is decoded with BitmapRegionDecoder (oriented → raw rect mapping for all
+  8 EXIF orientations), sampled for the current zoom, capped at 2 × view pixels, debounced 160 ms after gestures, and recycled
+  on replace/dispose (decoder recycled off the main thread). Zoom 1× (fit) to max(8×, 4 screen px per image px), cap 48×.
+  The % on the pill is relative to the image's real pixels. PNG/WebP rotation now keeps full resolution when it fits in a
+  quarter of the heap (else ≤ 4096 px, as before).
+- **Header:** Convert is hidden in panes / windows narrower than 400 dp (it stays in the overflow via ViewerMenuItems).
+
+## Requests to lead
+- **None blocking.** Everything is inside word/** and strings_word.xml.
+- FYI convert-agent: `DocxExport.toPdf(src, out)` keeps its signature; the overload `toPdf(src, out) { pagesDone -> keepGoing }`
+  (already used in convert/Engines.kt) reports progress and cancels. Encrypted/unreadable legacy documents now **throw**
+  `LegacyDocException` from `toPdf` (your `mapError` turns it into `convert_err_legacy_doc`; inside `runCatching` it is just a
+  failure as before). `toPdf` handles docx, doc, rtf, md, txt, log, csv and tsv, so TXT/MD→PDF can also use it if you want the
+  same page look as the viewer. `DocLoader.load(f)` returns the shared model for any of these.
+- Optional: the round-2 test generator `make_round2_testdata.py` (Word 97 .doc, RTF en/ar, Markdown, CSV/TSV, 1256/UTF-16 text,
+  big log/CSV) lives in my scratchpad because docs/** is yours now; if you want it in `docs/testdata/`, tell me and I'll add it.
+- Optional DESIGN.md §4.6 update (your file): "Word — Print layout (paged sheets, page counter) by default, Read layout toggle,
+  zoom pill + pinch + Ctrl+wheel + pen double-tap; also opens txt/md/rtf/csv/tsv/log and legacy .doc (text only)".
+
+## Self-check
+- **R1 Print layout (real pages, margins, page breaks, white sheets with 1dp border, "Page 3 of 12"): PASS.** Pages use the
+  document's size and margins; hard breaks, page-break-before and section breaks honoured; counter pill while scrolling.
+  Verified by the paginator invariants; on-device look needs the lead's visual check (no emulator here).
+- **R2 Read (web) layout toggle: PASS.** View menu → Print layout / Read layout (flowing card view kept from round 1).
+- **R3 Header like Word: PASS.** Title, Find, View menu (print/read layout, outline), ConvertButton, overflow =
+  ViewerMenuItems (Share, Convert, side by side, new window, open in another app) + Copy all text.
+- **R4 Zoom (pill bottom-start, two-finger pinch without breaking scroll/selection, Ctrl+wheel; pen): PASS.** Pen uses the
+  pill or S Pen double-tap. Pinch/selection interplay is by design (Initial-pass, ≥ 2 pointers only); needs on-device feel test.
+- **R5 txt/md/rtf/csv/tsv/log: PASS.** All routed through WordScreen by `screenFor` → DocLoader; verified on the JVM.
+- **R6 Legacy .doc: PASS.** Piece-table text (+ fallback) read-only with banner + Open in another app; old message when
+  unreadable/encrypted. Verified on spec-built Word 97 files (no real Word file available on this machine).
+- **R7 Large files smooth: PASS.** Parsing on IO, pagination on Default with progressive pages, lazy lists, size caps.
+- **R8 toPdf for docx + text formats: PASS (logic) / device check pending.** Headings, runs, lists, bordered tables with
+  repeated headers, sampled images, RTL; drawing code exercised on the JVM with a recording PdfDocument double.
+- **R9 writeDocx valid, RTL-aware, page breaks: PASS.** python3 structure check + round trip.
+- **R10 Image viewer (hoisted zoom with pill/pinch/double-tap/Ctrl+wheel; header; bounded memory; region decoding): PASS.**
+- **R11 DocxImages LRU ≤ 1/8 maxMemory: PASS** (min(48 MB, maxMemory/8), entries bucketed by size, cleared on dispose).
+- **R12 Strings en + real Arabic: PASS** (31 keys each, formats match, none unused/undefined).
+- **R13 Compiles: PASS** (`tools/compile.sh` BUILD OK, word/ classes verified rebuilt).

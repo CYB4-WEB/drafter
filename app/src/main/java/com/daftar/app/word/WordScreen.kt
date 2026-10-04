@@ -102,7 +102,9 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.CompositionLocalProvider
 import com.daftar.app.R
 import com.daftar.app.ui.ConvertButton
 import com.daftar.app.ui.EmptyState
@@ -186,6 +188,7 @@ fun WordScreen(path: String) {
     val printH = rememberScrollState()
     val sheetH = rememberScrollState()
     val scope = rememberCoroutineScope()
+    val density = LocalDensity.current
 
     val mode = when {
         doc == null -> Mode.READ
@@ -232,7 +235,8 @@ fun WordScreen(path: String) {
             }
         }
     }
-    fun zoomTo(target: Float, at: Offset = Offset(viewportW / 2f, 0f)) { if (zoomValue > 0f) applyZoom(target / zoomValue, at) }
+    /** [at] is in pixels of the viewer; the pill zooms around the top centre so the current text stays in view. */
+    fun zoomTo(target: Float, at: Offset = Offset(viewportW * density.density / 2f, 0f)) { if (zoomValue > 0f) applyZoom(target / zoomValue, at) }
 
     // ---------------------------------------------------------------- pagination (background, published progressively)
     val pagesFlow = remember(doc) { MutableStateFlow<List<LaidPage>>(emptyList()) }
@@ -280,8 +284,6 @@ fun WordScreen(path: String) {
         if (doc?.sheet == null) emptyMap()
         else matches.groupBy { it.pid }.mapValues { e -> e.value.groupBy { it.col }.mapValues { c -> c.value.map { it.start until it.end } } }
     }
-    val density = LocalDensity.current
-
     /** y offset (px) of the slice holding [pid]/[offset] on its page, for scrolling the print layout. */
     fun sliceOffsetPx(pageIdx: Int, pid: Int, offset: Int): Int {
         val d = doc ?: return 0
@@ -427,7 +429,15 @@ fun WordScreen(path: String) {
                             Modifier.weight(1f).fillMaxHeight().clipToBounds()
                                 .pinchToZoom(onPinch = { z, c -> pivot = c; live = (live * z).coerceIn(0.25f, 5f) },
                                     onEnd = { val f = live; live = 1f; applyZoom(f, pivot) })
-                                .ctrlWheelZoom { f, at -> applyZoom(f, at) },
+                                .ctrlWheelZoom { f, at -> applyZoom(f, at) }
+                                .stylusDoubleTap { at ->
+                                    // Pen double-tap: fit width ↔ 2× (print), 100% ↔ 160% (read / sheet)
+                                    val target = when (mode) {
+                                        Mode.PRINT -> if (zoomValue < printFit() * 1.4f) printFit() * 2f else printFit()
+                                        else -> if (zoomValue < 1.3f) 1.6f else 1f
+                                    }
+                                    zoomTo(target, at)
+                                },
                         ) {
                             val w = maxWidth.value
                             LaunchedEffect(w) {
@@ -566,12 +576,14 @@ private fun PrintView(doc: DocxDoc, pages: List<LaidPage>, done: Boolean, zoom: 
     BoxWithConstraints(Modifier.fillMaxSize().background(c.bg)) {
         val density = LocalDensity.current
         val k = zoom * PRINT_DP_PER_PT * density.density
-        val scale = remember(k, density) { PaperScale(k, density.density, density.fontScale) }
+        // The page is geometry, not UI text: font scale 1 keeps sizes linear (Android 14 scales large fonts non-linearly).
+        val paperDensity = remember(density.density) { Density(density.density, 1f) }
+        val scale = remember(k, density.density) { PaperScale(k, density.density, 1f) }
         val pageW = doc.page.w * zoom * PRINT_DP_PER_PT
         val gutter = 16f
         val contentW = max(maxWidth.value, pageW + 2 * gutter)
         val scrollsX = pageW + 2 * gutter > maxWidth.value + 0.5f
-        SelectionContainer {
+        CompositionLocalProvider(LocalDensity provides paperDensity) { SelectionContainer {
             Box(Modifier.fillMaxSize().then(if (scrollsX) Modifier.horizontalScroll(h) else Modifier)) {
                 LazyColumn(
                     state = list,
@@ -582,15 +594,17 @@ private fun PrintView(doc: DocxDoc, pages: List<LaidPage>, done: Boolean, zoom: 
                 ) {
                     items(count = pages.size, key = { it }) { i -> PrintPage(pages[i], doc.page, scale, images, hits) }
                     if (!done) item(key = "more") {
-                        Row(Modifier.padding(24.dp), verticalAlignment = Alignment.CenterVertically) {
-                            CircularProgressIndicator(Modifier.size(20.dp), color = c.accent, strokeWidth = 2.dp)
-                            Spacer(Modifier.width(12.dp))
-                            Text(stringResource(R.string.word_paginating), color = c.muted, style = MaterialTheme.typography.bodyMedium)
+                        CompositionLocalProvider(LocalDensity provides density) {
+                            Row(Modifier.padding(24.dp), verticalAlignment = Alignment.CenterVertically) {
+                                CircularProgressIndicator(Modifier.size(20.dp), color = c.accent, strokeWidth = 2.dp)
+                                Spacer(Modifier.width(12.dp))
+                                Text(stringResource(R.string.word_paginating), color = c.muted, style = MaterialTheme.typography.bodyMedium)
+                            }
                         }
                     }
                 }
             }
-        }
+        } }
     }
 }
 

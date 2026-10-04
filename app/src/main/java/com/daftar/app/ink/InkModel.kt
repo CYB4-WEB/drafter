@@ -8,7 +8,8 @@ import android.util.Base64
 import com.daftar.app.data.json
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
-import kotlinx.serialization.encodeToString
+import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.json.encodeToStream
 import java.io.ByteArrayOutputStream
 import java.io.File
 
@@ -100,8 +101,15 @@ data class TextItem(
     val color: Int = 0xFF1C1B19.toInt(),
     val font: String = "sans",
     val bold: Boolean = false,
+    /** Paragraph alignment: [ALIGN_START] (follows the text direction, Arabic → right), [ALIGN_CENTER], [ALIGN_END]. */
+    val align: Int = ALIGN_START,
 ) {
     @Transient var layout: StaticLayout? = null
+    companion object {
+        const val ALIGN_START = 0
+        const val ALIGN_CENTER = 1
+        const val ALIGN_END = 2
+    }
     fun bounds() = RectF(x, y, x + w, y + (layout?.height?.toFloat() ?: (size * 1.4f)))
 }
 
@@ -227,9 +235,11 @@ class InkDoc(
     /** Whiteboard mode: one page that grows in every direction (OneNote style). */
     var infinite: Boolean = false,
 ) {
+    /** Writes atomically (temp file + rename), streaming the JSON so a big document never exists twice as a String. */
+    @OptIn(ExperimentalSerializationApi::class)
     fun save(f: File) {
         val tmp = File(f.parentFile, f.name + ".tmp")
-        tmp.writeText(json.encodeToString(this))
+        tmp.outputStream().buffered(64 * 1024).use { json.encodeToStream(this, it) }
         if (!tmp.renameTo(f)) { f.delete(); tmp.renameTo(f) }
     }
 
