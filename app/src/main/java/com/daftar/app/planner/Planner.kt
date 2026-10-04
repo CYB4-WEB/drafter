@@ -7,7 +7,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.setValue
+import com.daftar.app.R
 import com.daftar.app.data.json
+import com.daftar.app.ui.toast
 import com.daftar.app.widget.Widgets
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
@@ -36,7 +38,21 @@ data class PlanEvent(
     val reminders: List<Int> = listOf(60),   // minutes before start
     val folder: String = "",         // optional linked library folder (absolute path)
     val done: Boolean = false,       // assignments can be ticked off
+    /** The user wants a copy in the phone's calendar (Samsung / Google Calendar). */
+    val calendarSync: Boolean = false,
+    /** CalendarContract event id of the phone copy (0 = none). Maintained by the store, not by editors. */
+    val deviceEventId: Long = 0,
+    /** Calendar holding the phone copy (0 = none). */
+    val deviceCalendarId: Long = 0,
+    /** Set on events copied from the phone calendar so the same item is not imported twice. */
+    val importKey: String = "",
 )
+
+/** True when two versions differ in anything the phone-calendar copy shows. */
+internal fun calendarFieldsDiffer(a: PlanEvent, b: PlanEvent): Boolean =
+    a.title != b.title || a.start != b.start || a.end != b.end || a.allDay != b.allDay || a.weekly != b.weekly ||
+        a.until != b.until || a.location != b.location || a.link != b.link || a.description != b.description ||
+        a.reminders != b.reminders
 
 /** One concrete occurrence (weekly events expand to many). */
 data class Occurrence(val event: PlanEvent, val start: Long, val end: Long)
@@ -69,6 +85,7 @@ object Planner {
         if (isReady) return
         appCtx = ctx.applicationContext
         file = File(appCtx.filesDir, "planner.json")
+        CalendarPrefs.init(appCtx)
         // Small file, needed synchronously so Home / widgets can render immediately.
         runCatching {
             if (file.exists()) events.addAll(json.decodeFromString<List<PlanEvent>>(file.readText()))
@@ -96,15 +113,31 @@ object Planner {
         return id
     }
 
+    /**
+     * Insert or replace [e]. The phone-calendar link (deviceEventId / deviceCalendarId) is owned by the store:
+     * an editor holding an old copy can never overwrite it. The phone copy follows automatically.
+     */
     fun upsert(e: PlanEvent) {
         val i = events.indexOfFirst { it.id == e.id }
-        if (i >= 0) events[i] = e else events.add(e)
-        changed(listOf(e.id))
+        val old = if (i >= 0) events[i] else null
+        val merged = if (old != null) e.copy(deviceEventId = old.deviceEventId, deviceCalendarId = old.deviceCalendarId) else e
+        if (i >= 0) events[i] = merged else events.add(merged)
+        val mirror = (merged.calendarSync || merged.deviceEventId != 0L) &&
+            (old == null || old.calendarSync != merged.calendarSync || calendarFieldsDiffer(old, merged) || merged.deviceEventId == 0L)
+        changed(listOf(merged.id), mirror = if (mirror) listOf(merged.id) else emptyList())
+    }
+
+    /** Adds many new events at once (calendar import). */
+    fun addAll(list: List<PlanEvent>) {
+        if (list.isEmpty()) return
+        events.addAll(list)
+        changed(list.map { it.id }, mirror = list.filter { it.calendarSync }.map { it.id })
     }
 
     fun delete(id: Long) {
+        val old = events.firstOrNull { it.id == id }
         events.removeAll { it.id == id }
-        changed(listOf(id))
+        changed(listOf(id), removedDevice = mapOf(id to (old?.deviceEventId ?: 0L)))
     }
 
     fun setDone(id: Long, done: Boolean) {
@@ -112,6 +145,90 @@ object Planner {
         if (i < 0) return
         events[i] = events[i].copy(done = done)
         changed(listOf(id))
+    }
+
+    /** Turns the phone-calendar copy on/off for these events (on = insert/update, off = remove the copy). */
+    fun setCalendarSync(ids: Collection<Long>, on: Boolean) {
+        val touched = ArrayList<Long>()
+        for (id in ids) {
+            val i = events.indexOfFirst { it.id == id }
+            if (i < 0) continue
+            if (events[i].calendarSync != on) events[i] = events[i].copy(calendarSync = on)
+            touched.add(id)
+        }
+        if (touched.isNotEmpty()) changed(touched, mirror = touched, reschedule = false)
+    }
+
+    fun setCalendarSync(id: Long, on: Boolean) = setCalendarSync(listOf(id), on)
+
+    /** Pushes every event that wants a phone copy but has none yet (e.g. after calendar access was granted). */
+    fun syncPending() {
+        val ids = events.filter { (it.calendarSync && it.deviceEventId == 0L) || (!it.calendarSync && it.deviceEventId != 0L) }.map { it.id }
+        if (ids.isNotEmpty()) io.execute { mirrorAll(ids) }
+    }
+
+    /**
+     * Copies deleted in the calendar app: clear the link and switch sync off for that event
+     * (respect the user's deletion; turning the switch on again re-adds it).
+     */
+    fun reconcileDevice(ctx: Context) {
+        val linked = events.filter { it.deviceEventId != 0L }.map { it.id to it.deviceEventId }
+        if (linked.isEmpty() || !DeviceCalendar.canRead(ctx)) return
+        val c = ctx.applicationContext
+        io.execute {
+            val alive = DeviceCalendar.existing(c, linked.map { it.second }) ?: return@execute
+            val gone = linked.filter { (id, dev) -> dev !in alive && (linkCache[id] ?: dev) == dev }
+            if (gone.isEmpty()) return@execute
+            gone.forEach { linkCache.remove(it.first) }
+            main.post {
+                var any = false
+                for ((id, dev) in gone) {
+                    val i = events.indexOfFirst { it.id == id }
+                    if (i >= 0 && events[i].deviceEventId == dev) {
+                        events[i] = events[i].copy(calendarSync = false, deviceEventId = 0, deviceCalendarId = 0); any = true
+                    }
+                }
+                if (any) changed(emptyList(), reschedule = false)
+            }
+        }
+    }
+
+    /** Stores the phone-copy link written by the IO thread (no further sync). */
+    private fun setLink(id: Long, deviceId: Long, calendarId: Long, sync: Boolean? = null) {
+        val i = events.indexOfFirst { it.id == id }
+        if (i < 0) return
+        val cur = events[i]
+        val next = cur.copy(deviceEventId = deviceId, deviceCalendarId = calendarId, calendarSync = sync ?: cur.calendarSync)
+        if (next != cur) { events[i] = next; changed(emptyList(), reschedule = false) }
+    }
+
+    // ---------- phone calendar mirror (IO thread only) ----------
+    /** Latest device id per event as known by the IO thread (newer than the list while a link write is in flight). */
+    private val linkCache = HashMap<Long, Long>()
+
+    private fun mirrorAll(ids: List<Long>) {
+        val list = snapshot()
+        for (id in ids) list.firstOrNull { it.id == id }?.let { mirror(appCtx, it) }
+    }
+
+    private fun mirror(c: Context, e: PlanEvent) {
+        val known = linkCache[e.id] ?: e.deviceEventId
+        if (!DeviceCalendar.permitted(c)) return // stays pending; syncPending() runs once access is granted
+        if (!e.calendarSync) {
+            if (known != 0L) {
+                DeviceCalendar.delete(c, known)
+                linkCache[e.id] = 0L
+                main.post { setLink(e.id, 0, 0) }
+            }
+            return
+        }
+        val r = DeviceCalendar.push(c, e, known)
+        if (r == null) {
+            main.post { toast(c, localized(c).getString(R.string.planner_cal_failed)) }
+            return
+        }
+        linkCache[e.id] = r.first
+        if (r.first != e.deviceEventId || r.second != e.deviceCalendarId) main.post { setLink(e.id, r.first, r.second) }
     }
 
     /** Runs [block] on the planner IO thread after all queued writes (used by receivers with goAsync). */
@@ -124,7 +241,12 @@ object Planner {
         io.execute { Alarms.rescheduleAll(c, list); Widgets.refreshNow(c) }
     }
 
-    private fun changed(ids: List<Long>) {
+    private fun changed(
+        ids: List<Long>,
+        mirror: List<Long> = emptyList(),
+        removedDevice: Map<Long, Long> = emptyMap(),
+        reschedule: Boolean = true,
+    ) {
         version++
         val list = events.toList()
         synchronized(lock) { saved = list }
@@ -135,11 +257,18 @@ object Planner {
                 tmp.writeText(json.encodeToString(list))
                 if (!tmp.renameTo(file)) { file.delete(); tmp.renameTo(file) }
             }
-            for (id in ids) {
-                val e = list.firstOrNull { it.id == id }
-                if (e == null) Alarms.cancelEvent(c, id) else Alarms.scheduleEvent(c, e)
+            if (reschedule) {
+                for (id in ids) {
+                    val e = list.firstOrNull { it.id == id }
+                    if (e == null) Alarms.cancelEvent(c, id) else Alarms.scheduleEvent(c, e)
+                }
+                Widgets.refreshNow(c, list)
             }
-            Widgets.refreshNow(c, list)
+            for ((id, dev) in removedDevice) {
+                val d = linkCache.remove(id) ?: dev
+                if (d != 0L && DeviceCalendar.permitted(c)) DeviceCalendar.delete(c, d)
+            }
+            for (id in mirror) list.firstOrNull { it.id == id }?.let { runCatching { mirror(c, it) } }
         }
     }
 
