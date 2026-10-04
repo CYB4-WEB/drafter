@@ -12,7 +12,8 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.File
 
-enum class Kind { FOLDER, NOTE, PDF, PPTX, DOCX, IMAGE, AUDIO, OTHER }
+/** TEXT = plain/markup text read in the Word viewer (txt, md, rtf, csv…). */
+enum class Kind { FOLDER, NOTE, PDF, PPTX, DOCX, TEXT, IMAGE, AUDIO, OTHER }
 
 @Serializable
 data class FolderMeta(val color: Int = 5, val icon: String = "folder", val desc: String = "")
@@ -67,7 +68,8 @@ object Storage {
         NOTE_EXT -> Kind.NOTE
         "pdf" -> Kind.PDF
         "pptx" -> Kind.PPTX
-        "docx" -> Kind.DOCX
+        "docx", "doc" -> Kind.DOCX
+        "txt", "md", "markdown", "rtf", "csv", "tsv", "log" -> Kind.TEXT
         "png", "jpg", "jpeg", "webp", "gif", "bmp", "heic" -> Kind.IMAGE
         "m4a", "mp3", "wav", "aac", "ogg" -> Kind.AUDIO
         else -> Kind.OTHER

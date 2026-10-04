@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.Article
 import androidx.compose.material.icons.automirrored.rounded.Assignment
 import androidx.compose.material.icons.automirrored.rounded.MenuBook
 import androidx.compose.material.icons.rounded.*
@@ -99,6 +100,7 @@ fun kindIcon(k: Kind): ImageVector = when (k) {
     Kind.PDF -> Icons.Rounded.PictureAsPdf
     Kind.PPTX -> Icons.Rounded.Slideshow
     Kind.DOCX -> Icons.Rounded.Description
+    Kind.TEXT -> Icons.AutoMirrored.Rounded.Article
     Kind.IMAGE -> Icons.Rounded.Image
     Kind.AUDIO -> Icons.Rounded.Mic
     Kind.OTHER -> Icons.Rounded.InsertDriveFile
@@ -110,6 +112,7 @@ fun kindColor(k: Kind): Color = when (k) {
     Kind.PDF -> Color(0xFFC8553D)
     Kind.PPTX -> Color(0xFFD9822B)
     Kind.DOCX -> Color(0xFF4B5BA8)
+    Kind.TEXT -> Color(0xFF10B981)
     Kind.IMAGE -> Color(0xFF3F8F5B)
     Kind.AUDIO -> Color(0xFF7B5BA6)
     else -> Color(0xFF5E6B78)
@@ -196,5 +199,21 @@ fun Chip(text: String, selected: Boolean, onClick: () -> Unit, leading: ImageVec
     ) {
         if (leading != null) Icon(leading, null, Modifier.size(18.dp), tint = if (selected) (tint ?: c.accent) else c.muted)
         Text(text, style = MaterialTheme.typography.labelMedium, color = if (selected) c.ink else c.muted, maxLines = 1)
+    }
+}
+
+/** Floating zoom pill used by every viewer: − / percent (tap = fit) / + / fit. */
+@Composable
+fun ZoomControls(percent: Int, onOut: () -> Unit, onIn: () -> Unit, onFit: () -> Unit, modifier: Modifier = Modifier) {
+    val c = D.c
+    Row(
+        modifier.background(c.surface, RoundedCornerShape(14.dp)).border(1.dp, c.line, RoundedCornerShape(14.dp)).padding(horizontal = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconButton(onClick = onOut, modifier = Modifier.size(40.dp)) { Icon(Icons.Rounded.Remove, stringResource(R.string.zoom_out), tint = c.ink) }
+        Text("$percent%", style = MaterialTheme.typography.labelMedium, color = c.ink, maxLines = 1,
+            modifier = Modifier.clickable(onClick = onFit).padding(horizontal = 4.dp, vertical = 8.dp))
+        IconButton(onClick = onIn, modifier = Modifier.size(40.dp)) { Icon(Icons.Rounded.Add, stringResource(R.string.zoom_in), tint = c.ink) }
+        IconButton(onClick = onFit, modifier = Modifier.size(40.dp)) { Icon(Icons.Rounded.FitScreen, stringResource(R.string.zoom_fit), tint = c.muted) }
     }
 }

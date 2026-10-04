@@ -12,6 +12,9 @@ import java.io.File
  * @param isNote  true for notebooks (pages can be added/removed, paper styles, audio recording)
  * @param extraActions extra top-bar buttons (e.g. PDF tools menu)
  * @param sidePanel optional panel (end side on wide screens, bottom sheet on narrow ones)
+ * @param sidePanelAtStart show [sidePanel] on the start side (PowerPoint-style slide rail) instead of the end
+ * @param sidePanelOpen whether [sidePanel] starts open (wide screens only)
+ * @param bottomPanel optional collapsible panel under the canvas (e.g. speaker notes); toggled by its own top-bar button
  */
 @Composable
 fun InkEditorScaffold(
@@ -24,6 +27,11 @@ fun InkEditorScaffold(
     extraActions: @Composable RowScope.(EditorController) -> Unit = {},
     sidePanel: (@Composable (EditorController) -> Unit)? = null,
     sidePanelLabel: String = "",
+    sidePanelAtStart: Boolean = false,
+    sidePanelOpen: Boolean = false,
+    bottomPanel: (@Composable (EditorController) -> Unit)? = null,
+    bottomPanelLabel: String = "",
 ) {
-    InkEditorImpl(title, inkFile, source, isNote, onBack, onRename, extraActions, sidePanel, sidePanelLabel)
+    InkEditorImpl(title, inkFile, source, isNote, onBack, onRename, extraActions, sidePanel, sidePanelLabel,
+        sidePanelAtStart, sidePanelOpen, bottomPanel, bottomPanelLabel)
 }

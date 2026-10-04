@@ -126,4 +126,14 @@
     <string name="set_daily_desc">A notification each morning with today\'s classes and deadlines</string>
     <string name="set_storage">Storage</string>
     <string name="set_storage_stats">%1$d folders · %2$d files · %3$s</string>
+    <!-- round 2 shared -->
+    <string name="kind_text">Text</string>
+    <string name="zoom_in">Zoom in</string>
+    <string name="zoom_out">Zoom out</string>
+    <string name="zoom_fit">Fit to width</string>
+    <string name="convert">Convert</string>
+    <string name="open_side_by_side">Open side by side</string>
+    <string name="open_new_window">Open in new window</string>
+    <string name="pick_second_file">Choose a file to open next to this one</string>
+    <string name="select_n">Select (%1$d)</string>
 </resources>
