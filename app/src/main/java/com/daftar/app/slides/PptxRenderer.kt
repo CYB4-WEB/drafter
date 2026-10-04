@@ -113,7 +113,11 @@ class PptxRenderer(private val deck: Pptx, private val labels: Labels) {
     private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
     private val bmpPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
 
-    fun clearCaches() { images.clear(); synchronized(textCache) { textCache.clear() } }
+    fun clearCaches(recycle: Boolean = false) {
+        images.clear(recycle)
+        synchronized(textCache) { textCache.clear() }
+        markImages()
+    }
 
     /** Draw slide [i] on [c], whose current matrix maps slide points to pixels at [pxPerPt]. */
     fun render(i: Int, c: Canvas, pxPerPt: Float) {
@@ -652,6 +656,7 @@ class PptxRenderer(private val deck: Pptx, private val labels: Labels) {
         val fh = max(0.01f, 1f - t - b)
         val bmp = images.get(media, dst.width() * ctx.px / fw, dst.height() * ctx.px / fh)
         if (bmp == null) { placeholderBox(c, dst, labels.image); return }
+        if (drawn.add(bmp)) drawnBytes += bmp.allocationByteCount
         val bw = bmp.width.toFloat(); val bh = bmp.height.toFloat()
         // Source window (may extend outside the bitmap for negative crops) mapped onto dst.
         val sl = bw * l; val st = bh * t; val sr = bw * (1f - rr); val sb = bh * (1f - b)
