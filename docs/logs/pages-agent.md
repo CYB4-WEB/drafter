@@ -110,3 +110,16 @@ small self-contained public page operations in `InkView`.
    page after "week:2026-10-05" is the next week; the private `PaperDialog` + `Papers` in InkEditorImpl are now unused
    and can be deleted.
 4. Please check on the Tab: drag-reorder feel, thumbnails of image-heavy pages, Arabic week/month headers.
+- Compile: `tools/compile.sh` → **BUILD OK** (whole app, after ink4-agent's in-progress InkView errors cleared).
+
+## Self-check
+1. Page manager — **PASS** (compiled; not device-tested): ⋮ "Pages" + page chip (notes); full-screen thumbnail grid
+   (paper + content, off main thread, byte-bounded LRU, recycled on close); tap → page; long-press-drag reorder +
+   Move earlier/later (+ TalkBack actions); multi-select delete (confirm, never all pages), duplicate, template, rotate
+   (content kept); copy / move to another library note (load → append → save); insert before/after with template
+   chooser + orientation; extract to new note; every change here = one `applyPages` undo step (Undo/Redo in panel too).
+2. Templates — **PASS**: graph, isometric dots, week (locale names, first-day aware, notes box, dated key), day
+   (07–22), month, to-do, music, lined wide/narrow, storyboard; Cornell unchanged; vector, clipped/culled, light+dark,
+   RTL-mirrored; old keys untouched; chooser with real mini previews.
+3. Paper dialog / Settings — **PARTIAL**: paper dialog shows all templates with previews (PASS); Settings default
+   paper still works for the 5 old keys, picking the new ones there needs lead request 1.

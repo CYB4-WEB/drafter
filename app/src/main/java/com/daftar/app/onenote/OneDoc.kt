@@ -115,6 +115,7 @@ object OneReader {
         val store = OneStore.open(f)
         if (store.encrypted) return OneSection(name, emptyList(), OneError.ENCRYPTED, f)
         val pages = SectionBuilder(store).pages()
+        if (pages.isEmpty() && store.legacyVersion) throw OneException(OneError.OLD_FORMAT)
         return OneSection(name, pages, null, f)
     }
 

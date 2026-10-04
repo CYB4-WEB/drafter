@@ -10,6 +10,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
@@ -113,6 +114,8 @@ class MainActivity : AppCompatActivity() {
         i.getStringExtra(EXTRA_ACTION)?.let { a ->
             when (a) {
                 ACTION_PLANNER -> Nav.tab(Screen.Planner)
+                "study" -> Nav.tab(Screen.Study)
+                "study_review" -> { Nav.tab(Screen.Study); Nav.push(Screen.Review(null)) }
                 ACTION_ADD_EVENT -> { Nav.tab(Screen.Planner); Nav.push(Screen.EditEvent(null)) }
                 else -> { Nav.tab(Screen.Home); pendingAction.value = a }
             }
@@ -203,7 +206,8 @@ private fun AppShell(tiny: Boolean) {
         if (showChrome && !compact && !tiny) Sidebar(sideItems, ::selected)
         Column(Modifier.weight(1f).fillMaxHeight()) {
             Box(Modifier.weight(1f)) {
-                AnimatedContent(current, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "nav") { s -> Route(s) }
+                AnimatedContent(current, transitionSpec = { fadeIn(tween(140)) togetherWith fadeOut(tween(90)) }, label = "nav") { s -> Route(s) }
+                com.daftar.app.study.FocusChip(Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 6.dp))
             }
             if (showChrome && (compact || tiny)) {
                 val colors = NavigationBarItemDefaults.colors(

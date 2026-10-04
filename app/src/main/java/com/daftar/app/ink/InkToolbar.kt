@@ -1,6 +1,5 @@
 package com.daftar.app.ink
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -22,8 +21,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
-import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -168,7 +166,11 @@ internal fun InkToolbar(
     val big = Prefs.largeControls
     val btn = if (big) 48.dp else 42.dp
     val icon = if (big) 26.dp else 22.dp
-    var stylePopup by remember { mutableIntStateOf(0) }   // 0 closed, 1 from the pen button, 2 from the style chip
+    // pre-render the five pen previews off the main thread, so the style popup opens instantly
+    val dens = androidx.compose.ui.platform.LocalDensity.current.density
+    LaunchedEffect(st.penColor, dens) {
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { PenStyle.all.forEach { PenPreviews.get(it, st.penColor, dens) } }
+    }
 
     @Composable
     fun ToolRow(content: @Composable RowScope.() -> Unit) {
@@ -185,12 +187,7 @@ internal fun InkToolbar(
 
     @Composable
     fun RowScope.Tools() {
-        Box {
-            ToolButton(penStyleIcon(st.penStyle), stringResource(R.string.ink_tool_pen), st.tool == Tool.PEN, btn, icon) {
-                if (st.tool == Tool.PEN) stylePopup = 1 else { st.selectTool(Tool.PEN); onToolChanged() }
-            }
-            PenStyleMenu(stylePopup == 1, st, onDismiss = { stylePopup = 0 }) { st.selectStyle(it); stylePopup = 0; onToolChanged() }
-        }
+        PenButton(st, btn, icon, onToolChanged)
         listOf(
             Triple(Tool.HIGHLIGHTER, Icons.Rounded.BorderColor, R.string.ink_tool_highlighter),
             Triple(Tool.ERASER, Icons.Rounded.CleaningServices, R.string.ink_tool_eraser),
@@ -216,19 +213,7 @@ internal fun InkToolbar(
     @Composable
     fun RowScope.Style(wide: Boolean) {
         if (st.tool == Tool.PEN) {
-            Box {
-                Row(
-                    Modifier.padding(horizontal = 2.dp).height(btn - 6.dp).clip(RoundedCornerShape(12.dp)).background(c.surfaceAlt)
-                        .clickable { stylePopup = 2 }.padding(horizontal = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(penStyleIcon(st.penStyle), null, tint = c.ink, modifier = Modifier.size(icon - 4.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text(stringResource(penStyleName(st.penStyle)), style = MaterialTheme.typography.labelMedium, color = c.ink, maxLines = 1)
-                    Icon(Icons.Rounded.ExpandMore, stringResource(R.string.ink_pen_type), tint = c.muted, modifier = Modifier.size(18.dp))
-                }
-                PenStyleMenu(stylePopup == 2, st, onDismiss = { stylePopup = 0 }) { st.selectStyle(it); stylePopup = 0; onToolChanged() }
-            }
+            StyleChip(st, btn, icon, onToolChanged)
             Spacer(Modifier.width(4.dp))
         }
         if (st.hasColors) {
@@ -314,41 +299,91 @@ private fun SizeBar(st: InkToolState, wide: Boolean, big: Boolean, onChanged: ()
 
 private fun abs1(v: Float) = if (v < 0f) -v else v
 
-/** Pen type popup: a real rendered sample stroke + name per style. */
+/** Pen button: tap selects the pen; tapping it again opens the style popup (its open state is local: nothing else recomposes). */
 @Composable
-private fun PenStyleMenu(open: Boolean, st: InkToolState, onDismiss: () -> Unit, onPick: (Int) -> Unit) {
+private fun PenButton(st: InkToolState, btn: Dp, icon: Dp, onToolChanged: () -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        ToolButton(penStyleIcon(st.penStyle), stringResource(R.string.ink_tool_pen), st.tool == Tool.PEN, btn, icon) {
+            if (st.tool == Tool.PEN) open = true else { st.selectTool(Tool.PEN); onToolChanged() }
+        }
+        if (open) PenStyleMenu(st, onDismiss = { open = false }) { st.selectStyle(it); open = false; onToolChanged() }
+    }
+}
+
+/** "Ballpoint ▾" chip in the style row. */
+@Composable
+private fun StyleChip(st: InkToolState, btn: Dp, icon: Dp, onToolChanged: () -> Unit) {
     val c = D.c
-    DropdownMenu(open, onDismiss) {
-        Text(stringResource(R.string.ink_pen_type), style = MaterialTheme.typography.labelMedium, color = c.muted,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
-        PenStyle.all.forEach { s ->
-            val sel = s == st.penStyle
-            Row(
-                Modifier.fillMaxWidth().widthIn(min = 230.dp).padding(horizontal = 6.dp).clip(RoundedCornerShape(10.dp))
-                    .background(if (sel) c.accent.copy(alpha = 0.12f) else Color.Transparent)
-                    .clickable { onPick(s) }.padding(horizontal = 10.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(penStyleIcon(s), null, tint = if (sel) c.accent else c.muted, modifier = Modifier.size(20.dp))
-                Spacer(Modifier.width(10.dp))
-                Text(stringResource(penStyleName(s)), color = c.ink, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-                Spacer(Modifier.width(10.dp))
-                StylePreview(s, st.penColor)
+    var open by remember { mutableStateOf(false) }
+    Box {
+        Row(
+            Modifier.padding(horizontal = 2.dp).height(btn - 6.dp).clip(RoundedCornerShape(12.dp)).background(c.surfaceAlt)
+                .clickable { open = true }.padding(horizontal = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(penStyleIcon(st.penStyle), null, tint = c.ink, modifier = Modifier.size(icon - 4.dp))
+            Spacer(Modifier.width(6.dp))
+            Text(stringResource(penStyleName(st.penStyle)), style = MaterialTheme.typography.labelMedium, color = c.ink, maxLines = 1)
+            Icon(Icons.Rounded.ExpandMore, stringResource(R.string.ink_pen_type), tint = c.muted, modifier = Modifier.size(18.dp))
+        }
+        if (open) PenStyleMenu(st, onDismiss = { open = false }) { st.selectStyle(it); open = false; onToolChanged() }
+    }
+}
+
+/**
+ * Pen type popup: name + a sample stroke per style. A plain (non-animated) popup showing cached preview bitmaps,
+ * so it appears on the next frame; nothing in the editor or the canvas is touched while it opens.
+ */
+@Composable
+private fun PenStyleMenu(st: InkToolState, onDismiss: () -> Unit, onPick: (Int) -> Unit) {
+    val c = D.c
+    val dens = androidx.compose.ui.platform.LocalDensity.current.density
+    val offset = with(androidx.compose.ui.platform.LocalDensity.current) { androidx.compose.ui.unit.IntOffset(0, 46.dp.roundToPx()) }
+    androidx.compose.ui.window.Popup(
+        offset = offset,
+        onDismissRequest = onDismiss,
+        properties = androidx.compose.ui.window.PopupProperties(focusable = true),
+    ) {
+        Column(
+            Modifier.width(IntrinsicSize.Max).background(c.surface, RoundedCornerShape(14.dp)).border(1.dp, c.line, RoundedCornerShape(14.dp))
+                .padding(vertical = 6.dp),
+        ) {
+            Text(stringResource(R.string.ink_pen_type), style = MaterialTheme.typography.labelMedium, color = c.muted,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
+            PenStyle.all.forEach { s ->
+                val sel = s == st.penStyle
+                Row(
+                    Modifier.fillMaxWidth().widthIn(min = 230.dp).padding(horizontal = 6.dp).clip(RoundedCornerShape(10.dp))
+                        .background(if (sel) c.accent.copy(alpha = 0.12f) else Color.Transparent)
+                        .clickable { onPick(s) }.padding(horizontal = 10.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(penStyleIcon(s), null, tint = if (sel) c.accent else c.muted, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(10.dp))
+                    Text(stringResource(penStyleName(s)), color = c.ink, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                    Spacer(Modifier.width(10.dp))
+                    androidx.compose.foundation.Image(PenPreviews.get(s, st.penColor, dens), null, Modifier.size(76.dp, 26.dp))
+                }
             }
         }
     }
 }
 
-@Composable
-private fun StylePreview(style: Int, color: Int) {
-    val stroke = remember(style, color) { sampleStroke(style, color) }
-    Canvas(Modifier.size(76.dp, 26.dp)) {
-        drawIntoCanvas { canvas ->
-            val nc = canvas.nativeCanvas
-            nc.save(); nc.scale(density, density)
-            InkRender.drawStroke(nc, stroke)
-            nc.restore()
-        }
+/** Small cached bitmaps of a sample stroke per pen style and colour (76 × 26 dp), rendered once with [InkRender]. */
+internal object PenPreviews {
+    private val cache = java.util.concurrent.ConcurrentHashMap<Long, androidx.compose.ui.graphics.ImageBitmap>()
+
+    fun get(style: Int, color: Int, density: Float): androidx.compose.ui.graphics.ImageBitmap {
+        val key = (style.toLong() shl 40) or ((density * 100).toLong() shl 32) or (color.toLong() and 0xFFFFFFFFL)
+        cache[key]?.let { return it }
+        if (cache.size > 30) cache.clear()
+        val w = (76 * density).toInt().coerceAtLeast(1); val h = (26 * density).toInt().coerceAtLeast(1)
+        val b = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888)
+        val cv = android.graphics.Canvas(b)
+        cv.scale(density, density)
+        InkRender.drawStroke(cv, sampleStroke(style, color))
+        return b.asImageBitmap().also { cache[key] = it }
     }
 }
 

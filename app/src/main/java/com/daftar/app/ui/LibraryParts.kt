@@ -329,7 +329,7 @@ fun rememberActions(): Actions {
 fun newNote(ctx: android.content.Context, dir: File): File {
     val label = ctx.getString(R.string.untitled_note) + " " + SimpleDateFormat("d MMM", Locale.getDefault()).format(Date())
     val f = Storage.uniqueFile(dir, label, Storage.NOTE_EXT)
-    InkDoc.newNote(Prefs.defaultPaper).save(f)
+    InkDoc.newNote(com.daftar.app.ink.PaperTemplates.stamp(Prefs.defaultPaper)).save(f)
     Storage.touch()
     return f
 }
