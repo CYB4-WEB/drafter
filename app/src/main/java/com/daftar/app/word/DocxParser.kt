@@ -15,13 +15,11 @@ class LegacyDocException : Exception()
  */
 object DocxParser {
 
-    /** Points → dp for indents / widths (twips are 1/20 pt). */
-    private const val IND_DP_PER_PT = 1.25f
-    /** EMU → dp: 9525 EMU per 96-dpi pixel, slightly enlarged for the 760dp reading column. */
-    private const val EMU_PER_DP = 9525f / 1.1f
+    /** EMU per point (914400 EMU per inch / 72). */
+    private const val EMU_PER_PT = 12700f
 
     fun parse(file: File): DocxDoc {
-        if (file.extension.equals("doc", true) || isOle(file)) throw LegacyDocException()
+        if (isOle(file)) throw LegacyDocException()
         ZipFile(file).use { zip ->
             val docEntry = zip.getEntry("word/document.xml") ?: findMainPart(zip) ?: throw IllegalStateException("no document part")
             val ctx = Ctx(zip)
@@ -49,11 +47,8 @@ object DocxParser {
                 }
             }
 
-            val headings = ArrayList<Heading>()
-            blocks.forEachIndexed { i, b ->
-                if (b is DocBlock.Para && b.heading > 0 && b.text.isNotBlank()) headings.add(Heading(b.text.trim(), b.heading, i))
-            }
-            return DocxDoc(file.absolutePath, blocks, headings)
+            while (blocks.lastOrNull() == DocBlock.PageBreak) blocks.removeAt(blocks.lastIndex)
+            return DocxDoc(file.absolutePath, blocks, headingsOf(blocks), ctx.page, DocKind.DOCX)
         }
     }
 
@@ -166,7 +161,7 @@ object DocxParser {
         val jc: String? = null, val before: Float? = null, val after: Float? = null, val line: Float? = null, val lineRule: String? = null,
         val indStart: Float? = null, val indEnd: Float? = null, val hanging: Float? = null, val firstLine: Float? = null,
         val numId: String? = null, val ilvl: Int? = null, val bidi: Boolean? = null, val outline: Int? = null,
-        val pStyle: String? = null, val pageBreakBefore: Boolean? = null,
+        val pStyle: String? = null, val pageBreakBefore: Boolean? = null, val sectBreak: Boolean? = null,
     ) {
         operator fun plus(o: PP?): PP = if (o == null) this else PP(
             o.jc ?: jc, o.before ?: before, o.after ?: after, o.line ?: line, o.lineRule ?: lineRule,
@@ -175,6 +170,7 @@ object DocxParser {
             if (o.hanging != null || o.firstLine != null) o.hanging else hanging,
             if (o.hanging != null || o.firstLine != null) o.firstLine else firstLine,
             o.numId ?: numId, o.ilvl ?: ilvl, o.bidi ?: bidi, o.outline ?: outline, o.pStyle ?: pStyle, o.pageBreakBefore ?: pageBreakBefore,
+            o.sectBreak,
         )
     }
 
@@ -244,7 +240,13 @@ object DocxParser {
                         "ilvl" -> p = p.copy(ilvl = a("val")?.toIntOrNull())
                     }
                 }
-                "rPr", "sectPr", "pPrChange", "tabs", "framePr", "pBdr" -> skipTree()
+                "sectPr" -> {
+                    // A section break inside a paragraph: every type except "continuous" starts a new page.
+                    var continuous = false
+                    children { m -> if (m == "type") continuous = a("val") == "continuous" }
+                    p = p.copy(sectBreak = !continuous)
+                }
+                "rPr", "pPrChange", "tabs", "framePr", "pBdr" -> skipTree()
             }
         }
         return p
@@ -262,6 +264,7 @@ object DocxParser {
         val counters = HashMap<String, IntArray>()
         val footnoteNumbers = LinkedHashMap<String, Int>()
         var pid = 0
+        var page = PageSpec.A4
         private val rpCache = HashMap<String, RP>()
         private val ppCache = HashMap<String, PP>()
 
@@ -458,11 +461,35 @@ object DocxParser {
                 when (p.name) {
                     "p" -> parseParagraph(p, rels, out, footnote)
                     "tbl" -> out.add(parseTable(p, rels, footnote))
+                    "sectPr" -> page = readSection(p)
                     // transparent containers: descend into their children
                     "sdt", "sdtContent", "customXml", "smartTag", "ins", "moveTo" -> {}
                     else -> p.skipTree()
                 }
             }
+        }
+
+        /** Body-level `w:sectPr`: page size and margins (twips → pt). */
+        private fun readSection(p: XmlPullParser): PageSpec {
+            var spec = PageSpec.A4
+            p.children { n ->
+                when (n) {
+                    "pgSz" -> {
+                        val w = p.a("w")?.toFloatOrNull()?.div(20f)
+                        val h = p.a("h")?.toFloatOrNull()?.div(20f)
+                        if (w != null && h != null && w in 144f..2880f && h in 144f..2880f) spec = spec.copy(w = w, h = h)
+                    }
+                    "pgMar" -> {
+                        fun m(k: String, d: Float) = p.a(k)?.toFloatOrNull()?.let { kotlin.math.abs(it) / 20f }?.coerceIn(0f, 288f) ?: d
+                        spec = spec.copy(top = m("top", spec.top), bottom = m("bottom", spec.bottom),
+                            left = m("left", spec.left) + m("gutter", 0f), right = m("right", spec.right))
+                    }
+                }
+            }
+            // Keep a usable text column even for odd margins.
+            if (spec.w - spec.left - spec.right < 144f) spec = spec.copy(left = 54f, right = 54f)
+            if (spec.h - spec.top - spec.bottom < 144f) spec = spec.copy(top = 54f, bottom = 54f)
+            return spec
         }
 
         private fun parseTable(p: XmlPullParser, rels: Map<String, Pair<String, Boolean>>, footnote: Int): DocBlock.Table {
@@ -471,6 +498,7 @@ object DocxParser {
             var rtl = false
             var borders: Boolean? = null
             var tblStyle: String? = null
+            var headerRows = 0
             p.children { n ->
                 when (n) {
                     "tblPr" -> p.children { t ->
@@ -481,8 +509,12 @@ object DocxParser {
                             else -> p.skipTree()
                         }
                     }
-                    "gridCol" -> grid.add(((p.a("w")?.toFloatOrNull() ?: 0f) / 20f) * IND_DP_PER_PT)
-                    "tr" -> rows.add(parseRow(p, rels, footnote))
+                    "gridCol" -> grid.add((p.a("w")?.toFloatOrNull() ?: 0f) / 20f)
+                    "tr" -> {
+                        val (row, header) = parseRow(p, rels, footnote)
+                        if (header && headerRows == rows.size) headerRows++
+                        rows.add(row)
+                    }
                     "tblGrid", "sdt", "sdtContent", "customXml" -> {}
                     else -> p.skipTree()
                 }
@@ -492,11 +524,13 @@ object DocxParser {
                 while (cur != null && r == null && g++ < 10) { val s = styles[cur]; r = s?.tableBorders; cur = s?.basedOn }
                 r ?: id.contains("grid", true)
             }
-            return DocBlock.Table(rows, if (grid.all { it > 0f }) grid else emptyList(), rtl, borders ?: styled ?: false)
+            return DocBlock.Table(rows, if (grid.all { it > 0f }) grid else emptyList(), rtl, borders ?: styled ?: false,
+                headerRows.coerceAtMost((rows.size - 1).coerceAtLeast(0)))
         }
 
-        private fun parseRow(p: XmlPullParser, rels: Map<String, Pair<String, Boolean>>, footnote: Int): DocBlock.Row {
+        private fun parseRow(p: XmlPullParser, rels: Map<String, Pair<String, Boolean>>, footnote: Int): Pair<DocBlock.Row, Boolean> {
             val cells = ArrayList<DocBlock.Cell>()
+            var header = false
             val depth = p.depth
             while (true) {
                 val ev = p.next()
@@ -528,12 +562,13 @@ object DocxParser {
                         }
                         cells.add(DocBlock.Cell(span, if (merged) emptyList() else blocks, fill, merged))
                     }
-                    "trPr", "tblPrEx" -> p.skipTree()
+                    "trPr" -> p.children { t -> if (t == "tblHeader") header = p.onOff() }
+                    "tblPrEx" -> p.skipTree()
                     "sdt", "sdtContent", "customXml" -> {}
                     else -> p.skipTree()
                 }
             }
-            return DocBlock.Row(cells)
+            return DocBlock.Row(cells) to header
         }
 
         /** Parses one `w:p`. May emit several blocks: text segments split by inline images / page breaks. */
@@ -606,8 +641,8 @@ object DocxParser {
                 when (p.name) {
                     "pPr" -> {
                         direct = p.readPP()
-                        if (direct.pageBreakBefore == true || (stylePP(direct.pStyle).pageBreakBefore == true)) {
-                            if (out.isNotEmpty() && out.last() !is DocBlock.Divider) out.add(DocBlock.Divider)
+                        if (footnote == 0 && (direct.pageBreakBefore == true || (stylePP(direct.pStyle).pageBreakBefore == true))) {
+                            if (out.isNotEmpty() && out.last() != DocBlock.PageBreak) out.add(DocBlock.PageBreak)
                         }
                     }
                     "hyperlink" -> {
@@ -622,7 +657,7 @@ object DocxParser {
                     "noBreakHyphen" -> if (inRun) addText("‑")
                     "softHyphen" -> {}
                     "br" -> if (inRun) {
-                        if (p.a("type") == "page") { pending.add(DocBlock.Divider); flush(false) } else addText("\n")
+                        if (p.a("type") == "page") { pending.add(DocBlock.PageBreak); flush(false) } else addText("\n")
                     }
                     "sym" -> if (inRun) {
                         val code = p.a("char")?.toIntOrNull(16)
@@ -657,7 +692,7 @@ object DocxParser {
                         if (target != null && zip.getEntry(target) != null && d.cx > 0f && d.cy > 0f) {
                             val (pp, _) = resolved()
                             val rtl = pp.bidi == true
-                            pending.add(DocBlock.Image(target, d.cx / EMU_PER_DP, d.cy / EMU_PER_DP, d.alt, alignOf(pp.jc, rtl, rtl), rtl))
+                            pending.add(DocBlock.Image(target, d.cx / EMU_PER_PT, d.cy / EMU_PER_PT, d.alt, alignOf(pp.jc, rtl, rtl), rtl))
                         }
                         pending.addAll(d.inner)
                         if (pending.isNotEmpty()) flush(false)
@@ -666,6 +701,7 @@ object DocxParser {
                 }
             }
             flush(true)
+            if (direct.sectBreak == true && footnote == 0) out.add(DocBlock.PageBreak)
         }
 
         /** Scans a `w:drawing` / `w:pict` subtree for the picture reference, its size, alt text and text boxes. */
@@ -728,13 +764,13 @@ object DocxParser {
             val effective = defPP + stylePP(styleId) +
                 PP(indStart = lvlPP.indStart, indEnd = lvlPP.indEnd, hanging = lvlPP.hanging, firstLine = lvlPP.firstLine) +
                 PP(indStart = direct.indStart, indEnd = direct.indEnd, hanging = direct.hanging, firstLine = direct.firstLine)
-            fun tw(v: Float?) = ((v ?: 0f) / 20f) * IND_DP_PER_PT
+            fun tw(v: Float?) = (v ?: 0f) / 20f
             val hang = tw(effective.hanging)
             val first = tw(effective.firstLine)
             var indStart = tw(effective.indStart).coerceAtLeast(0f)
             val markerW: Float
             if (marker != null) {
-                markerW = hang.coerceAtLeast(24f)
+                markerW = hang.coerceAtLeast(18f)
                 indStart = (indStart - hang).coerceAtLeast(0f)
             } else {
                 markerW = 0f
@@ -750,12 +786,12 @@ object DocxParser {
                 basePt = baseRp.sz ?: 11f,
                 align = alignOf(pp.jc, explicitBidi, rtl),
                 rtl = rtl,
-                indStart = indStart.coerceAtMost(240f),
-                indEnd = tw(effective.indEnd).coerceIn(0f, 240f),
-                firstLine = if (marker != null) 0f else (if (hang > 0f) -hang else first).coerceIn(-120f, 120f),
+                indStart = indStart.coerceAtMost(216f),
+                indEnd = tw(effective.indEnd).coerceIn(0f, 216f),
+                firstLine = if (marker != null) 0f else (if (hang > 0f) -hang else first).coerceIn(-144f, 144f),
                 marker = marker,
                 markerFmt = markerFmt,
-                markerWidth = markerW.coerceAtMost(96f),
+                markerWidth = markerW.coerceAtMost(72f),
                 before = if (continuation) 0f else ((pp.before ?: 0f) / 20f).coerceIn(0f, 36f),
                 after = ((pp.after ?: 0f) / 20f).coerceIn(0f, 36f),
                 lineMult = lineMult,

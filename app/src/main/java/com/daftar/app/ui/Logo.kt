@@ -1,8 +1,20 @@
 package com.daftar.app.ui
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.sp
+import com.daftar.app.R
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.scale
@@ -39,5 +51,33 @@ fun DaftarLogo(size: Dp = 32.dp, modifier: Modifier = Modifier) {
                 drawPath(sheetPath, sheet, alpha = 0.92f)
             }
         }
+    }
+}
+
+/** PakType Tehreer — the Arabic calligraphic face of the "دفتـــر" wordmark. */
+val TehreerFamily = FontFamily(Font(R.font.tehreer))
+
+/**
+ * App name as a wordmark: "دفتـــر" in Tehreer when the app runs in Arabic, otherwise "Daftar" in the UI font.
+ * [size] is the Latin size; the Arabic face is drawn a bit larger so both read at the same visual weight.
+ */
+@Composable
+fun DaftarWordmark(size: TextUnit = 22.sp, modifier: Modifier = Modifier) {
+    val arabic = LocalConfiguration.current.locales[0].language == "ar"
+    if (arabic) {
+        Text("دفتـــر", modifier = modifier, color = D.c.ink, fontFamily = TehreerFamily,
+            fontSize = size * 1.45f, lineHeight = size * 1.9f, maxLines = 1)
+    } else {
+        Text("Daftar", modifier = modifier, color = D.c.ink, fontWeight = FontWeight.Bold, fontSize = size, maxLines = 1)
+    }
+}
+
+/** Logo mark + wordmark, used in the sidebar header and About. */
+@Composable
+fun DaftarBrand(markSize: Dp = 30.dp, textSize: TextUnit = 22.sp, modifier: Modifier = Modifier) {
+    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+        DaftarLogo(markSize)
+        Spacer(Modifier.width(10.dp))
+        DaftarWordmark(textSize)
     }
 }
