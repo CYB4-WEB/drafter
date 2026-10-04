@@ -106,3 +106,50 @@ Files (all under `app/src/main/java/com/daftar/app/slides/`):
    background lane, LRU-cached (160); .ppt/OLE2 → legacy message, broken zip/missing parts → corrupt, zero slides → empty, missing file →
    message, each with "Open in another app" when the file exists. Exception guards per shape and per render.
 7. Strings en + ar; compiles — PASS: `res/values/strings_slides.xml` + `res/values-ar/strings_slides.xml` (same keys); build succeeds.
+
+---
+# Round 2
+
+## Understanding
+Resumed on the Linux box (compile with `tools/compile.sh`; shared API from round2b: `LocalPaneNav`/`pane`, `ViewerActions`,
+scaffold params `sidePanelAtStart / sidePanelOpen / bottomPanel / bottomPanelLabel`, controller zoom). My Round 2 work:
+1. **PowerPoint-like layout** in Daftar's design. Wide: permanent start-side rail of numbered slide thumbnails (current one outlined),
+   slide canvas in the centre (the scaffold's InkView), collapsible notes pane under the slide with tabs Speaker notes / Comments /
+   My notes. Narrow screens and split panes: the rail collapses and everything still looks right.
+2. **Present mode**: full-screen immersive slideshow from the current slide. System bars hidden (WindowInsetsControllerCompat) and
+   restored; next/previous by swipe, tap, arrow keys, Page Up/Down, volume keys; slide counter; exit button; laser pointer (fading
+   red trail for the pen, or the finger after a long press); next slide pre-rendered; at most ~3 screen-size bitmaps; screen kept on.
+3. **Header**: Present button, `ConvertButton(rememberViewerActions(file))`, my own menu (distinct icon, not MoreVert) with
+   `ViewerMenuItems(actions, close)` + "Export notes". No extra zoom control (the scaffold's pill covers it).
+4. **`SlidesExport`** (signatures kept, convert-agent calls it): `toPdf` = one PdfDocument page per slide at slide size in points,
+   drawn through my renderer so text/shapes stay vector, temp file then rename; `toImages` = `Slide 01.png` … with bounded bitmap
+   memory, recycled. Never throw (false / empty list), safe off the main thread.
+5. **Low memory**: thumbnail cache bounded by bytes, renderer image cache bounded by bytes (together ≤ 1/8 of maxMemory).
+6. Works inside a split pane and in a second window (links to a .pptx in a note open it via `pane.open`).
+
+Acceptance (mine): R2-1 rail + notes pane on wide; R2-2 collapses correctly when narrow / in a pane; R2-3 present mode as above;
+R2-4 header actions; R2-5 PDF export vector + atomic; R2-6 image export bounded + named; R2-7 byte-bounded caches;
+R2-8 split pane / second window safe; R2-9 en + ar strings, compiles clean.
+
+## Plan
+- `SlidesScreen.kt`: loading / error / editor. Editor wraps the scaffold in `BoxWithConstraints` and provides `LocalWidthClass` from
+  its *own* width (so a narrow split pane behaves like a phone even on a wide tablet). Expanded → `sidePanel` = rail at start, open
+  unless in a pane. Medium/Compact → no side panel (avoids a sheet popping up when the window shrinks with the rail open, and keeps
+  the header from overflowing on 360 dp phones); the notes pane gains a first "Slides" tab with a horizontal filmstrip.
+  Back via `LocalPaneNav.current.back()`. Header: Present (accent pill on wide, icon on compact), Convert (not on compact — it is in
+  the menu there), menu with `Icons.Rounded.IosShare` ("Share and export").
+- `SlidesPanels.kt`: byte-bounded `Thumbs`, rail, filmstrip, notes pane (tabs, speaker notes, comments, my notes), IME handling for
+  the My notes field (the pane slides up above the keyboard while the field is focused).
+- `SlidesPresent.kt`: full-screen `Dialog` (works from a split pane and a second window), dialog window → black, cutout edges, bars
+  hidden + transient-by-swipe, FLAG_KEEP_SCREEN_ON. `Frames` = ≤ 3 reusable bitmaps (current, next, previous) rendered by one
+  never-cancelled worker; hidden slides skipped; end-of-show screen; ink annotations drawn over the slide; laser + pen hover dot.
+- `SlidesExport.kt`: `toPdf` with PdfDocument batches (flush to a temp part when the images drawn reach a memory budget; several
+  parts are merged with PdfBox using temp-file memory); `toImages` with one reused bitmap. Interrupt-aware.
+- `PptxRenderer.kt` / `PptxSource.kt`: image cache ≤ maxMemory/16, recycle only on close (PDF pages keep references until written),
+  drawn-image accounting for export, `drawVector()` for PDF canvases with an image detail scale.
+- Strings en + ar for every new label.
+
+## Progress
+- 2026-10-04 — Read round2b, AGENT_RULES, DESIGN, SPEC (Round 2), round2 brief, my log, my slides code, InkEditor/InkEditorImpl,
+  PageSource, ViewerActions, Common, Nav, Workspace, Prefs, MainActivity, InkRender/InkModel. Verified APIs in the local Gradle cache
+  (DialogProperties.decorFitsSystemWindows, DialogWindowProvider, Compose `Key.*`, PdfBox `PDFMergerUtility` + `MemoryUsageSetting`).

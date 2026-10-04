@@ -46,11 +46,16 @@ private class Line(
 
 private class Geom(val path: Path, val fillable: Boolean, val start: FloatArray?, val end: FloatArray?, val ellipse: Boolean)
 
-/** Bitmap cache for slide media: decodes with inSampleSize to the size actually needed. */
+/**
+ * Bitmap cache for slide media: decodes with inSampleSize to the size actually needed, bounded by bytes
+ * (maxMemory / 16; the thumbnail cache takes another 1/16, so a deck screen stays within 1/8 of the heap).
+ * Evicted bitmaps are NOT recycled: a PDF page records references to them until the document is written.
+ * They are recycled only by [clear] with `recycle = true`, which [PptxSource.close] uses once nothing draws any more.
+ */
 class ImageCache(private val zip: java.util.zip.ZipFile) {
-    private val maxBytes = min(Runtime.getRuntime().maxMemory() / 6, 96L * 1024 * 1024).toInt()
+    private val maxBytes = min(Runtime.getRuntime().maxMemory() / 16, 64L * 1024 * 1024).toInt().coerceAtLeast(4 * 1024 * 1024)
     private val lru = object : LruCache<String, Bitmap>(maxBytes) {
-        override fun sizeOf(key: String, value: Bitmap) = value.byteCount
+        override fun sizeOf(key: String, value: Bitmap) = value.allocationByteCount
     }
     private val bad = HashSet<String>()
     private val dims = HashMap<String, IntArray>()
@@ -82,12 +87,22 @@ class ImageCache(private val zip: java.util.zip.ZipFile) {
         return bmp
     }
 
-    fun clear() = lru.evictAll()
+    fun clear(recycle: Boolean = false) {
+        val all = if (recycle) lru.snapshot().values.toList() else emptyList()
+        lru.evictAll()
+        all.forEach { if (!it.isRecycled) it.recycle() }
+    }
 }
 
 class PptxRenderer(private val deck: Pptx, private val labels: Labels) {
     private val images = ImageCache(deck.zip)
     private val extraParts = HashMap<String, Part?>()
+
+    /** Distinct media bitmaps drawn since [markImages] (export uses it to bound what a PDF batch keeps alive). */
+    private val drawn = java.util.Collections.newSetFromMap(java.util.IdentityHashMap<Bitmap, Boolean>())
+    private var drawnBytes = 0L
+    fun markImages() { drawn.clear(); drawnBytes = 0L }
+    fun imageBytesSinceMark(): Long = drawnBytes
 
     private data class TextKey(val node: XNode, val slide: Int, val w: Int, val h: Int)
     private val textCache = object : LinkedHashMap<TextKey, TextBlock>(128, 0.75f, true) {
