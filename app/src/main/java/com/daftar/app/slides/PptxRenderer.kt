@@ -98,10 +98,14 @@ class PptxRenderer(private val deck: Pptx, private val labels: Labels) {
     private val images = ImageCache(deck.zip)
     private val extraParts = HashMap<String, Part?>()
 
-    /** Distinct media bitmaps drawn since [markImages] (export uses it to bound what a PDF batch keeps alive). */
+    /**
+     * Distinct media bitmaps drawn since [markImages] (export uses it to bound what a PDF batch keeps alive).
+     * Off until the first [markImages], so the on-screen viewer never pins bitmaps here.
+     */
     private val drawn = java.util.Collections.newSetFromMap(java.util.IdentityHashMap<Bitmap, Boolean>())
     private var drawnBytes = 0L
-    fun markImages() { drawn.clear(); drawnBytes = 0L }
+    private var tracking = false
+    fun markImages() { drawn.clear(); drawnBytes = 0L; tracking = true }
     fun imageBytesSinceMark(): Long = drawnBytes
 
     private data class TextKey(val node: XNode, val slide: Int, val w: Int, val h: Int)
@@ -116,7 +120,7 @@ class PptxRenderer(private val deck: Pptx, private val labels: Labels) {
     fun clearCaches(recycle: Boolean = false) {
         images.clear(recycle)
         synchronized(textCache) { textCache.clear() }
-        markImages()
+        drawn.clear(); drawnBytes = 0L
     }
 
     /** Draw slide [i] on [c], whose current matrix maps slide points to pixels at [pxPerPt]. */
@@ -656,7 +660,7 @@ class PptxRenderer(private val deck: Pptx, private val labels: Labels) {
         val fh = max(0.01f, 1f - t - b)
         val bmp = images.get(media, dst.width() * ctx.px / fw, dst.height() * ctx.px / fh)
         if (bmp == null) { placeholderBox(c, dst, labels.image); return }
-        if (drawn.add(bmp)) drawnBytes += bmp.allocationByteCount
+        if (tracking && drawn.add(bmp)) drawnBytes += bmp.allocationByteCount
         val bw = bmp.width.toFloat(); val bh = bmp.height.toFloat()
         // Source window (may extend outside the bitmap for negative crops) mapped onto dst.
         val sl = bw * l; val st = bh * t; val sr = bw * (1f - rr); val sb = bh * (1f - b)

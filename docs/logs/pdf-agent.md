@@ -78,3 +78,38 @@ Approach notes:
 6. Pages→images naming; Images→PDF one page per image with orientation — PASS (orientation applies when the provider exposes the MediaStore ORIENTATION column; EXIF-only orientation from other providers cannot be read without exifinterface).
 7. Thumbnails, go-to-page, corrupt/password error state — PASS.
 8. Strings en + ar; compiles — PASS (zero errors in pdf/; other packages currently have errors not owned by me).
+
+# Round 2
+
+## Understanding
+Turn the PDF viewer into an Acrobat/Xodo-style reader in Daftar's design, on top of the shared ink scaffold:
+- **Header**: no duplicate "x / y" text (the editor's page chip stays); Search button, `ConvertButton(rememberViewerActions(file))`,
+  a distinct Tools icon (HomeRepairService) whose menu holds go-to-page, the PDF tools, page management and
+  `ViewerMenuItems(actions, close, onShare = annotated share)`. Zoom stays the scaffold's pill.
+- **Search**: PDFTextStripper per page on IO, cancellable, progressive results (page + snippet with the match bold), tap → `ctl.goToPage`,
+  next/previous; Arabic-aware matching (أإآ→ا, ى→ي, ة→ه, no tashkeel/tatweel) + case-insensitive Latin; match highlights on the page if positions can be mapped.
+- **Outline**: PDDocumentOutline as an indented tree in a tab next to Thumbnails; tap → page; "No outline" empty state.
+- **Page management**, each writing a new version safely (temp → validate → replace, reload viewer) and remapping the ink sidecar:
+  insert blank page after current, delete page(s) with confirm, rotate left/right (ink rotated with the page), move up/down + an organize (reorder) dialog,
+  extract (exists), merge with library PDFs (new file), **Sign** (draw once → transparent PNG in filesDir → `ctl.addImage`, re-draw/clear).
+- **Fix**: `imagesToPdf` honours EXIF orientation (platform `android.media.ExifInterface(InputStream)`).
+- **Thumbnails** show the user's ink; caches bounded by bytes (≤ 1/8 maxMemory in total), released on dispose.
+- Works in a split pane / narrow window (side panel → scaffold's bottom sheet; my own overlays measure their real width).
+
+Acceptance (my reading): header as above; search finds Latin case-insensitively and Arabic regardless of hamza/tashkeel forms, results list + next/prev
+navigate; outline tree navigates; every page operation leaves a valid PDF and ink that stays on the right page (and rotates with it); merge creates a
+new file; signature can be drawn, reused, redrawn, cleared; EXIF-only rotated photos come out upright; thumbnails show ink; no unbounded caches; en + ar strings; compiles.
+
+## Plan
+- `pdf/PdfSearch.kt` — text index per page (custom PDFTextStripper: visual-order glyphs per line → line-level bidi reorder → display text,
+  folded search text, glyph rectangles in displayed page points), Arabic/Latin folding, progressive cancellable search, bounded index cache.
+- `pdf/PdfSearchUi.kt` — search bar that covers the editor header while searching (native-reader style), results card, next/prev, Back closes.
+- `pdf/PdfPages.kt` — `PageSpec` plan model; `rebuild` (one generic page-tree rewrite for insert/delete/rotate/move/reorder; temp file → validate with
+  PdfRenderer → atomic replace) + ink remap/rotation; `merge` (PDFMergerUtility.appendDocument, ink sidecars concatenated so ink stays editable); outline loader.
+- `pdf/PdfPanels.kt` — side panel with tabs Pages | Outline; thumbnails grid with ink overlay (drawn live, polled for changes), long-press page menu.
+- `pdf/PdfPageDialogs.kt` — organize pages dialog (multi-select rotate/move/delete/insert blank), merge order dialog, result dialog.
+- `pdf/SignatureDialog.kt` — draw / reuse / clear signature.
+- `pdf/PdfScreen.kt` — session (renderers + caches, recreated per file version), reload after page edits (editor disposed first so its save cannot
+  overwrite the remapped ink), header actions + tools menu with a Pages sub-level.
+- `pdf/PdfSource.kt` — search marks drawn into rendered pages (multiply blend) when the editor can re-render pages.
+- `pdf/PdfTools.kt` — EXIF orientation.

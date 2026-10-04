@@ -61,6 +61,10 @@ interface PaneNav {
     fun replace(s: Screen)
     /** True when the screen is shown inside a split pane (hide redundant chrome, etc.). */
     val inPane: Boolean get() = false
+    /** The screens of this pane's back stack, bottom first. */
+    val screens: List<Screen> get() = emptyList()
+    /** Pop back until [s] is on top (e.g. breadcrumbs). Returns false (and changes nothing) when [s] is not in the stack. */
+    fun popTo(s: Screen): Boolean = false
 }
 
 object RootPaneNav : PaneNav {
@@ -68,6 +72,13 @@ object RootPaneNav : PaneNav {
     override fun open(ctx: Context, f: File) = Nav.open(ctx, f)
     override fun push(s: Screen) = Nav.push(s)
     override fun replace(s: Screen) = Nav.replace(s)
+    override val screens: List<Screen> get() = Nav.stack.toList()
+    override fun popTo(s: Screen): Boolean {
+        val i = Nav.stack.lastIndexOf(s)
+        if (i < 0) return false
+        while (Nav.stack.lastIndex > i) Nav.stack.removeAt(Nav.stack.lastIndex)
+        return true
+    }
 }
 
 val LocalPaneNav = androidx.compose.runtime.staticCompositionLocalOf<PaneNav> { RootPaneNav }
