@@ -152,4 +152,10 @@
     <string name="set_clear_cache">مسح الملفات المؤقتة</string>
     <string name="set_clear_cache_desc">%1$s مستخدمة للمعاينات والمشاركة والتصدير</string>
     <string name="cache_cleared">تم مسح الملفات المؤقتة</string>
+    <string name="set_pen_only_no_stylus">لم يُكتشف قلم S Pen بعد، لذا يمكن الكتابة بالإصبع حتى تستخدمه.</string>
+    <string name="countdown_now">الآن</string>
+    <string name="countdown_dh">%1$d ي %2$d س</string>
+    <string name="countdown_hm">%1$d س %2$d د</string>
+    <string name="countdown_m">%1$d دقيقة</string>
+    <string name="countdown_left">متبقٍّ</string>
 </resources>

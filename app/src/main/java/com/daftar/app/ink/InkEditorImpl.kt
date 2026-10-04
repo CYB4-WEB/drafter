@@ -277,7 +277,8 @@ internal fun InkEditorImpl(
     view.tapeColor = ts.tapeColor; view.tapeWidth = ts.tapeWidth
     view.shapeColor = ts.penColor
     view.keepScreenOn = Prefs.keepScreenOn
-    view.penOnly = Prefs.penOnly
+    // "Pen only" is enforced only once this device has shown it has a stylus; otherwise fingers must be able to write.
+    view.penOnly = Prefs.penOnly && Prefs.stylusSeen
     view.stylusButtonTool = if (Prefs.stylusButton == 1) Tool.LASSO else Tool.ERASER
     view.bgColor = c.bg.toArgb()
 

@@ -756,7 +756,9 @@ class InkView(context: Context) : View(context) {
 
     private fun isPen(e: MotionEvent, idx: Int = 0): Boolean {
         val t = e.getToolType(idx)
-        return t == MotionEvent.TOOL_TYPE_STYLUS || t == MotionEvent.TOOL_TYPE_ERASER
+        if (t == MotionEvent.TOOL_TYPE_STYLUS || t == MotionEvent.TOOL_TYPE_ERASER) { com.daftar.app.data.Prefs.markStylusSeen(); return true }
+        // A mouse (emulator, DeX, Bluetooth mouse) writes like a pen; fingers are never pens.
+        return t == MotionEvent.TOOL_TYPE_MOUSE
     }
 
     @SuppressLint("ClickableViewAccessibility")
