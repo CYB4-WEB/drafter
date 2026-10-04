@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Hub -->
+    <string name="convert_subtitle">حوّل أي ملف إلى صيغة أخرى</string>
+    <string name="convert_for_file">لهذا الملف</string>
+    <string name="convert_recent">التحويلات الأخيرة</string>
+    <string name="convert_clear">مسح</string>
+    <string name="convert_none">لا توجد تحويلات لهذا النوع من الملفات</string>
+    <string name="convert_open_hub">المزيد في قسم التحويل</string>
+    <string name="convert_merge_more">دمج مع ملفات PDF أخرى…</string>
+    <string name="convert_other">تحويل إلى صيغة أخرى</string>
+
+    <!-- Groups -->
+    <string name="convert_group_pdf">من PDF</string>
+    <string name="convert_group_images">من الصور</string>
+    <string name="convert_group_pptx">من PowerPoint</string>
+    <string name="convert_group_word">من Word</string>
+    <string name="convert_group_notes">من الملاحظات والنصوص</string>
+    <string name="convert_group_tools">أدوات PDF</string>
+
+    <!-- Conversions -->
+    <string name="convert_pdf_images">PDF إلى صور</string>
+    <string name="convert_pdf_images_desc">كل صفحة صورة بصيغة PNG أو JPG</string>
+    <string name="convert_pdf_pptx">PDF إلى PowerPoint</string>
+    <string name="convert_pdf_pptx_desc">شريحة لكل صفحة على شكل صورة</string>
+    <string name="convert_pdf_docx">PDF إلى Word</string>
+    <string name="convert_pdf_docx_desc">نص قابل للتعديل صفحةً بصفحة</string>
+    <string name="convert_pdf_txt">PDF إلى نص</string>
+    <string name="convert_pdf_txt_desc">النص العادي للصفحات</string>
+    <string name="convert_images_pdf">صور إلى PDF</string>
+    <string name="convert_images_pdf_desc">اجمع الصور في ملف PDF واحد</string>
+    <string name="convert_images_pptx">صور إلى PowerPoint</string>
+    <string name="convert_images_pptx_desc">شريحة لكل صورة</string>
+    <string name="convert_image_format">صيغة الصورة</string>
+    <string name="convert_image_format_desc">PNG أو JPG أو WEBP مع اختيار الجودة</string>
+    <string name="convert_pptx_pdf">PowerPoint إلى PDF</string>
+    <string name="convert_pptx_pdf_desc">صفحة لكل شريحة</string>
+    <string name="convert_pptx_images">PowerPoint إلى صور</string>
+    <string name="convert_pptx_images_desc">كل شريحة على شكل صورة</string>
+    <string name="convert_pptx_txt">PowerPoint إلى نص</string>
+    <string name="convert_pptx_txt_desc">عناوين الشرائح ونصوصها وملاحظات المتحدث</string>
+    <string name="convert_docx_pdf">Word إلى PDF</string>
+    <string name="convert_docx_pdf_desc">ملف PDF بصفحات A4</string>
+    <string name="convert_docx_txt">Word إلى نص</string>
+    <string name="convert_docx_txt_desc">النص العادي للمستند</string>
+    <string name="convert_note_pdf">ملاحظة إلى PDF</string>
+    <string name="convert_note_pdf_desc">الصفحات بورقها وخط يدك</string>
+    <string name="convert_note_images">ملاحظة إلى صور</string>
+    <string name="convert_note_images_desc">كل صفحة على شكل صورة</string>
+    <string name="convert_note_docx">ملاحظة إلى Word</string>
+    <string name="convert_note_docx_desc">النص المكتوب بلوحة المفاتيح في الملاحظة</string>
+    <string name="convert_text_pdf">نص إلى PDF</string>
+    <string name="convert_text_pdf_desc">ملفات TXT أو Markdown أو RTF بصفحات A4</string>
+    <string name="convert_text_docx">نص إلى Word</string>
+    <string name="convert_text_docx_desc">ملف TXT أو Markdown كمستند Word</string>
+    <string name="convert_merge">دمج ملفات PDF</string>
+    <string name="convert_merge_desc">اجمع عدة ملفات PDF بالترتيب الذي تختاره</string>
+    <string name="convert_split">تقسيم PDF</string>
+    <string name="convert_split_desc">حسب نطاقات الصفحات أو كل عدد من الصفحات</string>
+    <string name="convert_compress">ضغط PDF</string>
+    <string name="convert_compress_desc">تصغير ملفات PDF الممسوحة ضوئيًا (تتحول الصفحات إلى صور)</string>
+
+    <!-- Setup -->
+    <string name="convert_source">الملف</string>
+    <string name="convert_sources">الملفات (بهذا الترتيب)</string>
+    <string name="convert_no_source">اختر ملفًا لتحويله</string>
+    <string name="convert_need_two">اختر ملفَّي PDF على الأقل</string>
+    <string name="convert_from_library">من المكتبة</string>
+    <string name="convert_from_device">من الجهاز</string>
+    <string name="convert_from_photos">من الصور</string>
+    <string name="convert_pick_file">اختر ملفًا</string>
+    <string name="convert_pick_files">اختر ملفات</string>
+    <string name="convert_not_supported">تم تخطي بعض الملفات لأن نوعها غير مناسب</string>
+    <string name="convert_move_up">تحريك لأعلى</string>
+    <string name="convert_move_down">تحريك لأسفل</string>
+    <string name="convert_remove">إزالة</string>
+    <string name="convert_options">الخيارات</string>
+    <string name="convert_range">الصفحات</string>
+    <string name="convert_range_hint">كل الصفحات</string>
+    <string name="convert_range_help">%1$d صفحة · مثال: 1-3، 5 (فارغ = الكل)</string>
+    <string name="convert_range_help_plain">مثال: 1-3، 5 (فارغ = الكل)</string>
+    <string name="convert_range_invalid">استخدم أرقام صفحات من 1 إلى %1$d، مثال: 1-3، 5</string>
+    <string name="convert_format">الصيغة</string>
+    <string name="convert_quality">الجودة</string>
+    <string name="convert_dpi">الدقة (نقطة لكل بوصة)</string>
+    <string name="convert_scale">الدقة</string>
+    <string name="convert_split_mode">التقسيم</string>
+    <string name="convert_split_every">كل عدد من الصفحات</string>
+    <string name="convert_split_ranges">حسب النطاقات</string>
+    <string name="convert_split_every_label">عدد الصفحات في كل ملف</string>
+    <string name="convert_split_ranges_label">النطاقات (ملف لكل نطاق)</string>
+    <string name="convert_split_ranges_hint">1-3، 4-8، 9</string>
+    <string name="convert_split_ranges_help">كل نطاق مفصول بفاصلة يصبح ملف PDF مستقلًا</string>
+    <string name="convert_split_result">سيُنشئ %1$d ملفات</string>
+    <string name="convert_annotations">تضمين تعليقاتي التوضيحية</string>
+    <string name="convert_save_to">الحفظ في</string>
+    <string name="convert_change">تغيير</string>
+    <string name="convert_choose_folder">اختر مجلد الحفظ</string>
+    <string name="convert_run">تحويل</string>
+    <string name="convert_again">تحويل مرة أخرى</string>
+
+    <!-- Progress & result -->
+    <string name="convert_running">جارٍ التحويل…</string>
+    <string name="convert_progress">%1$d من %2$d</string>
+    <string name="convert_cancelled">أُلغي التحويل</string>
+    <string name="convert_show_in_folder">عرض في المجلد</string>
+    <string name="convert_n_files">%1$d ملفات</string>
+    <string name="convert_size_change">الحجم: من %1$s إلى %2$s (%3$s)</string>
+    <string name="convert_skipped">ملفات تعذّرت قراءتها وتم تخطيها: %1$d</string>
+    <string name="convert_just_now">الآن</string>
+
+    <!-- Output names -->
+    <string name="convert_name_images">%1$s (صور)</string>
+    <string name="convert_name_split">%1$s (مقسّم)</string>
+    <string name="convert_name_compressed">%1$s (مضغوط)</string>
+    <string name="convert_name_merged">%1$s (مدمج)</string>
+    <string name="convert_name_page">صفحة %1$s</string>
+    <string name="convert_name_photos">صور %1$s</string>
+    <string name="convert_txt_slide">الشريحة %1$d</string>
+    <string name="convert_txt_notes">ملاحظات المتحدث:</string>
+
+    <!-- Errors -->
+    <string name="convert_err_failed">فشل التحويل. قد يكون الملف تالفًا أو غير مدعوم.</string>
+    <string name="convert_err_read">تعذّرت قراءة هذا الملف.</string>
+    <string name="convert_err_space">لا توجد مساحة تخزين كافية.</string>
+    <string name="convert_err_password">هذا الملف محمي بكلمة مرور.</string>
+    <string name="convert_err_memory">الملف كبير جدًا على هذا الجهاز. جرّب دقة أقل.</string>
+    <string name="convert_err_legacy_doc">لا يمكن تحويل ملفات ‎.doc القديمة. احفظه بصيغة ‎.docx أولًا.</string>
+    <string name="convert_err_legacy_ppt">لا يمكن تحويل ملفات ‎.ppt القديمة. احفظه بصيغة ‎.pptx أولًا.</string>
+    <string name="convert_err_range">نطاق صفحات غير صالح. استخدم الصفحات من 1 إلى %1$d.</string>
+    <string name="convert_err_split">أدخل عدد الصفحات في كل ملف، أو نطاقات صحيحة بين 1 و%1$d.</string>
+    <string name="convert_err_no_text">لم يُعثر على نص. يبدو أن هذا الملف ممسوح ضوئيًا — جرّب تحويل PDF إلى صور.</string>
+    <string name="convert_err_no_text_doc">لا يحتوي هذا الملف على نص لتصديره.</string>
+    <string name="convert_err_note_no_text">لا تحتوي هذه الملاحظة على نص مكتوب. استخدم التحويل إلى PDF أو صور للاحتفاظ بخط اليد.</string>
+    <string name="convert_err_no_images">تعذّرت قراءة جميع الصور.</string>
+    <string name="convert_err_engine_slides">تعذّر على محوّل PowerPoint معالجة هذا الملف.</string>
+    <string name="convert_err_engine_word">تعذّر على محوّل Word معالجة هذا الملف.</string>
+    <string name="convert_err_too_large">ملف النص هذا كبير جدًا (الحد الأقصى 20 ميغابايت).</string>
+</resources>

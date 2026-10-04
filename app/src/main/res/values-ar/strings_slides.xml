@@ -1,33 +1,47 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="slides_panel">لوحة الشرائح</string>
+    <!-- Viewer layout -->
+    <string name="slides_rail">مصغّرات الشرائح</string>
+    <string name="slides_notes_pane">جزء الملاحظات</string>
+    <string name="slides_slides_and_notes">الشرائح والملاحظات</string>
     <string name="slides_tab_slides">الشرائح</string>
-    <string name="slides_tab_notes">الملاحظات</string>
     <string name="slides_tab_comments">التعليقات</string>
     <string name="slides_tab_mynotes">ملاحظاتي</string>
+    <string name="slides_speaker_notes">ملاحظات المتحدث</string>
+    <string name="slides_file_menu">المشاركة والتصدير</string>
     <string name="slides_opening">جارٍ فتح العرض التقديمي…</string>
+    <string name="slides_hidden">شريحة مخفية</string>
+    <!-- Errors -->
     <string name="slides_err_title">تعذّر فتح هذا العرض التقديمي</string>
     <string name="slides_err_legacy">هذا ملف PowerPoint قديم (‎.ppt) أو ملف محمي بكلمة مرور. افتحه في تطبيق آخر، أو احفظه بصيغة ‎.pptx.</string>
     <string name="slides_err_corrupt">الملف تالف أو ليس عرضًا تقديميًا صالحًا من PowerPoint.</string>
     <string name="slides_err_empty">لا يحتوي هذا العرض التقديمي على أي شرائح.</string>
     <string name="slides_err_missing">تعذّر العثور على الملف.</string>
+    <!-- Notes pane -->
     <string name="slides_no_notes">لا توجد ملاحظات للمتحدث في هذه الشريحة</string>
     <string name="slides_no_comments">لا توجد تعليقات على هذه الشريحة</string>
     <string name="slides_mynotes_hint">اكتب ملاحظاتك الخاصة بالشريحة %1$d…</string>
     <string name="slides_mynotes_saved">يُحفظ تلقائيًا</string>
+    <string name="slides_unknown_author">كاتب غير معروف</string>
+    <string name="slides_resolved">تم الحل</string>
+    <!-- Export notes -->
     <string name="slides_export_notes">تصدير ملاحظات الشرائح</string>
     <string name="slides_export_file">%1$s - ملاحظات</string>
     <string name="slides_slide_n">الشريحة %1$d</string>
     <string name="slides_slide_n_title">الشريحة %1$d · %2$s</string>
-    <string name="slides_speaker_notes">ملاحظات المتحدث</string>
     <string name="slides_comments_header">التعليقات</string>
-    <string name="slides_unknown_author">كاتب غير معروف</string>
-    <string name="slides_resolved">تم الحل</string>
-    <string name="slides_replies">%1$d ردود</string>
+    <!-- Placeholders drawn on slides for content that is not rendered -->
     <string name="slides_chart">مخطط</string>
     <string name="slides_diagram">رسم تخطيطي</string>
     <string name="slides_object">كائن</string>
     <string name="slides_image">صورة</string>
-    <string name="slides_more">خيارات إضافية</string>
-    <string name="slides_hidden">شريحة مخفية</string>
+    <!-- Present mode -->
+    <string name="slides_present">عرض</string>
+    <string name="slides_present_from_current">العرض من الشريحة الحالية</string>
+    <string name="slides_exit_present">إنهاء عرض الشرائح</string>
+    <string name="slides_prev">الشريحة السابقة</string>
+    <string name="slides_next">الشريحة التالية</string>
+    <string name="slides_counter">%1$d / %2$d</string>
+    <string name="slides_end_of_show">انتهى عرض الشرائح. انقر للخروج.</string>
+    <string name="slides_laser_hint">مؤشر الليزر: ارسم بالقلم، أو المس مطوّلًا ثم اسحب بإصبعك</string>
 </resources>

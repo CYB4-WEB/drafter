@@ -92,4 +92,90 @@
         <item quantity="one">%d other event</item>
         <item quantity="other">%d other events</item>
     </plurals>
+
+    <!-- Round 2: phone calendar (Samsung / Google Calendar) -->
+    <string name="planner_ask_title">Also add this to your phone\'s calendar?</string>
+    <string name="planner_ask_text">Samsung Calendar / Google Calendar will remind you too.</string>
+    <string name="planner_ask_add">Add</string>
+    <string name="planner_not_now">Not now</string>
+    <string name="planner_ask_remember">Remember my choice</string>
+    <string name="planner_ask_settings_hint">You can change this any time in Settings.</string>
+    <string name="planner_ask_always">Always do this</string>
+    <string name="planner_ask_never">Don\'t ask again</string>
+    <string name="planner_cal_access_title">Allow calendar access</string>
+    <string name="planner_cal_access_text">Daftar adds your events to the phone\'s calendar and keeps them up to date when you edit or delete them here. Android will ask you to allow calendar access next.</string>
+    <string name="planner_cal_access_blocked">Calendar access is turned off for Daftar. You can turn it on in the app\'s settings, or add this event in your calendar app instead.</string>
+    <string name="planner_cal_access_blocked_short">Calendar access is turned off for Daftar. You can turn it on in the app\'s settings.</string>
+    <string name="planner_continue">Continue</string>
+    <string name="planner_open_settings">Open settings</string>
+    <string name="planner_use_calendar_app">Use calendar app</string>
+    <string name="planner_cal_needed">Calendar access is needed for this</string>
+    <string name="planner_cal_added">Added to your phone\'s calendar</string>
+    <string name="planner_cal_failed">Couldn\'t add the event to your phone\'s calendar</string>
+    <string name="planner_cal_no_app">No calendar app found</string>
+    <string name="planner_cal_switch">Also add to my phone\'s calendar</string>
+    <string name="planner_cal_switch_hint">Samsung Calendar / Google Calendar will remind you too</string>
+    <string name="planner_cal_synced_in">In your phone\'s calendar: %1$s</string>
+    <string name="planner_cal_open">Open in calendar app</string>
+    <string name="planner_delete_text_synced">\"%1$s\", its reminders and its copy in your phone\'s calendar will be removed.</string>
+
+    <string name="planner_more">More options</string>
+    <string name="planner_menu_sync">Sync with device calendar</string>
+    <string name="planner_menu_import">Import from calendar</string>
+    <string name="planner_menu_export">Export .ics</string>
+    <string name="planner_sync_auto">Add new events automatically</string>
+    <string name="planner_sync_auto_hint">Edits and deletions in Daftar update the phone\'s calendar too</string>
+    <string name="planner_sync_target">Calendar for new events</string>
+    <string name="planner_sync_target_hint">Events already added stay in their calendar.</string>
+    <string name="planner_sync_no_calendars">No calendar accounts on this device. Add one in your calendar app.</string>
+    <string name="planner_sync_need_access">Allow calendar access to choose a calendar and sync your events.</string>
+    <string name="planner_sync_allow">Allow calendar access</string>
+    <string name="planner_sync_adding">Adding to your phone\'s calendar…</string>
+    <plurals name="planner_sync_add_existing">
+        <item quantity="one">Add %d upcoming event to the calendar</item>
+        <item quantity="other">Add %d upcoming events to the calendar</item>
+    </plurals>
+    <plurals name="planner_sync_remove">
+        <item quantity="one">Remove %d event from the phone\'s calendar</item>
+        <item quantity="other">Remove %d events from the phone\'s calendar</item>
+    </plurals>
+    <string name="planner_sync_remove_title">Remove from the phone\'s calendar?</string>
+    <string name="planner_sync_remove_text">The copies Daftar added to your phone\'s calendar will be deleted. Your events stay in Daftar.</string>
+    <string name="planner_remove">Remove</string>
+    <string name="planner_done">Done</string>
+    <string name="planner_default_cal">Default</string>
+    <string name="planner_close">Close</string>
+
+    <string name="planner_import_title">Import from calendar</string>
+    <string name="planner_import_range_2w">2 weeks</string>
+    <string name="planner_import_range_1m">1 month</string>
+    <string name="planner_import_range_3m">3 months</string>
+    <string name="planner_import_range_6m">6 months</string>
+    <string name="planner_import_select_all">Select all</string>
+    <string name="planner_import_type_hint">Tap a type to change it</string>
+    <string name="planner_import_empty">No upcoming events in your calendar</string>
+    <string name="planner_import_already">Already in Daftar</string>
+    <string name="planner_import_reminders">Add Daftar reminders</string>
+    <string name="planner_import_reminders_hint">Leave off if your calendar app already reminds you</string>
+    <string name="planner_import_button">Import (%1$d)</string>
+    <plurals name="planner_imported_n">
+        <item quantity="one">%d event imported</item>
+        <item quantity="other">%d events imported</item>
+    </plurals>
+
+    <string name="planner_export_title">Export .ics</string>
+    <string name="planner_export_desc">Creates an iCalendar file you can share or open in any calendar app.</string>
+    <string name="planner_export_upcoming">Upcoming events (%1$d)</string>
+    <string name="planner_export_all">All events (%1$d)</string>
+    <string name="planner_export_failed">Couldn\'t create the file</string>
+    <string name="planner_ics_calname">Daftar planner</string>
+
+    <string name="planner_set_cal_mode">Add new events to the phone\'s calendar</string>
+    <string name="planner_mode_ask">Ask</string>
+    <string name="planner_mode_always">Always</string>
+    <string name="planner_mode_never">Never</string>
+    <string name="planner_set_calendar">Phone calendar</string>
+    <string name="planner_set_calendar_none">No calendar found</string>
+    <string name="planner_set_daily">Morning summary</string>
+    <string name="planner_set_daily_desc">Every day at %1$s: today\'s classes, exams and deadlines</string>
 </resources>

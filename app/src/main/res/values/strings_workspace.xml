@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- split workspace -->
+    <string name="ws_split_menu">Split view options</string>
+    <string name="ws_split_swap">Swap panes</string>
+    <string name="ws_split_side">Side by side</string>
+    <string name="ws_split_stacked">Stacked</string>
+    <string name="ws_split_equal">Equal sizes</string>
+    <string name="ws_open_left">Open file on the left…</string>
+    <string name="ws_open_right">Open file on the right…</string>
+    <string name="ws_open_top">Open file at the top…</string>
+    <string name="ws_open_bottom">Open file at the bottom…</string>
+    <string name="ws_close_left">Close left pane</string>
+    <string name="ws_close_right">Close right pane</string>
+    <string name="ws_close_top">Close top pane</string>
+    <string name="ws_close_bottom">Close bottom pane</string>
+    <string name="ws_pick_file">Choose a file to open here</string>
+
+    <!-- windows -->
+    <string name="ws_window_missing">This file is no longer available</string>
+
+    <!-- import -->
+    <string name="ws_import_title">Import</string>
+    <string name="ws_import_files">Files</string>
+    <string name="ws_import_files_desc">Pick one or more documents</string>
+    <string name="ws_import_folder">Folder</string>
+    <string name="ws_import_folder_desc">A whole folder with its sub-folders</string>
+    <string name="ws_import_folder_action">Import folder</string>
+    <string name="ws_import_folder_named">Import “%1$s”</string>
+    <string name="ws_import_into">Into %1$s</string>
+    <string name="ws_copy">Copy</string>
+    <string name="ws_copy_desc">Keep the originals where they are</string>
+    <string name="ws_move">Move</string>
+    <string name="ws_move_desc">Remove the originals after importing</string>
+    <string name="ws_move_unavailable">This location doesn’t allow removing files</string>
+    <string name="ws_scanning">Looking for files…</string>
+    <string name="ws_importing">Importing…</string>
+    <string name="ws_removing">Removing originals…</string>
+    <string name="ws_progress">%1$d of %2$d</string>
+    <string name="ws_import_busy">Another import is still running</string>
+    <string name="ws_import_done_title">Import finished</string>
+    <string name="ws_import_cancelled_title">Import cancelled</string>
+    <string name="ws_not_removed_title">Some originals were kept</string>
+    <string name="ws_shared_text">Shared text</string>
+    <plurals name="ws_import_items">
+        <item quantity="one">Import %1$d item</item>
+        <item quantity="other">Import %1$d items</item>
+    </plurals>
+    <plurals name="ws_imported_n">
+        <item quantity="one">%1$d file imported</item>
+        <item quantity="other">%1$d files imported</item>
+    </plurals>
+    <plurals name="ws_failed_n">
+        <item quantity="one">%1$d file could not be imported:</item>
+        <item quantity="other">%1$d files could not be imported:</item>
+    </plurals>
+    <plurals name="ws_not_removed_n">
+        <item quantity="one">%1$d item was copied but could not be removed from its original place:</item>
+        <item quantity="other">%1$d items were copied but could not be removed from their original place:</item>
+    </plurals>
+
+    <!-- in-app browser -->
+    <string name="ws_web_back">Previous page</string>
+    <string name="ws_web_forward">Next page</string>
+    <string name="ws_web_reload">Reload</string>
+    <string name="ws_web_stop">Stop</string>
+    <string name="ws_web_open_external">Open in browser</string>
+    <string name="ws_web_url_hint">Search or type a web address</string>
+    <string name="ws_web_file_blocked">Local files can’t be opened in the browser</string>
+    <string name="ws_web_no_app">No app can open this link</string>
+    <string name="ws_web_error">This page couldn’t be loaded</string>
+</resources>

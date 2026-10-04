@@ -241,9 +241,9 @@ private class IndexStripper(
     private val isCancelled: () -> Boolean,
     private val onPage: (Int, PageText) -> Unit,
 ) : PDFTextStripper() {
-    private class Unit(val text: String, val glyph: Int)
+    private class GlyphUnit(val text: String, val glyph: Int)
 
-    private val line = ArrayList<Unit>()
+    private val line = ArrayList<GlyphUnit>()
     private val display = StringBuilder()
     private val norm = StringBuilder()
     private val n2d = IntBuf()
@@ -276,11 +276,11 @@ private class IndexStripper(
             val u = tp.unicode
             if (u.isNullOrEmpty()) continue
             val g = addGlyph(tp)
-            line.add(Unit(Normalizer.normalize(u, Normalizer.Form.NFKC), g))
+            line.add(GlyphUnit(Normalizer.normalize(u, Normalizer.Form.NFKC), g))
         }
     }
 
-    override fun writeWordSeparator() { line.add(Unit(" ", -1)) }
+    override fun writeWordSeparator() { line.add(GlyphUnit(" ", -1)) }
 
     override fun writeLineSeparator() { flushLine() }
 
@@ -296,7 +296,7 @@ private class IndexStripper(
         }
     }
 
-    private fun append(u: Unit) {
+    private fun append(u: GlyphUnit) {
         val ds = display.length
         display.append(u.text)
         val de = display.length
@@ -309,7 +309,7 @@ private class IndexStripper(
     }
 
     /** Visual (left-to-right) glyph order → logical order, mirroring brackets inside right-to-left runs. */
-    private fun reorder(src: List<Unit>): List<Unit> {
+    private fun reorder(src: List<GlyphUnit>): List<GlyphUnit> {
         val proxy = CharArray(src.size) { i -> src[i].text.firstOrNull { !TextFold.isStripped(it) } ?: src[i].text[0] }
         if (!Bidi.requiresBidi(proxy, 0, proxy.size)) return src
         val bidi = Bidi(String(proxy), Bidi.DIRECTION_DEFAULT_LEFT_TO_RIGHT)
@@ -317,10 +317,10 @@ private class IndexStripper(
         val levels = ByteArray(src.size) { bidi.getLevelAt(it).toByte() }
         val arr = Array<Any>(src.size) { i ->
             val u = src[i]
-            if (levels[i].toInt() and 1 == 1 && u.text.length == 1) mirror(u.text[0])?.let { Unit(it.toString(), u.glyph) } ?: u else u
+            if ((levels[i].toInt() and 1) == 1 && u.text.length == 1) mirror(u.text[0])?.let { GlyphUnit(it.toString(), u.glyph) } ?: u else u
         }
         Bidi.reorderVisually(levels, 0, arr, 0, arr.size)
-        return arr.map { it as Unit }
+        return arr.map { it as GlyphUnit }
     }
 
     private fun mirror(c: Char): Char? = when (c) {

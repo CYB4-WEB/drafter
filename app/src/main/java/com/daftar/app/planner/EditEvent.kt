@@ -455,13 +455,13 @@ fun EditEventScreen(id: Long?, presetType: Int) {
 
     askId?.let { id ->
         AddToCalendarDialog(
-            onAdd = { remember ->
-                if (remember) CalendarPrefs.putMode(CalendarPrefs.ALWAYS)
+            onAdd = { always ->
+                if (always) CalendarPrefs.putMode(CalendarPrefs.ALWAYS)
                 askId = null
                 addToPhone(id, askReminders)
             },
-            onNotNow = { remember ->
-                if (remember) CalendarPrefs.putMode(CalendarPrefs.NEVER)
+            onNotNow = { never ->
+                if (never) CalendarPrefs.putMode(CalendarPrefs.NEVER)
                 askId = null
                 leave(askReminders)
             },

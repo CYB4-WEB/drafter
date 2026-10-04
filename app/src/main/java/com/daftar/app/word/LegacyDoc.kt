@@ -328,10 +328,6 @@ internal object LegacyDocReader {
                     lastWasCell = false
                 }
                 else -> {
-                    if (lastWasCell && row.isEmpty() && rows.isNotEmpty()) closeTable()
-                    if (lastWasCell && c != '\r') {
-                        // text after a row without a row mark continues the row
-                    }
                     cur.append(c)
                     lastWasCell = false
                 }

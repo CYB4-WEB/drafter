@@ -56,7 +56,29 @@
                 <data android:mimeType="text/rtf" />
                 <data android:mimeType="application/msword" />
             </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/pdf" />
+                <data android:mimeType="application/vnd.openxmlformats-officedocument.presentationml.presentation" />
+                <data android:mimeType="application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
+                <data android:mimeType="application/msword" />
+                <data android:mimeType="image/*" />
+                <data android:mimeType="text/*" />
+                <data android:mimeType="application/rtf" />
+            </intent-filter>
         </activity>
+
+        <!-- Separate windows (Samsung multi-window / pop-up view): one file per window, launched as new document tasks. -->
+        <activity
+            android:name=".WindowActivity"
+            android:exported="false"
+            android:launchMode="standard"
+            android:resizeableActivity="true"
+            android:autoRemoveFromRecents="true"
+            android:label="@string/app_name"
+            android:windowSoftInputMode="adjustResize"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|keyboard|navigation|density|uiMode" />
 
         <provider
             android:name="androidx.core.content.FileProvider"

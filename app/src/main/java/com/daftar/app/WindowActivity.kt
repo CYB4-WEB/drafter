@@ -65,7 +65,7 @@ class WindowActivity : AppCompatActivity() {
                         if (label != null) setLabel(label)
                     }
                     Box(Modifier.fillMaxSize().background(D.c.bg).openDropTarget(n)) { EntryStackContent(n.stack) }
-                    ImportHost()
+                    ImportHost(n)
                 }
             }
         }

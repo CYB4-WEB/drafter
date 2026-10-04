@@ -117,7 +117,11 @@ fun rememberCalendarAccess(): CalendarAccess {
             icon = { Icon(Icons.Rounded.EventAvailable, null, tint = D.c.accent) },
             title = { Text(stringResource(R.string.planner_cal_access_title), textAlign = TextAlign.Center) },
             text = {
-                Text(stringResource(if (blocked) R.string.planner_cal_access_blocked else R.string.planner_cal_access_text),
+                Text(stringResource(when {
+                    !blocked -> R.string.planner_cal_access_text
+                    state.allowFallback -> R.string.planner_cal_access_blocked
+                    else -> R.string.planner_cal_access_blocked_short
+                }),
                     style = MaterialTheme.typography.bodyMedium, color = D.c.muted)
             },
             confirmButton = {
@@ -152,8 +156,8 @@ fun rememberCalendarAccess(): CalendarAccess {
 
 /** [onAdd] / [onNotNow] get true when "Remember my choice" is ticked (→ always / never). */
 @Composable
-internal fun AddToCalendarDialog(onAdd: (remember: Boolean) -> Unit, onNotNow: (remember: Boolean) -> Unit) {
-    var remember by rememberSaveable { mutableStateOf(false) }
+internal fun AddToCalendarDialog(onAdd: (always: Boolean) -> Unit, onNotNow: (never: Boolean) -> Unit) {
+    var keep by rememberSaveable { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = { onNotNow(false) },
         icon = { Icon(Icons.Rounded.EditCalendar, null, tint = D.c.accent) },
@@ -163,10 +167,10 @@ internal fun AddToCalendarDialog(onAdd: (remember: Boolean) -> Unit, onNotNow: (
                 Text(stringResource(R.string.planner_ask_text), style = MaterialTheme.typography.bodyMedium, color = D.c.muted)
                 Spacer(Modifier.height(12.dp))
                 Row(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { remember = !remember }.padding(vertical = 4.dp),
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { keep = !keep }.padding(vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Checkbox(remember, { remember = it },
+                    Checkbox(keep, { keep = it },
                         colors = CheckboxDefaults.colors(checkedColor = D.c.accent, uncheckedColor = D.c.muted, checkmarkColor = D.c.onAccent))
                     Column(Modifier.weight(1f)) {
                         Text(stringResource(R.string.planner_ask_remember), style = MaterialTheme.typography.bodyLarge, color = D.c.ink)
@@ -176,13 +180,13 @@ internal fun AddToCalendarDialog(onAdd: (remember: Boolean) -> Unit, onNotNow: (
             }
         },
         confirmButton = {
-            Button(onClick = { onAdd(remember) }, colors = ButtonDefaults.buttonColors(containerColor = D.c.accent, contentColor = D.c.onAccent)) {
-                Text(stringResource(if (remember) R.string.planner_ask_always else R.string.planner_ask_add))
+            Button(onClick = { onAdd(keep) }, colors = ButtonDefaults.buttonColors(containerColor = D.c.accent, contentColor = D.c.onAccent)) {
+                Text(stringResource(if (keep) R.string.planner_ask_always else R.string.planner_ask_add))
             }
         },
         dismissButton = {
-            TextButton(onClick = { onNotNow(remember) }) {
-                Text(stringResource(if (remember) R.string.planner_ask_never else R.string.planner_not_now), color = D.c.ink)
+            TextButton(onClick = { onNotNow(keep) }) {
+                Text(stringResource(if (keep) R.string.planner_ask_never else R.string.planner_not_now), color = D.c.ink)
             }
         },
     )
@@ -374,11 +378,13 @@ internal fun ImportCalendarDialog(onDismiss: () -> Unit) {
     val selectable = candidates.orEmpty().filter { !it.alreadyImported }
     val chosen = selectable.filter { selected[it.key] == true }
 
-    fun import() {
-        val base = Planner.newId()
-        val list = chosen.mapIndexed { i, cand ->
+    fun doImport() {
+        val used = Planner.all().mapTo(HashSet()) { it.id }
+        var next = Planner.newId()
+        val list = chosen.map { cand ->
+            while (next in used) next++
             val t = types[cand.key] ?: cand.event.type
-            cand.event.copy(id = base + i, type = t, reminders = if (addReminders) defaultReminders(t) else emptyList())
+            cand.event.copy(id = next++, type = t, reminders = if (addReminders) defaultReminders(t) else emptyList())
         }
         Planner.addAll(list)
         toast(ctx, ctx.resources.getQuantityString(R.plurals.planner_imported_n, list.size, list.size))
@@ -442,7 +448,7 @@ internal fun ImportCalendarDialog(onDismiss: () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel), color = D.c.ink) }
                 Spacer(Modifier.width(8.dp))
-                Button(onClick = ::import, enabled = chosen.isNotEmpty(),
+                Button(onClick = ::doImport, enabled = chosen.isNotEmpty(),
                     colors = ButtonDefaults.buttonColors(containerColor = D.c.accent, contentColor = D.c.onAccent)) {
                     Text(stringResource(R.string.planner_import_button, chosen.size))
                 }
