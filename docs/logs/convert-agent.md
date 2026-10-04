@@ -127,3 +127,10 @@ Acceptance criteria:
 - Arabic survives TXT→PDF and PDF→DOCX — PARTIAL: DOCX side verified (bidi/rtl runs); TXT→PDF uses per-paragraph
   FIRSTSTRONG direction and platform shaping, needs an on-device look.
 - Generated PPTX/DOCX validated — PASS.
+
+## Progress (lead follow-up: OneNote)
+- Added `ONE_PDF`, `ONE_TXT`, `ONE_NOTE` (Group NOTES, from `Kind.ONENOTE`) → `OneConvert.toPdf/toText/toNote` with a captured
+  `Job.isActive` cancel flag, PDF progress 0–100, written to a `.part` file then renamed (deleted on cancel/failure).
+  `OneException` mapped: ENCRYPTED → password message, IO → read error, CLOUD/TOC/OLD_FORMAT/PACKAGE_COMPRESSION → new
+  `convert_err_one_unsupported`, else generic. `mimesFor(Kind.ONENOTE)` as requested. 7 new strings en + ar (130 keys each).
+  `FILTER=convert/ tools/compile.sh` → **BUILD OK**. Not run on a device.
