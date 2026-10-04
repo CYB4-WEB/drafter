@@ -400,7 +400,7 @@ private fun PrintPara(p: DocBlock.Para, start: Int, end: Int, first: Boolean, ga
         fontSize = scale.sp(p.basePt),
         lineHeight = scale.lineSp(p),
         textAlign = alignOf(p.align),
-        textDirection = if (p.rtl) TextDirection.Rtl else TextDirection.Content,
+        textDirection = when (textDir(p, first)) { 1 -> TextDirection.Rtl; -1 -> TextDirection.Ltr; else -> TextDirection.Content },
         textIndent = if (firstInd > 0f || hang > 0f) TextIndent(scale.sp(firstInd), scale.sp(hang)) else TextIndent.None,
         lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Proportional, LineHeightStyle.Trim.None),
         lineBreak = LineBreak.Simple,

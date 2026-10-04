@@ -27,6 +27,8 @@ sealed class Screen {
     data class Slides(val path: String) : Screen()
     data class Word(val path: String) : Screen()
     data class Image(val path: String) : Screen()
+    /** OneNote section (.one) or notebook package (.onepkg). */
+    data class OneNote(val path: String) : Screen()
     /** In-app browser / video player for links placed in notes. */
     data class Web(val url: String) : Screen()
     /** Converter hub; [path] preselects a source file. */
@@ -35,8 +37,14 @@ sealed class Screen {
     data class Split(val first: Screen, val second: Screen, val vertical: Boolean = false) : Screen()
     /** Planner editor; id null = new event, preset type optional. */
     data class EditEvent(val id: Long?, val presetType: Int = -1) : Screen()
+    /** Study hub: flashcard decks + focus timer (study-agent). */
+    data object Study : Screen()
+    /** Spaced-repetition review; deck = subject folder path or null for all due cards. */
+    data class Review(val deck: String? = null) : Screen()
+    /** Recycle bin (files-agent). */
+    data object Trash : Screen()
 
-    val isTopLevel get() = this is Home || this is Planner || this is Settings || this is Notes || this is Search || this is Convert || (this is Library && dir == Storage.root.absolutePath)
+    val isTopLevel get() = this is Home || this is Planner || this is Settings || this is Notes || this is Search || this is Convert || this is Study || (this is Library && dir == Storage.root.absolutePath)
 }
 
 /** Intent extra used by widgets / notifications to deep-link: values below. */
@@ -118,6 +126,7 @@ fun screenFor(f: File): Screen? {
         Kind.PPTX -> Screen.Slides(f.absolutePath)
         Kind.DOCX, Kind.TEXT -> Screen.Word(f.absolutePath)
         Kind.IMAGE -> Screen.Image(f.absolutePath)
+        Kind.ONENOTE -> Screen.OneNote(f.absolutePath)
         else -> null
     }
 }
@@ -129,6 +138,7 @@ val Screen.file: File? get() = when (this) {
     is Screen.Slides -> File(path)
     is Screen.Word -> File(path)
     is Screen.Image -> File(path)
+    is Screen.OneNote -> File(path)
     else -> null
 }
 
@@ -136,6 +146,8 @@ fun uriFor(ctx: Context, f: File) = FileProvider.getUriForFile(ctx, ctx.packageN
 
 fun mimeOf(f: File): String = when (f.extension.lowercase()) {
     "note" -> "application/octet-stream"
+    "one", "onetoc2" -> "application/onenote"
+    "onepkg" -> "application/vnd.ms-cab-compressed"
     else -> MimeTypeMap.getSingleton().getMimeTypeFromExtension(f.extension.lowercase()) ?: "*/*"
 }
 

@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Document scanner -->
+    <string name="files_scan">مسح ضوئي</string>
+    <string name="files_scan_document">مسح مستند</string>
+    <string name="files_scan_document_desc">من الكاميرا أو المعرض، ويُحفظ بصيغة PDF</string>
+    <string name="files_scan_name">مسح</string>
+    <string name="files_scan_no_play">يحتاج مسح المستندات إلى خدمات Google Play، وهي غير متوفرة على هذا الجهاز.</string>
+    <string name="files_scan_downloading">ما زالت خدمات Google Play تنزّل الماسح الضوئي. حاول مرة أخرى بعد دقيقة.</string>
+    <string name="files_scan_failed">تعذّر تشغيل الماسح الضوئي: %1$s</string>
+    <string name="files_scan_save_failed">تعذّر حفظ المسح.</string>
+    <string name="files_scan_saved">حُفظ المسح في %1$s</string>
+
+    <!-- Folder pictures -->
+    <string name="files_cover">الصورة</string>
+    <string name="files_cover_choose">اختيار صورة</string>
+    <string name="files_cover_change">تغيير</string>
+    <string name="files_cover_remove">إزالة الصورة</string>
+    <string name="files_cover_square">مربعة</string>
+    <string name="files_cover_wide">عريضة 16:9</string>
+    <string name="files_cover_failed">تعذّرت قراءة هذه الصورة.</string>
+    <string name="files_cover_none">لا توجد صورة. تعرض بطاقة المجلد الصورة مع لون المجلد وأيقونته.</string>
+
+    <!-- Recycle bin -->
+    <string name="files_trash">سلة المحذوفات</string>
+    <string name="files_trash_desc">تبقى العناصر المحذوفة 30 يومًا ثم تُحذف نهائيًا.</string>
+    <string name="files_trash_empty_action">إفراغ السلة</string>
+    <string name="files_trash_empty_title">إفراغ سلة المحذوفات؟</string>
+    <string name="files_trash_empty_text">سيُحذف كل ما في سلة المحذوفات نهائيًا. لا يمكن التراجع عن ذلك.</string>
+    <string name="files_trash_none">سلة المحذوفات فارغة</string>
+    <string name="files_trash_settings_desc">%1$d عنصر · %2$s · تُحفظ 30 يومًا</string>
+    <string name="files_trash_settings_empty">فارغة · تُحفظ العناصر المحذوفة 30 يومًا</string>
+    <string name="files_restore">استعادة</string>
+    <string name="files_restored">تمت الاستعادة إلى %1$s</string>
+    <string name="files_restore_failed">تعذّرت استعادة هذا العنصر.</string>
+    <string name="files_delete_forever">حذف نهائي</string>
+    <string name="files_delete_forever_text">حذف \"%1$s\" نهائيًا؟ لا يمكن التراجع عن ذلك.</string>
+    <string name="files_trash_move_title">نقل إلى سلة المحذوفات</string>
+    <string name="files_trash_move_text">نقل \"%1$s\" إلى سلة المحذوفات؟ يمكنك استعادته خلال 30 يومًا.</string>
+    <string name="files_trash_move">نقل إلى السلة</string>
+    <string name="files_trash_moved">نُقل \"%1$s\" إلى سلة المحذوفات</string>
+    <string name="files_trash_failed">تعذّر نقل هذا العنصر إلى سلة المحذوفات.</string>
+    <string name="files_undo">تراجع</string>
+    <string name="files_deleted_today">حُذف اليوم</string>
+    <plurals name="files_deleted_days">
+        <item quantity="zero">حُذف اليوم</item>
+        <item quantity="one">حُذف منذ يوم واحد</item>
+        <item quantity="two">حُذف منذ يومين</item>
+        <item quantity="few">حُذف منذ %d أيام</item>
+        <item quantity="many">حُذف منذ %d يومًا</item>
+        <item quantity="other">حُذف منذ %d يوم</item>
+    </plurals>
+    <plurals name="files_days_left">
+        <item quantity="zero">لم يبقَ أي يوم</item>
+        <item quantity="one">بقي يوم واحد</item>
+        <item quantity="two">بقي يومان</item>
+        <item quantity="few">بقيت %d أيام</item>
+        <item quantity="many">بقي %d يومًا</item>
+        <item quantity="other">بقي %d يوم</item>
+    </plurals>
+
+    <!-- Version history -->
+    <string name="files_version_history">سجل الإصدارات</string>
+    <string name="files_versions_none">لا توجد إصدارات سابقة بعد. أثناء التحرير يُحفظ إصدار كل 10 دقائق.</string>
+    <string name="files_version_pick">اختر إصدارًا لمعاينته.</string>
+    <string name="files_version_restore_title">استعادة هذا الإصدار؟</string>
+    <string name="files_version_restore_text">ستعود الملاحظة إلى ما كانت عليه في %1$s. يُحفظ محتواها الحالي كإصدار.</string>
+    <string name="files_version_restored">تمت استعادة الإصدار</string>
+    <string name="files_version_copy">حفظ كنسخة</string>
+    <string name="files_version_copy_name">%1$s (إصدار %2$s)</string>
+    <string name="files_version_note_open">أغلق الملاحظة قبل استعادة إصدار.</string>
+    <string name="files_version_latest">الأحدث</string>
+    <string name="files_version_failed">تعذّرت قراءة هذا الإصدار.</string>
+    <plurals name="files_pages">
+        <item quantity="zero">لا صفحات</item>
+        <item quantity="one">صفحة واحدة</item>
+        <item quantity="two">صفحتان</item>
+        <item quantity="few">%d صفحات</item>
+        <item quantity="many">%d صفحة</item>
+        <item quantity="other">%d صفحة</item>
+    </plurals>
+</resources>

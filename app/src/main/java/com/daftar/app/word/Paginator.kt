@@ -148,7 +148,7 @@ internal class TextEngine(private val darkInk: Int = 0xFF1F2937.toInt(), private
         val align = when (p.align) { 1 -> Layout.Alignment.ALIGN_CENTER; 2 -> Layout.Alignment.ALIGN_OPPOSITE; else -> Layout.Alignment.ALIGN_NORMAL }
         val b = StaticLayout.Builder.obtain(text, 0, text.length, paint, w)
             .setAlignment(align)
-            .setTextDirection(if (p.rtl) TextDirectionHeuristics.RTL else TextDirectionHeuristics.FIRSTSTRONG_LTR)
+            .setTextDirection(when (textDir(p, first)) { 1 -> TextDirectionHeuristics.RTL; -1 -> TextDirectionHeuristics.LTR; else -> TextDirectionHeuristics.FIRSTSTRONG_LTR })
             .setIncludePad(false)
             .setLineSpacing(0f, 1f)
             .setBreakStrategy(Layout.BREAK_STRATEGY_SIMPLE)
@@ -182,6 +182,17 @@ internal class TextEngine(private val darkInk: Int = 0xFF1F2937.toInt(), private
         val n = max(1, layout(p, 0, p.text.length, true, textWidth(p, colW) - SAFETY, UNIT).lineCount)
         return (if (atTop) 0f else p.before) + 2 * boxPadV(p.box) + n * lineHeight(p) + p.after
     }
+}
+
+/**
+ * Base direction for (part of) a paragraph: 1 RTL, -1 LTR, 0 first-strong per line. A continuation slice of a single
+ * LTR paragraph keeps LTR even if it starts with Arabic; multi-line text chunks (txt / log / code) stay per line.
+ * The print renderer uses the same rule.
+ */
+internal fun textDir(p: DocBlock.Para, first: Boolean): Int = when {
+    p.rtl -> 1
+    !first && p.text.indexOf('\n') < 0 -> -1
+    else -> 0
 }
 
 /** Sets the text size in (float) pixels; AbsoluteSizeSpan would round to whole pixels. */

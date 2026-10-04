@@ -8,7 +8,8 @@ import android.util.Base64
 import com.daftar.app.data.json
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
-import kotlinx.serialization.encodeToString
+import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.json.encodeToStream
 import java.io.ByteArrayOutputStream
 import java.io.File
 
@@ -53,6 +54,17 @@ class Stroke(
     @Transient var bbox: RectF? = null
     /** Tape only: shown see-through in the editor (self-quiz). Never saved, never exported. */
     @Transient var revealed: Boolean = false
+    /**
+     * Offset of [geom] relative to [pts]: a whiteboard growth shift shares the already built geometry instead of copying
+     * every Path; [InkRender] draws the geometry translated by (gdx, gdy).
+     */
+    @Transient var gdx: Float = 0f
+    @Transient var gdy: Float = 0f
+    /** Stable identity shared by shifted copies of this stroke (render caches survive whiteboard growth). */
+    @Transient private var ident: Any? = null
+
+    /** Identity token: the same for this stroke and every [shifted] copy of it. Main thread only. */
+    fun identity(): Any = ident ?: Any().also { ident = it }
 
     val isTape get() = tool == Tool.TAPE
 
@@ -77,16 +89,20 @@ class Stroke(
         val n = pts.copyOf()
         var i = 0
         while (i < n.size) { n[i] += dx; n[i + 1] += dy; i += 3 }
+        val id = identity()
         return Stroke(tool, color, width, n, rec, t, style).also { s ->
-            s.geom = geom?.offsetCopy(dx, dy)
+            val g = geom
+            if (g != null && g.finished) { s.geom = g; s.gdx = gdx + dx; s.gdy = gdy + dy }
             bbox?.let { b -> s.bbox = RectF(b).apply { offset(dx, dy) } }
             s.revealed = revealed
+            s.ident = id
         }
     }
 
-    fun withColor(c: Int) = Stroke(tool, c, width, pts, rec, t, style)
+    /** Same points in another colour (geometry does not depend on colour, so it is shared). */
+    fun withColor(c: Int) = Stroke(tool, c, width, pts, rec, t, style).also { it.geom = geom; it.gdx = gdx; it.gdy = gdy; it.bbox = bbox }
 
-    fun withTime(recId: Int, time: Long) = Stroke(tool, color, width, pts, recId, time, style).also { it.geom = geom; it.bbox = bbox }
+    fun withTime(recId: Int, time: Long) = Stroke(tool, color, width, pts, recId, time, style).also { it.geom = geom; it.gdx = gdx; it.gdy = gdy; it.bbox = bbox }
 }
 
 @Serializable
@@ -100,8 +116,15 @@ data class TextItem(
     val color: Int = 0xFF1C1B19.toInt(),
     val font: String = "sans",
     val bold: Boolean = false,
+    /** Paragraph alignment: [ALIGN_START] (follows the text direction, Arabic → right), [ALIGN_CENTER], [ALIGN_END]. */
+    val align: Int = ALIGN_START,
 ) {
     @Transient var layout: StaticLayout? = null
+    companion object {
+        const val ALIGN_START = 0
+        const val ALIGN_CENTER = 1
+        const val ALIGN_END = 2
+    }
     fun bounds() = RectF(x, y, x + w, y + (layout?.height?.toFloat() ?: (size * 1.4f)))
 }
 
@@ -227,9 +250,11 @@ class InkDoc(
     /** Whiteboard mode: one page that grows in every direction (OneNote style). */
     var infinite: Boolean = false,
 ) {
+    /** Writes atomically (temp file + rename), streaming the JSON so a big document never exists twice as a String. */
+    @OptIn(ExperimentalSerializationApi::class)
     fun save(f: File) {
         val tmp = File(f.parentFile, f.name + ".tmp")
-        tmp.writeText(json.encodeToString(this))
+        tmp.outputStream().buffered(64 * 1024).use { json.encodeToStream(this, it) }
         if (!tmp.renameTo(f)) { f.delete(); tmp.renameTo(f) }
     }
 

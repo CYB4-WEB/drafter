@@ -1,0 +1,142 @@
+==== sample.one
+SECTION 'sample' pages=3 error=null
+ PAGE 'Lecture 3 — Cell biology' level=1 created=Wed Apr 01 00:00:00 UTC 2026 size=612x792 title@36,21 items=5
+  OUTLINE @36,86 w=468
+   P {h2}: «Summary»(b16)
+   P {p}: «Key ideas: »(b11)«membranes»(i11)« control »(11)«transport»(u11#C00000)« and »(11)«signalling»(11^FFFF00)«.»(14)
+   P {p}: «Reading: »(11)«cell notes»(u11 ->https://example.com/cells)« (online)»(11)
+   P [•] {p}: «Phospholipid bilayer»(11)
+   P [•] {p}: «Proteins»(11)
+     P [1.] {p}: «Diffusion»(11)
+     P [2.] {p}: «Active transport»(11)
+  OUTLINE @36,324 w=324
+   TABLE 3x2 widths=[108, 144] borders=true
+     cell[0,0]
+       P {p}: «Organelle»(b11)
+     cell[0,1]
+       P {p}: «Function»(11)
+     cell[1,0]
+       P {p}: «Nucleus»(11)
+     cell[1,1]
+       P {p}: «Holds DNA»(11)
+     cell[2,0]
+       P {p}: «Mitochondria»(11)
+     cell[2,1]
+       P {p}: «Makes ATP»(11)
+  IMAGE @540,86 144x108pt type=png bytes=6234 alt=Cell diagram name=null
+  INK @540,252 strokes=2 bounds=[5, 17, 79, 99] first=w=1.98 c=FF1D4ED8 n=13 p0=(76.5,42.5)
+  FILE @540,432 safety.txt 44
+ PAGE 'Homework' level=2 created=Thu Apr 02 00:00:00 UTC 2026 size=0x0 title@36,21 items=1
+  OUTLINE @36,86 w=360
+   P [1)] {p}: «Read chapter 4»(11)
+   P [2)] {p}: «Answer questions 1-5»(11)
+   P [3)] {p}: «Draw a cell»(11)
+ PAGE 'ملاحظات المحاضرة' level=1 created=Fri Apr 03 00:00:00 UTC 2026 size=0x0 title@36,21 items=1
+  OUTLINE @36,86 w=432
+   P {p} align=2: «الخلية هي »(11)«وحدة الحياة»(b11)« الأساسية.»(11)
+   P [1.] {p}: «النواة»(11)
+   P [2.] {p}: «الميتوكوندريا»(11)
+==== lab.one
+SECTION 'lab' pages=1 error=null
+ PAGE 'Lab 1 — Microscopes' level=1 created=Wed Apr 01 00:00:00 UTC 2026 size=0x0 title@36,21 items=1
+  OUTLINE @36,86 w=360
+   P {p}: «Steps»(b11)
+   P [1.] {p}: «Clean the lens»(11)
+   P [2.] {p}: «Place the slide»(11)
+   P [3.] {p}: «Focus slowly»(11)
+==== sample.onepkg
+SECTION 'Lectures' pages=3 error=null
+ PAGE 'Lecture 3 — Cell biology' level=1 created=Wed Apr 01 00:00:00 UTC 2026 size=612x792 title@36,21 items=5
+  OUTLINE @36,86 w=468
+   P {h2}: «Summary»(b16)
+   P {p}: «Key ideas: »(b11)«membranes»(i11)« control »(11)«transport»(u11#C00000)« and »(11)«signalling»(11^FFFF00)«.»(14)
+   P {p}: «Reading: »(11)«cell notes»(u11 ->https://example.com/cells)« (online)»(11)
+   P [•] {p}: «Phospholipid bilayer»(11)
+   P [•] {p}: «Proteins»(11)
+     P [1.] {p}: «Diffusion»(11)
+     P [2.] {p}: «Active transport»(11)
+  OUTLINE @36,324 w=324
+   TABLE 3x2 widths=[108, 144] borders=true
+     cell[0,0]
+       P {p}: «Organelle»(b11)
+     cell[0,1]
+       P {p}: «Function»(11)
+     cell[1,0]
+       P {p}: «Nucleus»(11)
+     cell[1,1]
+       P {p}: «Holds DNA»(11)
+     cell[2,0]
+       P {p}: «Mitochondria»(11)
+     cell[2,1]
+       P {p}: «Makes ATP»(11)
+  IMAGE @540,86 144x108pt type=png bytes=6234 alt=Cell diagram name=null
+  INK @540,252 strokes=2 bounds=[5, 17, 79, 99] first=w=1.98 c=FF1D4ED8 n=13 p0=(76.5,42.5)
+  FILE @540,432 safety.txt 44
+ PAGE 'Homework' level=2 created=Thu Apr 02 00:00:00 UTC 2026 size=0x0 title@36,21 items=1
+  OUTLINE @36,86 w=360
+   P [1)] {p}: «Read chapter 4»(11)
+   P [2)] {p}: «Answer questions 1-5»(11)
+   P [3)] {p}: «Draw a cell»(11)
+ PAGE 'ملاحظات المحاضرة' level=1 created=Fri Apr 03 00:00:00 UTC 2026 size=0x0 title@36,21 items=1
+  OUTLINE @36,86 w=432
+   P {p} align=2: «الخلية هي »(11)«وحدة الحياة»(b11)« الأساسية.»(11)
+   P [1.] {p}: «النواة»(11)
+   P [2.] {p}: «الميتوكوندريا»(11)
+SECTION 'Labs › Lab 1' pages=1 error=null
+ PAGE 'Lab 1 — Microscopes' level=1 created=Wed Apr 01 00:00:00 UTC 2026 size=0x0 title@36,21 items=1
+  OUTLINE @36,86 w=360
+   P {p}: «Steps»(b11)
+   P [1.] {p}: «Clean the lens»(11)
+   P [2.] {p}: «Place the slide»(11)
+   P [3.] {p}: «Focus slowly»(11)
+==== sample_stored.onepkg
+SECTION 'Lectures' pages=3 error=null
+ PAGE 'Lecture 3 — Cell biology' level=1 created=Wed Apr 01 00:00:00 UTC 2026 size=612x792 title@36,21 items=5
+  OUTLINE @36,86 w=468
+   P {h2}: «Summary»(b16)
+   P {p}: «Key ideas: »(b11)«membranes»(i11)« control »(11)«transport»(u11#C00000)« and »(11)«signalling»(11^FFFF00)«.»(14)
+   P {p}: «Reading: »(11)«cell notes»(u11 ->https://example.com/cells)« (online)»(11)
+   P [•] {p}: «Phospholipid bilayer»(11)
+   P [•] {p}: «Proteins»(11)
+     P [1.] {p}: «Diffusion»(11)
+     P [2.] {p}: «Active transport»(11)
+  OUTLINE @36,324 w=324
+   TABLE 3x2 widths=[108, 144] borders=true
+     cell[0,0]
+       P {p}: «Organelle»(b11)
+     cell[0,1]
+       P {p}: «Function»(11)
+     cell[1,0]
+       P {p}: «Nucleus»(11)
+     cell[1,1]
+       P {p}: «Holds DNA»(11)
+     cell[2,0]
+       P {p}: «Mitochondria»(11)
+     cell[2,1]
+       P {p}: «Makes ATP»(11)
+  IMAGE @540,86 144x108pt type=png bytes=6234 alt=Cell diagram name=null
+  INK @540,252 strokes=2 bounds=[5, 17, 79, 99] first=w=1.98 c=FF1D4ED8 n=13 p0=(76.5,42.5)
+  FILE @540,432 safety.txt 44
+ PAGE 'Homework' level=2 created=Thu Apr 02 00:00:00 UTC 2026 size=0x0 title@36,21 items=1
+  OUTLINE @36,86 w=360
+   P [1)] {p}: «Read chapter 4»(11)
+   P [2)] {p}: «Answer questions 1-5»(11)
+   P [3)] {p}: «Draw a cell»(11)
+ PAGE 'ملاحظات المحاضرة' level=1 created=Fri Apr 03 00:00:00 UTC 2026 size=0x0 title@36,21 items=1
+  OUTLINE @36,86 w=432
+   P {p} align=2: «الخلية هي »(11)«وحدة الحياة»(b11)« الأساسية.»(11)
+   P [1.] {p}: «النواة»(11)
+   P [2.] {p}: «الميتوكوندريا»(11)
+SECTION 'Labs › Lab 1' pages=1 error=null
+ PAGE 'Lab 1 — Microscopes' level=1 created=Wed Apr 01 00:00:00 UTC 2026 size=0x0 title@36,21 items=1
+  OUTLINE @36,86 w=360
+   P {p}: «Steps»(b11)
+   P [1.] {p}: «Clean the lens»(11)
+   P [2.] {p}: «Place the slide»(11)
+   P [3.] {p}: «Focus slowly»(11)
+==== encrypted.one
+SECTION 'encrypted' pages=0 error=ENCRYPTED
+==== toc.onetoc2
+ERROR TOC: TOC
+==== corrupt.one
+ERROR CORRUPT: chunk out of file (19304+220)

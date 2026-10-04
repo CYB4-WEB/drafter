@@ -73,6 +73,9 @@ enum class Conv(
     NOTE_DOCX(Group.NOTES, Kind.NOTE, Kind.DOCX, R.string.convert_note_docx, R.string.convert_note_docx_desc),
     TEXT_PDF(Group.NOTES, Kind.TEXT, Kind.PDF, R.string.convert_text_pdf, R.string.convert_text_pdf_desc),
     TEXT_DOCX(Group.NOTES, Kind.TEXT, Kind.DOCX, R.string.convert_text_docx, R.string.convert_text_docx_desc),
+    ONE_PDF(Group.NOTES, Kind.ONENOTE, Kind.PDF, R.string.convert_one_pdf, R.string.convert_one_pdf_desc),
+    ONE_TXT(Group.NOTES, Kind.ONENOTE, Kind.TEXT, R.string.convert_one_txt, R.string.convert_one_txt_desc),
+    ONE_NOTE(Group.NOTES, Kind.ONENOTE, Kind.NOTE, R.string.convert_one_note, R.string.convert_one_note_desc),
 
     MERGE_PDF(Group.TOOLS, Kind.PDF, Kind.PDF, R.string.convert_merge, R.string.convert_merge_desc, multi = true, minSources = 2,
         tool = Icons.AutoMirrored.Rounded.MergeType),

@@ -54,4 +54,18 @@ internal object InkPrefs {
     var tapeWidth: Float
         get() = float("tapeWidth", 26f)
         set(v) = put("tapeWidth", v)
+    /** Math helper: answers expressions ending with "=" (on by default). */
+    var mathHelper: Boolean
+        get() = sp?.getBoolean("mathHelper", true) ?: true
+        set(v) { sp?.edit()?.putBoolean("mathHelper", v)?.apply() }
+    /** Last text box formatting (used for new boxes). */
+    var textFont: String
+        get() = sp?.getString("textFont", "sans")?.takeIf { it in InkRender.fonts } ?: "sans"
+        set(v) { sp?.edit()?.putString("textFont", v)?.apply() }
+    var textSize: Float
+        get() = float("textSize", 16f).coerceIn(4f, 400f)
+        set(v) = put("textSize", v)
+    var textBold: Boolean
+        get() = sp?.getBoolean("textBold", false) ?: false
+        set(v) { sp?.edit()?.putBoolean("textBold", v)?.apply() }
 }
