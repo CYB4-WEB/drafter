@@ -350,7 +350,13 @@ class InkView(context: Context) : View(context) {
         } else { sx = 0f; sy = 0f }
         laidOut = true
         clamp(); notifyZoom()
+        if (pendingGo >= 0) { val g = pendingGo; pendingGo = -1; goToPage(g) }
     }
+
+    private var pendingGo = -1
+
+    /** [goToPage] now, or right after the first layout when the view has no size yet (opening at a given page). */
+    fun goToPageWhenReady(i: Int) { if (laidOut && width > 0) goToPage(i) else pendingGo = i }
 
     /** Whiteboards are normalised on open: empty space far from the content (from earlier panning) is trimmed. */
     private fun trimBoard() {
@@ -2138,7 +2144,6 @@ class InkView(context: Context) : View(context) {
         m.images.forEach { box.union(it.bounds()) }
         m.links.forEach { box.union(it.bounds()) }
         sel = Sel(s.page, tidied, m.texts, m.images, m.links, box).also { it.changed = true }
-        listener?.onChanged()
         invalidate()
         return true
     }

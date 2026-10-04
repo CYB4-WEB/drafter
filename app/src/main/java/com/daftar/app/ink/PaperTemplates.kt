@@ -160,10 +160,7 @@ object PaperTemplates {
     /** Gives the templates a context for translated captions ("Notes"); called by the editor UI. */
     fun bind(ctx: Context) { if (appContext == null) appContext = ctx.applicationContext }
 
-    @SuppressLint("PrivateApi", "DiscouragedPrivateApi")
-    private fun context(): Context? = appContext ?: runCatching {
-        Class.forName("android.app.ActivityThread").getMethod("currentApplication").invoke(null) as? Context
-    }.getOrNull()?.also { appContext = it }
+    private fun context(): Context? = appContext ?: runCatching { com.daftar.app.data.Storage.appCtx }.getOrNull()?.also { appContext = it }
 
     private class Labels(
         val rtl: Boolean,
