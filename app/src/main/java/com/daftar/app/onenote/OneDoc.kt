@@ -184,8 +184,9 @@ private class SectionBuilder(val store: OneStore) {
                 val txt = blocks.filterIsInstance<OnePara>().joinToString(" ") { it.text.trim() }.trim()
                 if (txt.isNotEmpty() && title.isEmpty()) {
                     title = txt
-                    titleX = (op.f32(P.OffsetFromParentHoriz) ?: tp.f32(P.OffsetFromParentHoriz) ?: 1f) * HALF_INCH
-                    titleY = (op.f32(P.OffsetFromParentVert) ?: tp.f32(P.OffsetFromParentVert) ?: 0.6f) * HALF_INCH
+                    // Title outline offsets are relative to the title node; keep it clear of the page edge like OneNote does.
+                    titleX = maxOf(((op.f32(P.OffsetFromParentHoriz) ?: 0f) + (tp.f32(P.OffsetFromParentHoriz) ?: 0f)) * HALF_INCH, 36f)
+                    titleY = maxOf(((op.f32(P.OffsetFromParentVert) ?: 0f) + (tp.f32(P.OffsetFromParentVert) ?: 0f)) * HALF_INCH, 20f)
                 }
             }
         }
@@ -303,13 +304,17 @@ private class SectionBuilder(val store: OneStore) {
 
         private fun content(id: XG, level: Int, label: String?, rtl: Boolean): OneBlock? {
             val p = space.props(id) ?: return null
-            return when {
-                space.jcidIndex(id) == J.RichText || p.has(P.RichEditTextUnicode) || p.has(P.TextExtendedAscii) -> paragraph(p, level, label, rtl)
-                space.jcidIndex(id) == J.Table -> table(p, level)
-                space.jcidIndex(id) == J.Image -> image(p)?.let { OneImageBlock(level, it) }
-                space.jcidIndex(id) == J.EmbeddedFile -> attachment(p)?.let { OneFileBlock(level, it) }
-                p.has(P.InkData) -> ink(p)?.let { OneInkBlock(level, it) }
-                else -> null
+            // Image nodes also carry RichEditTextUnicode (OCR text), so the node type is checked before the text properties.
+            return when (space.jcidIndex(id)) {
+                J.Image -> image(p)?.let { OneImageBlock(level, it) }
+                J.Table -> table(p, level)
+                J.EmbeddedFile -> attachment(p)?.let { OneFileBlock(level, it) }
+                J.RichText -> paragraph(p, level, label, rtl)
+                else -> when {
+                    p.has(P.InkData) -> ink(p)?.let { OneInkBlock(level, it) }
+                    p.has(P.RichEditTextUnicode) || p.has(P.TextExtendedAscii) -> paragraph(p, level, label, rtl)
+                    else -> null
+                }
             }
         }
 

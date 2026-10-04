@@ -14,4 +14,4 @@ if [ ! -f "$OUT/.stamp" ] || [ "$NEWEST" -nt "$OUT/.stamp" ]; then
     "$SRC"/OneModel.kt "$SRC"/OneStore.kt "$SRC"/OneDoc.kt "$SRC"/Cab.kt "$SRC"/OneLoader.kt "$ROOT/docs/testdata/onenote/OneDump.kt" 2>&1 | grep -v "JAVA_TOOL_OPTIONS" | grep -v "^warning:" || true
   touch "$OUT/.stamp"
 fi
-java -cp "$OUT:$LIB/kotlin-stdlib-2.0.21.jar" OneDumpKt "$@" 2>&1 | grep -v JAVA_TOOL_OPTIONS
+java -Dstdout.encoding=UTF-8 -Dfile.encoding=UTF-8 -cp "$OUT:$LIB/kotlin-stdlib-2.0.21.jar" OneDumpKt "$@" 2>&1 | grep -v JAVA_TOOL_OPTIONS
