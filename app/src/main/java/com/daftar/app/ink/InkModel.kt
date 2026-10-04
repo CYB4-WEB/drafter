@@ -149,6 +149,22 @@ data class LinkItem(
     companion object {
         const val LINK_H = 30f
 
+        /** Label shown when the user gives none: file name, or the URL without scheme / "www." / trailing slash. */
+        fun defaultLabel(target: String): String {
+            if (target.startsWith("/")) return File(target).nameWithoutExtension
+            val s = target.substringAfter("://").removePrefix("www.").trimEnd('/')
+            return if (s.length > 60) s.take(57) + "…" else s
+        }
+
+        /** "youtube.com/x" → "https://youtube.com/x"; returns null when [raw] is not a usable web address. */
+        fun normalizeUrl(raw: String): String? {
+            val t = raw.trim()
+            if (t.isEmpty() || t.contains(' ')) return null
+            val u = if (t.startsWith("http://", true) || t.startsWith("https://", true)) t else "https://$t"
+            val host = u.substringAfter("://").substringBefore('/').substringBefore('?').substringBefore('#')
+            return if (host.contains('.') && !host.startsWith('.') && !host.endsWith('.')) u else null
+        }
+
         fun isVideoUrl(u: String): Boolean {
             val s = u.lowercase()
             val host = s.substringAfter("://").substringBefore('/').removePrefix("www.").removePrefix("m.")
