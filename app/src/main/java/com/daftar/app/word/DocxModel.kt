@@ -21,6 +21,8 @@ data class RunFmt(
     /** 0 = baseline, 1 = superscript, 2 = subscript. */
     val vert: Int = 0,
     val mono: Boolean = false,
+    /** Font family key: null = document default (sans), "serif", "mono", "cairo", "amiri", "tehreer". */
+    val font: String? = null,
 )
 
 /** A formatted range inside a paragraph's plain text. */

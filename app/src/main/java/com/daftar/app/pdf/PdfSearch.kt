@@ -1,6 +1,9 @@
 package com.daftar.app.pdf
 
 import android.graphics.RectF
+import com.tom_roush.pdfbox.contentstream.operator.Operator
+import com.tom_roush.pdfbox.cos.COSBase
+import com.tom_roush.pdfbox.cos.COSName
 import com.tom_roush.pdfbox.io.MemoryUsageSetting
 import com.tom_roush.pdfbox.pdmodel.PDDocument
 import com.tom_roush.pdfbox.pdmodel.PDPage
@@ -78,8 +81,35 @@ class PageText(
     val n2dEnd: IntArray,
     val n2g: IntArray,
     val glyphs: FloatArray,
+    /** Per display line: 4 floats (left, top, right, bottom) in displayed page points. */
+    val lineBoxes: FloatArray = FloatArray(0),
+    /** Per display line: largest font size in points (headings are guessed from it). */
+    val lineSizes: FloatArray = FloatArray(0),
+    /** Per picture drawn on the page: 4 floats (left, top, right, bottom) in displayed page points. */
+    val images: FloatArray = FloatArray(0),
+    /** True when this text comes from OCR (scanned page) rather than the PDF's text layer. */
+    val fromOcr: Boolean = false,
 ) {
-    val bytes: Long get() = 64L + display.length * 2L + norm.length * 14L + glyphs.size * 4L
+    val bytes: Long get() = 64L + display.length * 2L + norm.length * 14L + glyphs.size * 4L + lineBoxes.size * 5L + images.size * 4L
+
+    /** The display lines (reading order), same indexing as [lineBoxes] / [lineSizes]. */
+    val lines: List<String> by lazy {
+        val l = display.split('\n')
+        if (l.isNotEmpty() && l.last().isEmpty()) l.dropLast(1) else l
+    }
+
+    fun lineBox(i: Int): RectF? {
+        val o = i * 4
+        return if (o + 3 < lineBoxes.size) RectF(lineBoxes[o], lineBoxes[o + 1], lineBoxes[o + 2], lineBoxes[o + 3]) else null
+    }
+
+    fun lineSize(i: Int): Float = lineSizes.getOrNull(i) ?: 0f
+
+    val imageCount: Int get() = images.size / 4
+
+    fun imageBox(i: Int): RectF = RectF(images[i * 4], images[i * 4 + 1], images[i * 4 + 2], images[i * 4 + 3])
+
+    val hasText: Boolean get() = norm.isNotBlank()
 }
 
 private class IntBuf(cap: Int = 1024) {
@@ -91,6 +121,7 @@ private class IntBuf(cap: Int = 1024) {
 
 private class FloatBuf(cap: Int = 4096) {
     var a = FloatArray(cap); var n = 0
+    fun add(v: Float) { if (n == a.size) a = a.copyOf(a.size * 2); a[n++] = v }
     fun add4(l: Float, t: Float, r: Float, b: Float) {
         if (n + 4 > a.size) a = a.copyOf(a.size * 2)
         a[n++] = l; a[n++] = t; a[n++] = r; a[n++] = b
@@ -115,6 +146,45 @@ class PdfTextIndex(private val file: File, private val budgetBytes: Long) {
     }
 
     @Synchronized fun clear() { cache.clear(); used = 0 }
+
+    /**
+     * Text for pages that have no text layer (scanned) — set by the session from the OCR sidecar.
+     * Search, reading mode and translation use it in place of the empty text layer.
+     */
+    @Volatile var ocrPage: ((Int) -> PageText?)? = null
+
+    /** The text layer of page [i] if it is cached already (no parsing). */
+    fun cachedPage(i: Int): PageText? = cached(i)
+
+    /** Text layer when it has text, else the OCR text when there is some, else the (empty) text layer. */
+    fun effective(i: Int, t: PageText): PageText = if (t.hasText) t else ocrPage?.invoke(i) ?: t
+
+    /**
+     * Blocking walk over pages [from]..[to] (0-based, inclusive) delivering each page's text layer (not merged with OCR —
+     * see [effective]). Uses / fills the cache. Call on IO. Throws [CancellationException] once [isCancelled] turns true.
+     */
+    fun walk(from: Int = 0, to: Int = Int.MAX_VALUE, isCancelled: () -> Boolean = { false }, onPage: (Int, PageText) -> Unit) {
+        PDDocument.load(file, MemoryUsageSetting.setupMixed(16L shl 20)).use { doc ->
+            val n = doc.numberOfPages
+            val a = from.coerceIn(0, (n - 1).coerceAtLeast(0))
+            val b = to.coerceIn(a, (n - 1).coerceAtLeast(0))
+            val stripper = IndexStripper(cached = ::cached, isCancelled = isCancelled) { idx, text ->
+                keep(idx, text)
+                onPage(idx, text)
+            }
+            stripper.startPage = a + 1
+            stripper.endPage = b + 1
+            stripper.writeText(doc, NullWriter)
+        }
+    }
+
+    /** Text layer of one page (blocking, cached). */
+    fun page(i: Int): PageText? {
+        cached(i)?.let { return it }
+        var out: PageText? = null
+        walk(i, i) { _, t -> out = t }
+        return out
+    }
 
     /** Progressive results for [query]: hits page by page plus progress; cancelled with the collecting coroutine. */
     fun search(query: String, maxHits: Int = MAX_HITS): Flow<SearchEvent> = channelFlow {
@@ -147,8 +217,9 @@ class PdfTextIndex(private val file: File, private val budgetBytes: Long) {
             val stripper = IndexStripper(
                 cached = ::cached,
                 isCancelled = isCancelled,
-            ) { idx, text ->
-                keep(idx, text)
+            ) { idx, raw ->
+                keep(idx, raw)
+                val text = effective(idx, raw)
                 if (text.norm.isNotBlank()) hasText = true
                 if (found < maxHits) {
                     val hits = matches(idx, text, q, maxHits - found)
@@ -260,6 +331,12 @@ private class IndexStripper(
     private val glyphs = FloatBuf()
     private var glyphCount = 0
     private val pt = FloatArray(8)
+    private val lineBoxes = FloatBuf(256)
+    private val lineSizes = FloatBuf(64)
+    private val images = FloatBuf(16)
+    private var lineSize = 0f
+    private var ll = Float.MAX_VALUE; private var lt = Float.MAX_VALUE; private var lr = -Float.MAX_VALUE; private var lb = -Float.MAX_VALUE
+    private var pageRot = 0; private var pageW = 0f; private var pageH = 0f; private var cropX = 0f; private var cropY = 0f
 
     init {
         sortByPosition = true
@@ -273,10 +350,59 @@ private class IndexStripper(
         if (known != null) { onPage(idx, known); return }
         line.clear(); display.setLength(0); norm.setLength(0)
         n2d.clear(); n2dEnd.clear(); n2g.clear(); glyphs.clear(); glyphCount = 0
+        lineBoxes.clear(); lineSizes.clear(); images.clear(); resetLineBox()
+        val crop = page.cropBox
+        pageRot = ((page.rotation % 360) + 360) % 360
+        pageW = crop.width; pageH = crop.height; cropX = crop.lowerLeftX; cropY = crop.lowerLeftY
         super.processPage(page)
         flushLine()
-        val t = PageText(display.toString(), norm.toString(), n2d.toArray(), n2dEnd.toArray(), n2g.toArray(), glyphs.toArray())
+        val t = PageText(
+            display.toString(), norm.toString(), n2d.toArray(), n2dEnd.toArray(), n2g.toArray(), glyphs.toArray(),
+            lineBoxes.toArray(), lineSizes.a.copyOf(lineSizes.n), images.toArray(),
+        )
         onPage(idx, t)
+    }
+
+    private fun resetLineBox() {
+        ll = Float.MAX_VALUE; lt = Float.MAX_VALUE; lr = -Float.MAX_VALUE; lb = -Float.MAX_VALUE; lineSize = 0f
+    }
+
+    /** Pictures: image XObjects (`Do`, forms are walked by the engine itself) and inline images (`BI`). */
+    override fun processOperator(operator: Operator, operands: MutableList<COSBase>) {
+        runCatching {
+            when (operator.name) {
+                "Do" -> {
+                    val n = operands.firstOrNull() as? COSName
+                    if (n != null && resources?.isImageXObject(n) == true) addImage()
+                }
+                "BI" -> addImage()
+            }
+        }
+        super.processOperator(operator, operands)
+    }
+
+    /** The current transformation maps the unit square onto the picture; keep it in displayed page points. */
+    private fun addImage() {
+        val m = graphicsState.currentTransformationMatrix
+        var l = Float.MAX_VALUE; var tp = Float.MAX_VALUE; var r = -Float.MAX_VALUE; var b = -Float.MAX_VALUE
+        for (k in 0 until 4) {
+            val ux = if (k == 1 || k == 2) 1f else 0f
+            val uy = if (k >= 2) 1f else 0f
+            val x = m.scaleX * ux + m.shearX * uy + m.translateX - cropX
+            val y = m.shearY * ux + m.scaleY * uy + m.translateY - cropY
+            val dx: Float; val dy: Float
+            when (pageRot) {
+                90 -> { dx = y; dy = x }
+                180 -> { dx = pageW - x; dy = y }
+                270 -> { dx = pageH - y; dy = pageW - x }
+                else -> { dx = x; dy = pageH - y }
+            }
+            l = min(l, dx); tp = min(tp, dy); r = max(r, dx); b = max(b, dy)
+        }
+        // Skip rules, bullets and other decorations.
+        if (r - l < 24f || b - tp < 24f) return
+        if (images.n >= 4 * 200) return
+        images.add4(l, tp, r, b)
     }
 
     override fun writeString(text: String, textPositions: MutableList<TextPosition>) {
@@ -284,6 +410,10 @@ private class IndexStripper(
             val u = tp.unicode
             if (u.isNullOrEmpty()) continue
             val g = addGlyph(tp)
+            val o = g * 4
+            ll = min(ll, glyphs.a[o]); lt = min(lt, glyphs.a[o + 1]); lr = max(lr, glyphs.a[o + 2]); lb = max(lb, glyphs.a[o + 3])
+            val fs = tp.fontSizeInPt.takeIf { it > 0f && it < 500f } ?: tp.heightDir
+            if (fs > lineSize) lineSize = fs
             line.add(GlyphUnit(Normalizer.normalize(u, Normalizer.Form.NFKC), g))
         }
     }
@@ -299,6 +429,9 @@ private class IndexStripper(
         for (u in reorder(line)) append(u)
         line.clear()
         display.append('\n')
+        if (ll <= lr) lineBoxes.add4(ll, lt, lr, lb) else lineBoxes.add4(0f, 0f, 0f, 0f)
+        lineSizes.add(lineSize)
+        resetLineBox()
         if (norm.isNotEmpty() && norm[norm.length - 1] != ' ') {
             norm.append(' '); n2d.add(display.length - 1); n2dEnd.add(display.length); n2g.add(-1)
         }

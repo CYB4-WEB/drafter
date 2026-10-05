@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- updatePeriodMillis is only a 6 h safety net: the widget is refreshed with every planner change and by a
+     non-wakeup alarm when a countdown label changes (battery first). -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="180dp" android:minHeight="110dp"
+    android:minResizeWidth="110dp" android:minResizeHeight="50dp"
+    android:targetCellWidth="3" android:targetCellHeight="2"
+    android:resizeMode="horizontal|vertical"
+    android:updatePeriodMillis="21600000"
+    android:initialLayout="@layout/widget_exams"
+    android:previewLayout="@layout/widget_exams"
+    android:description="@string/grades_widget_desc"
+    android:widgetCategory="home_screen" />

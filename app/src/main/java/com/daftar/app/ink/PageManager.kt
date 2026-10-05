@@ -94,6 +94,7 @@ internal object PageOps {
         texts = p.texts.map { it.copy(x = it.x * k, y = it.y * k, w = it.w * k, size = it.size * k) },
         images = p.images.map { i -> i.copy(x = i.x * k, y = i.y * k, w = i.w * k, h = i.h * k).also { it.bmp = i.bmp } },
         links = p.links.map { it.copy(x = it.x * k, y = it.y * k, w = it.w * k, h = it.h * k) },
+        stickers = p.stickers.map { it.copy(x = it.x * k, y = it.y * k, w = it.w * k, h = it.h * k) },
     )
 
     /**
@@ -102,7 +103,7 @@ internal object PageOps {
      */
     fun portable(p: InkPage): InkPage =
         if (p.strokes.none { it.rec != 0 }) p.copy()
-        else p.copy(strokes = p.strokes.map { s -> if (s.rec == 0) s else Stroke(s.tool, s.color, s.width, s.pts, 0, -1, s.style) })
+        else p.copy(strokes = p.strokes.map { s -> if (s.rec == 0) s else Stroke(s.tool, s.color, s.width, s.pts, 0, -1, s.style, s.shape) })
 
     /** Moves the selected pages one step earlier (dir < 0) or later; blocks keep their order. */
     fun shift(pages: List<InkPage>, sel: Set<Int>, dir: Int): List<InkPage> {

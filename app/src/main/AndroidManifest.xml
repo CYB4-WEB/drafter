@@ -136,5 +136,11 @@
             </intent-filter>
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_quick" />
         </receiver>
+        <receiver android:name=".widget.ExamWidget" android:exported="true" android:label="@string/grades_widget_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_exams" />
+        </receiver>
     </application>
 </manifest>

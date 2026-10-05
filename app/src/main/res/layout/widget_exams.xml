@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Exam countdown widget (grades-agent): next 1-3 planner exams. Texts are set at runtime (in-app language). -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/ex_root" android:layout_width="match_parent" android:layout_height="match_parent"
+    android:background="@drawable/widget_bg" android:orientation="vertical" android:padding="14dp">
+    <TextView android:id="@+id/ex_header" android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:text="@string/grades_widget_header" android:textColor="@color/ink" android:textSize="16sp" android:textStyle="bold"
+        android:maxLines="1" android:ellipsize="end" android:textAlignment="viewStart" />
+    <TextView android:id="@+id/ex_empty" android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:text="@string/grades_widget_empty" android:textColor="@color/muted" android:textSize="13sp" android:paddingTop="10dp"
+        android:textAlignment="viewStart" />
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:paddingTop="6dp">
+        <LinearLayout android:id="@+id/ex_row0" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="horizontal" android:gravity="center_vertical" android:paddingTop="6dp" android:paddingBottom="6dp" android:visibility="gone">
+            <ImageView android:id="@+id/ex_bar0" android:layout_width="4dp" android:layout_height="36dp"
+                android:src="@drawable/widget_bar" android:layout_marginEnd="10dp" android:importantForAccessibility="no" />
+            <LinearLayout android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:orientation="vertical">
+                <TextView android:id="@+id/ex_title0" android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:textColor="@color/ink" android:textSize="14sp" android:maxLines="1" android:ellipsize="end" android:textStyle="bold"
+                    android:textAlignment="viewStart" />
+                <TextView android:id="@+id/ex_sub0" android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:textColor="@color/muted" android:textSize="12sp" android:maxLines="1" android:ellipsize="end"
+                    android:textAlignment="viewStart" />
+            </LinearLayout>
+            <TextView android:id="@+id/ex_cd0" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_marginStart="10dp" android:background="@drawable/widget_chip"
+                android:paddingStart="10dp" android:paddingEnd="10dp" android:paddingTop="5dp" android:paddingBottom="5dp"
+                android:textColor="@color/ink" android:textSize="14sp" android:textStyle="bold" android:maxLines="1" />
+        </LinearLayout>
+        <LinearLayout android:id="@+id/ex_row1" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="horizontal" android:gravity="center_vertical" android:paddingTop="6dp" android:paddingBottom="6dp" android:visibility="gone">
+            <ImageView android:id="@+id/ex_bar1" android:layout_width="4dp" android:layout_height="36dp"
+                android:src="@drawable/widget_bar" android:layout_marginEnd="10dp" android:importantForAccessibility="no" />
+            <LinearLayout android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:orientation="vertical">
+                <TextView android:id="@+id/ex_title1" android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:textColor="@color/ink" android:textSize="14sp" android:maxLines="1" android:ellipsize="end" android:textStyle="bold"
+                    android:textAlignment="viewStart" />
+                <TextView android:id="@+id/ex_sub1" android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:textColor="@color/muted" android:textSize="12sp" android:maxLines="1" android:ellipsize="end"
+                    android:textAlignment="viewStart" />
+            </LinearLayout>
+            <TextView android:id="@+id/ex_cd1" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_marginStart="10dp" android:background="@drawable/widget_chip"
+                android:paddingStart="10dp" android:paddingEnd="10dp" android:paddingTop="5dp" android:paddingBottom="5dp"
+                android:textColor="@color/ink" android:textSize="14sp" android:textStyle="bold" android:maxLines="1" />
+        </LinearLayout>
+        <LinearLayout android:id="@+id/ex_row2" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="horizontal" android:gravity="center_vertical" android:paddingTop="6dp" android:paddingBottom="6dp" android:visibility="gone">
+            <ImageView android:id="@+id/ex_bar2" android:layout_width="4dp" android:layout_height="36dp"
+                android:src="@drawable/widget_bar" android:layout_marginEnd="10dp" android:importantForAccessibility="no" />
+            <LinearLayout android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:orientation="vertical">
+                <TextView android:id="@+id/ex_title2" android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:textColor="@color/ink" android:textSize="14sp" android:maxLines="1" android:ellipsize="end" android:textStyle="bold"
+                    android:textAlignment="viewStart" />
+                <TextView android:id="@+id/ex_sub2" android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:textColor="@color/muted" android:textSize="12sp" android:maxLines="1" android:ellipsize="end"
+                    android:textAlignment="viewStart" />
+            </LinearLayout>
+            <TextView android:id="@+id/ex_cd2" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_marginStart="10dp" android:background="@drawable/widget_chip"
+                android:paddingStart="10dp" android:paddingEnd="10dp" android:paddingTop="5dp" android:paddingBottom="5dp"
+                android:textColor="@color/ink" android:textSize="14sp" android:textStyle="bold" android:maxLines="1" />
+        </LinearLayout>
+    </LinearLayout>
+</LinearLayout>

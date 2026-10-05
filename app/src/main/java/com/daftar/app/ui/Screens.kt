@@ -144,12 +144,14 @@ fun HomeScreen() {
                         Column(Modifier.weight(1f)) {
                             UpcomingSection(upcoming)
                             com.daftar.app.study.StudyHomeCard()
+                            com.daftar.app.grades.GpaHomeStat()
                             if (pins.isNotEmpty()) PinnedSection(pins, actions)
                         }
                     }
                 } else {
                     UpcomingSection(upcoming)
                     com.daftar.app.study.StudyHomeCard()
+                    com.daftar.app.grades.GpaHomeStat()
                     SubjectsSection(subjects, actions, columns = if (compact) 0 else 3)
                     if (pins.isNotEmpty()) PinnedSection(pins, actions)
                     RecentSection(recents, actions)

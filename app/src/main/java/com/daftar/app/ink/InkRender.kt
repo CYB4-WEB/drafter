@@ -127,6 +127,13 @@ class StrokeGeom internal constructor(val tool: Int, val style: Int, val width: 
             curW = w
             newChunk(mx, my, w)
         }
+        if (tool == Tool.SHAPE) {
+            // shapes (library + recognized): straight segments, sharp corners
+            chunks[nChunks - 1]!!.lineTo(x, y)
+            segInChunk++
+            mx = x; my = y; lx = x; ly = y; n++
+            return
+        }
         val nmx = (lx + x) / 2f; val nmy = (ly + y) / 2f
         chunks[nChunks - 1]!!.quadTo(lx, ly, nmx, nmy)
         segInChunk++
@@ -319,7 +326,15 @@ object InkRender {
     private val pathTL = ThreadLocal.withInitial { Path() }
     private val dashTL = ThreadLocal.withInitial { DashPathEffect(floatArrayOf(4f, 3f), 0f) }
     private val dotsTL = ThreadLocal.withInitial { FloatArray(2048) }
+    /** Night paper on this thread (set by the editor around its own frame, by exports "as shown", and by tile renders). */
+    private val nightTL = ThreadLocal.withInitial { BooleanArray(1) }
     private val strokePaint get() = strokeTL.get()!!
+
+    /** Turns the on-screen night ink mapping on/off for drawing on the calling thread (see [InkNight]). */
+    fun setNight(on: Boolean) { nightTL.get()!![0] = on }
+    val night: Boolean get() = nightTL.get()!![0]
+    /** Display colour of [c] on this thread (mapped for night paper). */
+    fun inkColor(c: Int): Int = if (nightTL.get()!![0]) InkNight.ink(c) else c
     private val bmpPaint get() = bmpTL.get()!!
     private val linePaint get() = lineTL.get()!!
 
@@ -422,7 +437,8 @@ object InkRender {
         if (tool == Tool.HIGHLIGHTER) c.drawRect(x - r, y - r, x + r, y + r, p) else c.drawCircle(x, y, r, p)
     }
 
-    private fun drawGeom(c: Canvas, g: StrokeGeom, tool: Int, style: Int, color: Int, alpha: Float) {
+    private fun drawGeom(c: Canvas, g: StrokeGeom, tool: Int, style: Int, color0: Int, alpha: Float) {
+        val color = inkColor(color0)
         if (g.dotR > 0f) { drawDot(c, g.dotX, g.dotY, g.dotR * 2f, tool, style, color, alpha); return }
         if (g.kind == StrokeGeom.KIND_OUTLINE) {
             val p = if (style == PenStyle.PENCIL) pencilTL.get()!!.also { it.colorFilter = pencilColor(color) }
@@ -444,11 +460,12 @@ object InkRender {
     }
 
     /** Live (unfinished) geometry, including the not-yet-smoothed tail so the ink follows the pen tip exactly. */
-    fun drawLive(c: Canvas, g: StrokeGeom, color: Int) {
+    fun drawLive(c: Canvas, g: StrokeGeom, color0: Int) {
         val tool = g.tool; val style = g.style
-        if (g.kind == StrokeGeom.KIND_TAPE) { drawTapeGeom(c, g, color, false, 1f); return }
-        if (!g.finished && g.isDot) { drawDot(c, g.liveDotX, g.liveDotY, g.dotWidth(), tool, style, color, 1f); return }
-        drawGeom(c, g, tool, style, color, 1f)
+        if (g.kind == StrokeGeom.KIND_TAPE) { drawTapeGeom(c, g, color0, false, 1f); return }
+        if (!g.finished && g.isDot) { drawDot(c, g.liveDotX, g.liveDotY, g.dotWidth(), tool, style, inkColor(color0), 1f); return }
+        drawGeom(c, g, tool, style, color0, 1f)
+        val color = inkColor(color0)
         if (g.finished || g.n == 0) return
         if (g.kind == StrokeGeom.KIND_CHUNKS) {
             val p = strokePaint
@@ -520,7 +537,16 @@ object InkRender {
     }
 
     fun drawText(c: Canvas, t: TextItem) {
-        c.save(); c.translate(t.x, t.y); layout(t).draw(c); c.restore()
+        val l = layout(t)
+        c.save(); c.translate(t.x, t.y)
+        if (nightTL.get()!![0]) {
+            // night paper: the cached layout's paint is shared, so map its colour just for this draw
+            val p = l.paint; val old = p.color
+            p.color = InkNight.ink(old)
+            l.draw(c)
+            p.color = old
+        } else l.draw(c)
+        c.restore()
     }
 
     fun drawImage(c: Canvas, im: ImageItem) {
@@ -699,7 +725,7 @@ object InkRender {
                 val s = lod(26f, 7f)
                 var y = 72f + max(0f, floor((area.top - 72f) / s)) * s
                 while (y < min(page.h - 150f, area.bottom)) { c.drawLine(24f, y, page.w - 24f, y, lp); y += s }
-                lp.color = 0xFF9DB3CC.toInt(); lp.strokeWidth = hair(1f)
+                lp.color = if (dark) 0x59FFFFFF else 0xFF9DB3CC.toInt(); lp.strokeWidth = hair(1f)
                 c.drawLine(150f, 40f, 150f, page.h - 150f, lp)
                 c.drawLine(24f, page.h - 150f, page.w - 24f, page.h - 150f, lp)
             }
@@ -707,7 +733,7 @@ object InkRender {
     }
 
     /**
-     * Everything a user put on the page — no paper/background. Order: images, ink, text, links, then tapes on top
+     * Everything a user put on the page — no paper/background. Order: images, ink, stickers, text, links, then tapes on top
      * (tapes always hidden here: exports and thumbnails never give the answers away).
      */
     fun drawPageContent(c: Canvas, page: InkPage) {
@@ -716,6 +742,8 @@ object InkRender {
         val st = page.strokes
         var tapes = 0
         for (i in st.indices) { val s = st[i]; if (s.isTape) tapes++ else drawStroke(c, s) }
+        val sk = page.stickers
+        for (i in sk.indices) InkStickers.draw(c, sk[i])
         val tx = page.texts
         for (i in tx.indices) drawText(c, tx[i])
         val ln = page.links

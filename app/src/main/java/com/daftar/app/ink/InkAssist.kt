@@ -155,7 +155,7 @@ internal object Tidy {
         val out = strokes.toMutableList()
         for (it in items) {
             val s = strokes[it.index]
-            out[it.index] = Stroke(s.tool, s.color, s.width, it.pts, s.rec, s.t, s.style)
+            out[it.index] = Stroke(s.tool, s.color, s.width, it.pts, s.rec, s.t, s.style, s.shape)
         }
         return out
     }
