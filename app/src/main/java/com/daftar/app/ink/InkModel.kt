@@ -6,6 +6,7 @@ import android.graphics.RectF
 import android.text.StaticLayout
 import android.util.Base64
 import com.daftar.app.data.json
+import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
 import kotlinx.serialization.ExperimentalSerializationApi
@@ -39,6 +40,7 @@ object PenStyle {
  * One ink stroke. Points are (x, y, pressure) triples in page points. Identity-compared on purpose.
  * A [Tool.TAPE] stroke has exactly two points (start, end) and [width] = tape thickness.
  */
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 class Stroke(
     val tool: Int,
@@ -48,6 +50,11 @@ class Stroke(
     val rec: Int = 0,      // recording id this stroke was drawn during (0 = none)
     val t: Long = -1,      // ms offset into that recording
     val style: Int = PenStyle.BALL,
+    /**
+     * Shape library kind of a [Tool.SHAPE] stroke ("rect", "arrow", "table:3:4", … see [InkShapes]); "" for everything
+     * else. Never written when empty, so old files and ordinary strokes are byte-for-byte unchanged.
+     */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val shape: String = "",
 ) {
     /** Render geometry for this stroke's pen style (built once by [InkRender], then reused every frame). */
     @Transient var geom: StrokeGeom? = null
@@ -81,7 +88,7 @@ class Stroke(
         val n = pts.copyOf()
         var i = 0
         while (i < n.size) { val (x, y) = f(n[i], n[i + 1]); n[i] = x; n[i + 1] = y; i += 3 }
-        return Stroke(tool, color, width * widthScale, n, rec, t, style)
+        return Stroke(tool, color, width * widthScale, n, rec, t, style, shape)
     }
 
     /** Same stroke moved by (dx, dy). Keeps the cached geometry (offset copy), so big whiteboards shift cheaply. */
@@ -90,7 +97,7 @@ class Stroke(
         var i = 0
         while (i < n.size) { n[i] += dx; n[i + 1] += dy; i += 3 }
         val id = identity()
-        return Stroke(tool, color, width, n, rec, t, style).also { s ->
+        return Stroke(tool, color, width, n, rec, t, style, shape).also { s ->
             val g = geom
             if (g != null && g.finished) { s.geom = g; s.gdx = gdx + dx; s.gdy = gdy + dy }
             bbox?.let { b -> s.bbox = RectF(b).apply { offset(dx, dy) } }
@@ -100,9 +107,9 @@ class Stroke(
     }
 
     /** Same points in another colour (geometry does not depend on colour, so it is shared). */
-    fun withColor(c: Int) = Stroke(tool, c, width, pts, rec, t, style).also { it.geom = geom; it.gdx = gdx; it.gdy = gdy; it.bbox = bbox }
+    fun withColor(c: Int) = Stroke(tool, c, width, pts, rec, t, style, shape).also { it.geom = geom; it.gdx = gdx; it.gdy = gdy; it.bbox = bbox }
 
-    fun withTime(recId: Int, time: Long) = Stroke(tool, color, width, pts, recId, time, style).also { it.geom = geom; it.gdx = gdx; it.gdy = gdy; it.bbox = bbox }
+    fun withTime(recId: Int, time: Long) = Stroke(tool, color, width, pts, recId, time, style, shape).also { it.geom = geom; it.gdx = gdx; it.gdy = gdy; it.bbox = bbox }
 }
 
 @Serializable
@@ -203,6 +210,35 @@ data class LinkItem(
     }
 }
 
+/**
+ * A sticker / stamp from the sticker tray (vector, see [InkStickers]): [kind] picks the artwork, [text] is the label of
+ * text stamps (stored in the language it was placed in, so it renders the same everywhere), [rot] = rotation in degrees
+ * around the centre. Drawn crisp at any zoom and as vectors in PDF exports.
+ */
+@Serializable
+data class StickerItem(
+    val id: Long,
+    val x: Float,
+    val y: Float,
+    val w: Float,
+    val h: Float,
+    val kind: String,
+    val color: Int,
+    val rot: Float = 0f,
+    val text: String = "",
+) {
+    fun bounds(): RectF {
+        if (rot == 0f) return RectF(x, y, x + w, y + h)
+        // rotated: bounds of the rotated rectangle
+        val a = Math.toRadians(rot.toDouble())
+        val c = kotlin.math.abs(kotlin.math.cos(a)).toFloat(); val s = kotlin.math.abs(kotlin.math.sin(a)).toFloat()
+        val hw = (w * c + h * s) / 2f; val hh = (w * s + h * c) / 2f
+        val cx = x + w / 2f; val cy = y + h / 2f
+        return RectF(cx - hw, cy - hh, cx + hw, cy + hh)
+    }
+}
+
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class InkPage(
     val w: Float = 595f,
@@ -215,8 +251,10 @@ data class InkPage(
     /** Whiteboards only: total amount the content was shifted right/down while the board grew left/top. */
     val shiftX: Float = 0f,
     val shiftY: Float = 0f,
+    /** Stickers / stamps (never written when empty: old readers and old files are unaffected). */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val stickers: List<StickerItem> = emptyList(),
 ) {
-    fun isEmpty() = strokes.isEmpty() && texts.isEmpty() && images.isEmpty() && links.isEmpty()
+    fun isEmpty() = strokes.isEmpty() && texts.isEmpty() && images.isEmpty() && links.isEmpty() && stickers.isEmpty()
 
     /** All content moved by (dx, dy) (whiteboard growth). Render caches are carried over. */
     fun shifted(dx: Float, dy: Float): InkPage = copy(
@@ -224,6 +262,7 @@ data class InkPage(
         texts = texts.map { t -> t.copy(x = t.x + dx, y = t.y + dy).also { it.layout = t.layout } },
         images = images.map { i -> i.copy(x = i.x + dx, y = i.y + dy).also { it.bmp = i.bmp } },
         links = links.map { l -> l.copy(x = l.x + dx, y = l.y + dy).also { it.shown = l.shown; it.shownFor = l.shownFor } },
+        stickers = stickers.map { it.copy(x = it.x + dx, y = it.y + dy) },
         shiftX = shiftX + dx, shiftY = shiftY + dy,
     )
 
@@ -235,12 +274,17 @@ data class InkPage(
         for (t in texts) { InkRender.layout(t); r.union(t.bounds()) }
         for (i in images) r.union(i.bounds())
         for (l in links) r.union(l.bounds())
+        for (k in stickers) r.union(k.bounds())
         return r
     }
 }
 
 @Serializable
-data class Recording(val id: Int, val file: String, val duration: Long, val created: Long)
+data class Recording(
+    val id: Int, val file: String, val duration: Long, val created: Long,
+    /** Live lecture transcript (transcript-agent); empty for older notes / devices without live transcription. */
+    val transcript: List<TranscriptSeg> = emptyList(),
+)
 
 @Serializable
 class InkDoc(

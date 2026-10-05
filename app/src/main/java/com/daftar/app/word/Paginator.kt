@@ -111,6 +111,7 @@ internal class TextEngine(private val darkInk: Int = 0xFF1F2937.toInt(), private
             val style = (if (f.bold) Typeface.BOLD else 0) or (if (f.italic) Typeface.ITALIC else 0)
             if (style != 0) s.setSpan(StyleSpan(style), a, b, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             if (f.mono) s.setSpan(TypefaceSpan("monospace"), a, b, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            else WordFonts.typeface(f.font)?.let { s.setSpan(FaceSpan(it), a, b, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE) }
             if (f.vert == 1) s.setSpan(SuperscriptSpan(), a, b, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             if (f.vert == 2) s.setSpan(SubscriptSpan(), a, b, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             if (withColors) {

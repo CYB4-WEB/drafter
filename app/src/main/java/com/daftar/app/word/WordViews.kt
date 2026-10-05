@@ -179,7 +179,7 @@ internal fun buildText(
                 fontSize = sizeEm,
                 fontWeight = if (f.bold) FontWeight.Bold else null,
                 fontStyle = if (f.italic) FontStyle.Italic else null,
-                fontFamily = if (f.mono) FontFamily.Monospace else null,
+                fontFamily = if (f.mono) FontFamily.Monospace else WordFonts.family(f.font),
                 textDecoration = deco,
                 background = f.background?.let { if (paper) Color(it) else docBackground(Color(it), c) } ?: Color.Unspecified,
                 baselineShift = when (f.vert) { 1 -> BaselineShift.Superscript; 2 -> BaselineShift.Subscript; else -> null },

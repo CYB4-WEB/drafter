@@ -209,6 +209,7 @@ fun EditEventScreen(id: Long?, presetType: Int) {
             stringResource(if (existing == null) R.string.planner_new_event else R.string.planner_edit_event),
             onBack = { pane.back() },
         ) {
+            if (existing != null) com.daftar.app.grades.GradeItButton(existing) // grades-agent: past exams → "Grade it"
             if (existing != null) IconButton(onClick = { confirmDelete = true }) {
                 Icon(Icons.Rounded.DeleteOutline, stringResource(R.string.delete), tint = D.c.muted)
             }

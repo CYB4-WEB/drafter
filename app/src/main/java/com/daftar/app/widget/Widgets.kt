@@ -62,6 +62,7 @@ object Widgets {
             if (up.isNotEmpty()) updateUpcoming(ctx, m, up, list)
             val q = m.getAppWidgetIds(ComponentName(ctx, QuickWidget::class.java))
             if (q.isNotEmpty()) updateQuick(ctx, m, q)
+            ExamWidgets.refresh(ctx, list) // grades-agent: exam countdown widget follows every planner change
         }
     }
 
