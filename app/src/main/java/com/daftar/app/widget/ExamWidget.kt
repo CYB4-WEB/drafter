@@ -11,10 +11,8 @@ import android.net.Uri
 import android.os.Bundle
 import android.view.View
 import android.widget.RemoteViews
-import androidx.compose.ui.graphics.toArgb
 import com.daftar.app.MainActivity
 import com.daftar.app.R
-import com.daftar.app.data.Storage
 import com.daftar.app.planner.DAY
 import com.daftar.app.planner.EventType
 import com.daftar.app.planner.HOUR
@@ -25,12 +23,8 @@ import com.daftar.app.planner.fmtTime
 import com.daftar.app.planner.localeOf
 import com.daftar.app.planner.localized
 import com.daftar.app.planner.shortDayLabel
-import com.daftar.app.planner.typeColorArgb
 import com.daftar.app.ui.ACTION_PLANNER
 import com.daftar.app.ui.EXTRA_ACTION
-import com.daftar.app.ui.EXTRA_EVENT_ID
-import com.daftar.app.ui.theme.folderColor
-import java.io.File
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -72,7 +66,9 @@ object ExamWidgets {
     private val barIds = intArrayOf(R.id.ex_bar0, R.id.ex_bar1, R.id.ex_bar2)
     private val titleIds = intArrayOf(R.id.ex_title0, R.id.ex_title1, R.id.ex_title2)
     private val subIds = intArrayOf(R.id.ex_sub0, R.id.ex_sub1, R.id.ex_sub2)
-    private val cdIds = intArrayOf(R.id.ex_cd0, R.id.ex_cd1, R.id.ex_cd2)
+    private val iconIds = intArrayOf(R.id.ex_icon0, R.id.ex_icon1, R.id.ex_icon2)
+    private val numIds = intArrayOf(R.id.ex_num0, R.id.ex_num1, R.id.ex_num2)
+    private val unitIds = intArrayOf(R.id.ex_unit0, R.id.ex_unit1, R.id.ex_unit2)
 
     /** Re-render every placed exam widget (any thread). */
     fun refresh(ctx: Context, list: List<PlanEvent> = Planner.snapshot()) {
@@ -97,20 +93,7 @@ object ExamWidgets {
     private fun rowsFor(m: AppWidgetManager, id: Int): Int {
         val h = runCatching { m.getAppWidgetOptions(id).getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT) }.getOrDefault(0)
         if (h <= 0) return MAX_ROWS
-        return ((h - 50) / 50).coerceIn(1, MAX_ROWS)
-    }
-
-    /** Subject folder colour (first-level library folder of the linked folder), else the exam colour. */
-    private fun colorFor(e: PlanEvent): Int {
-        if (e.folder.isEmpty()) return typeColorArgb(EventType.EXAM)
-        return runCatching {
-            val root = Storage.root.absolutePath
-            val f = File(e.folder)
-            var d: File? = f
-            var subject: File? = null
-            while (d != null && d.absolutePath.startsWith(root) && d.absolutePath != root) { subject = d; d = d.parentFile }
-            if (subject != null && subject.isDirectory) folderColor(Storage.meta(subject).color).toArgb() else null
-        }.getOrNull() ?: typeColorArgb(EventType.EXAM)
+        return ((h - 46) / 58).coerceIn(1, MAX_ROWS) // card rows: 52dp + 6dp gap
     }
 
     /** "3 d 4 h", "5 h", "< 1 h", "Now" (whole hours only: the label changes at most hourly). */
@@ -154,11 +137,11 @@ object ExamWidgets {
                 val o = shown.getOrNull(k)
                 if (o == null) { v.setViewVisibility(rowIds[k], View.GONE); continue }
                 v.setViewVisibility(rowIds[k], View.VISIBLE)
-                v.setTextViewText(titleIds[k], o.event.title)
-                v.setTextViewText(subIds[k], dateLine(c, o))
-                v.setTextViewText(cdIds[k], countdown(c, o.start, o.end, now))
-                v.setInt(barIds[k], "setColorFilter", colorFor(o.event))
-                v.setOnClickPendingIntent(rowIds[k], launch(ctx, 7610 + k) { putExtra(EXTRA_EVENT_ID, o.event.id) })
+                // countdown-agent: card row (subject/type colour) with the end number block; tap → live countdown.
+                val (num, unit) = WidgetCards.durationBlock(c, o, now)
+                WidgetCards.fillRow(ctx, v, intArrayOf(barIds[k], iconIds[k], titleIds[k], subIds[k], numIds[k], unitIds[k]), o, dateLine(c, o), num, unit)
+                v.setContentDescription(rowIds[k], o.event.title + ", " + countdown(c, o.start, o.end, now))
+                v.setOnClickPendingIntent(rowIds[k], WidgetCards.openCountdown(ctx, 7610 + k, o))
             }
             m.updateAppWidget(wid, v)
         }

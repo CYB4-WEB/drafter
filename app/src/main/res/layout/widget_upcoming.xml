@@ -1,60 +1,127 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Upcoming widget: header + up to 4 colour card rows with the end number block (countdown-agent card style). -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/root" android:layout_width="match_parent" android:layout_height="match_parent"
-    android:background="@drawable/widget_bg" android:orientation="vertical" android:padding="14dp">
+    android:background="@drawable/widget_bg" android:orientation="vertical" android:padding="12dp">
     <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical">
         <TextView android:id="@+id/header" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content"
-            android:text="@string/widget_upcoming" android:textColor="@color/ink" android:textSize="16sp" android:textStyle="bold" />
+            android:text="@string/widget_upcoming" android:textColor="@color/ink" android:textSize="16sp" android:textStyle="bold"
+            android:textAlignment="viewStart" />
         <TextView android:id="@+id/add" android:layout_width="wrap_content" android:layout_height="wrap_content"
             android:text="@string/add_short" android:textColor="@color/accent" android:textSize="14sp" android:textStyle="bold"
             android:background="@drawable/widget_chip" android:paddingStart="12dp" android:paddingEnd="12dp" android:paddingTop="6dp" android:paddingBottom="6dp" />
     </LinearLayout>
     <TextView android:id="@+id/empty" android:layout_width="match_parent" android:layout_height="wrap_content"
-        android:text="@string/nothing_upcoming" android:textColor="@color/muted" android:textSize="13sp" android:paddingTop="10dp" />
-    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:paddingTop="6dp">
-        <LinearLayout android:id="@+id/row0" android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:orientation="horizontal" android:paddingTop="6dp" android:paddingBottom="6dp" android:visibility="gone">
-            <ImageView android:id="@+id/bar0" android:layout_width="4dp" android:layout_height="34dp"
-                android:src="@drawable/widget_bar" android:layout_marginEnd="10dp" />
-            <LinearLayout android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:orientation="vertical">
-                <TextView android:id="@+id/title0" android:layout_width="match_parent" android:layout_height="wrap_content"
-                    android:textColor="@color/ink" android:textSize="14sp" android:maxLines="1" android:ellipsize="end" android:textStyle="bold" />
-                <TextView android:id="@+id/sub0" android:layout_width="match_parent" android:layout_height="wrap_content"
-                    android:textColor="@color/muted" android:textSize="12sp" android:maxLines="1" android:ellipsize="end" />
+        android:text="@string/nothing_upcoming" android:textColor="@color/muted" android:textSize="13sp" android:paddingTop="10dp"
+        android:textAlignment="viewStart" />
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:paddingTop="2dp">
+        <FrameLayout android:id="@+id/row0" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="6dp" android:visibility="gone">
+            <ImageView android:id="@+id/bar0" android:layout_width="match_parent" android:layout_height="match_parent"
+                android:src="@drawable/widget_card" android:scaleType="fitXY" android:importantForAccessibility="no" />
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal"
+                android:gravity="center_vertical" android:minHeight="52dp" android:paddingStart="10dp" android:paddingEnd="4dp"
+                android:paddingTop="4dp" android:paddingBottom="4dp">
+                <ImageView android:id="@+id/icon0" android:layout_width="22dp" android:layout_height="22dp"
+                    android:layout_marginEnd="10dp" android:importantForAccessibility="no" />
+                <LinearLayout android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:orientation="vertical">
+                    <TextView android:id="@+id/title0" android:layout_width="match_parent" android:layout_height="wrap_content"
+                        android:textColor="#FFFFFFFF" android:textSize="14sp" android:maxLines="1" android:ellipsize="end" android:textStyle="bold"
+                        android:textAlignment="viewStart" />
+                    <TextView android:id="@+id/sub0" android:layout_width="match_parent" android:layout_height="wrap_content"
+                        android:textColor="#DDFFFFFF" android:textSize="12sp" android:maxLines="1" android:ellipsize="end"
+                        android:textAlignment="viewStart" />
+                </LinearLayout>
+                <LinearLayout android:layout_width="wrap_content" android:layout_height="44dp" android:minWidth="64dp"
+                    android:layout_marginStart="8dp" android:background="@drawable/widget_block" android:orientation="vertical"
+                    android:gravity="center" android:paddingStart="8dp" android:paddingEnd="8dp">
+                    <TextView android:id="@+id/num0" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                        android:textColor="#FFFFFFFF" android:textSize="18sp" android:textStyle="bold" android:maxLines="1" android:includeFontPadding="false" />
+                    <TextView android:id="@+id/unit0" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                        android:textColor="#FFFFFFFF" android:textSize="11sp" android:maxLines="1" />
+                </LinearLayout>
             </LinearLayout>
-        </LinearLayout>
-        <LinearLayout android:id="@+id/row1" android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:orientation="horizontal" android:paddingTop="6dp" android:paddingBottom="6dp" android:visibility="gone">
-            <ImageView android:id="@+id/bar1" android:layout_width="4dp" android:layout_height="34dp"
-                android:src="@drawable/widget_bar" android:layout_marginEnd="10dp" />
-            <LinearLayout android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:orientation="vertical">
-                <TextView android:id="@+id/title1" android:layout_width="match_parent" android:layout_height="wrap_content"
-                    android:textColor="@color/ink" android:textSize="14sp" android:maxLines="1" android:ellipsize="end" android:textStyle="bold" />
-                <TextView android:id="@+id/sub1" android:layout_width="match_parent" android:layout_height="wrap_content"
-                    android:textColor="@color/muted" android:textSize="12sp" android:maxLines="1" android:ellipsize="end" />
+        </FrameLayout>
+        <FrameLayout android:id="@+id/row1" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="6dp" android:visibility="gone">
+            <ImageView android:id="@+id/bar1" android:layout_width="match_parent" android:layout_height="match_parent"
+                android:src="@drawable/widget_card" android:scaleType="fitXY" android:importantForAccessibility="no" />
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal"
+                android:gravity="center_vertical" android:minHeight="52dp" android:paddingStart="10dp" android:paddingEnd="4dp"
+                android:paddingTop="4dp" android:paddingBottom="4dp">
+                <ImageView android:id="@+id/icon1" android:layout_width="22dp" android:layout_height="22dp"
+                    android:layout_marginEnd="10dp" android:importantForAccessibility="no" />
+                <LinearLayout android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:orientation="vertical">
+                    <TextView android:id="@+id/title1" android:layout_width="match_parent" android:layout_height="wrap_content"
+                        android:textColor="#FFFFFFFF" android:textSize="14sp" android:maxLines="1" android:ellipsize="end" android:textStyle="bold"
+                        android:textAlignment="viewStart" />
+                    <TextView android:id="@+id/sub1" android:layout_width="match_parent" android:layout_height="wrap_content"
+                        android:textColor="#DDFFFFFF" android:textSize="12sp" android:maxLines="1" android:ellipsize="end"
+                        android:textAlignment="viewStart" />
+                </LinearLayout>
+                <LinearLayout android:layout_width="wrap_content" android:layout_height="44dp" android:minWidth="64dp"
+                    android:layout_marginStart="8dp" android:background="@drawable/widget_block" android:orientation="vertical"
+                    android:gravity="center" android:paddingStart="8dp" android:paddingEnd="8dp">
+                    <TextView android:id="@+id/num1" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                        android:textColor="#FFFFFFFF" android:textSize="18sp" android:textStyle="bold" android:maxLines="1" android:includeFontPadding="false" />
+                    <TextView android:id="@+id/unit1" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                        android:textColor="#FFFFFFFF" android:textSize="11sp" android:maxLines="1" />
+                </LinearLayout>
             </LinearLayout>
-        </LinearLayout>
-        <LinearLayout android:id="@+id/row2" android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:orientation="horizontal" android:paddingTop="6dp" android:paddingBottom="6dp" android:visibility="gone">
-            <ImageView android:id="@+id/bar2" android:layout_width="4dp" android:layout_height="34dp"
-                android:src="@drawable/widget_bar" android:layout_marginEnd="10dp" />
-            <LinearLayout android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:orientation="vertical">
-                <TextView android:id="@+id/title2" android:layout_width="match_parent" android:layout_height="wrap_content"
-                    android:textColor="@color/ink" android:textSize="14sp" android:maxLines="1" android:ellipsize="end" android:textStyle="bold" />
-                <TextView android:id="@+id/sub2" android:layout_width="match_parent" android:layout_height="wrap_content"
-                    android:textColor="@color/muted" android:textSize="12sp" android:maxLines="1" android:ellipsize="end" />
+        </FrameLayout>
+        <FrameLayout android:id="@+id/row2" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="6dp" android:visibility="gone">
+            <ImageView android:id="@+id/bar2" android:layout_width="match_parent" android:layout_height="match_parent"
+                android:src="@drawable/widget_card" android:scaleType="fitXY" android:importantForAccessibility="no" />
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal"
+                android:gravity="center_vertical" android:minHeight="52dp" android:paddingStart="10dp" android:paddingEnd="4dp"
+                android:paddingTop="4dp" android:paddingBottom="4dp">
+                <ImageView android:id="@+id/icon2" android:layout_width="22dp" android:layout_height="22dp"
+                    android:layout_marginEnd="10dp" android:importantForAccessibility="no" />
+                <LinearLayout android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:orientation="vertical">
+                    <TextView android:id="@+id/title2" android:layout_width="match_parent" android:layout_height="wrap_content"
+                        android:textColor="#FFFFFFFF" android:textSize="14sp" android:maxLines="1" android:ellipsize="end" android:textStyle="bold"
+                        android:textAlignment="viewStart" />
+                    <TextView android:id="@+id/sub2" android:layout_width="match_parent" android:layout_height="wrap_content"
+                        android:textColor="#DDFFFFFF" android:textSize="12sp" android:maxLines="1" android:ellipsize="end"
+                        android:textAlignment="viewStart" />
+                </LinearLayout>
+                <LinearLayout android:layout_width="wrap_content" android:layout_height="44dp" android:minWidth="64dp"
+                    android:layout_marginStart="8dp" android:background="@drawable/widget_block" android:orientation="vertical"
+                    android:gravity="center" android:paddingStart="8dp" android:paddingEnd="8dp">
+                    <TextView android:id="@+id/num2" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                        android:textColor="#FFFFFFFF" android:textSize="18sp" android:textStyle="bold" android:maxLines="1" android:includeFontPadding="false" />
+                    <TextView android:id="@+id/unit2" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                        android:textColor="#FFFFFFFF" android:textSize="11sp" android:maxLines="1" />
+                </LinearLayout>
             </LinearLayout>
-        </LinearLayout>
-        <LinearLayout android:id="@+id/row3" android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:orientation="horizontal" android:paddingTop="6dp" android:paddingBottom="6dp" android:visibility="gone">
-            <ImageView android:id="@+id/bar3" android:layout_width="4dp" android:layout_height="34dp"
-                android:src="@drawable/widget_bar" android:layout_marginEnd="10dp" />
-            <LinearLayout android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:orientation="vertical">
-                <TextView android:id="@+id/title3" android:layout_width="match_parent" android:layout_height="wrap_content"
-                    android:textColor="@color/ink" android:textSize="14sp" android:maxLines="1" android:ellipsize="end" android:textStyle="bold" />
-                <TextView android:id="@+id/sub3" android:layout_width="match_parent" android:layout_height="wrap_content"
-                    android:textColor="@color/muted" android:textSize="12sp" android:maxLines="1" android:ellipsize="end" />
+        </FrameLayout>
+        <FrameLayout android:id="@+id/row3" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="6dp" android:visibility="gone">
+            <ImageView android:id="@+id/bar3" android:layout_width="match_parent" android:layout_height="match_parent"
+                android:src="@drawable/widget_card" android:scaleType="fitXY" android:importantForAccessibility="no" />
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal"
+                android:gravity="center_vertical" android:minHeight="52dp" android:paddingStart="10dp" android:paddingEnd="4dp"
+                android:paddingTop="4dp" android:paddingBottom="4dp">
+                <ImageView android:id="@+id/icon3" android:layout_width="22dp" android:layout_height="22dp"
+                    android:layout_marginEnd="10dp" android:importantForAccessibility="no" />
+                <LinearLayout android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:orientation="vertical">
+                    <TextView android:id="@+id/title3" android:layout_width="match_parent" android:layout_height="wrap_content"
+                        android:textColor="#FFFFFFFF" android:textSize="14sp" android:maxLines="1" android:ellipsize="end" android:textStyle="bold"
+                        android:textAlignment="viewStart" />
+                    <TextView android:id="@+id/sub3" android:layout_width="match_parent" android:layout_height="wrap_content"
+                        android:textColor="#DDFFFFFF" android:textSize="12sp" android:maxLines="1" android:ellipsize="end"
+                        android:textAlignment="viewStart" />
+                </LinearLayout>
+                <LinearLayout android:layout_width="wrap_content" android:layout_height="44dp" android:minWidth="64dp"
+                    android:layout_marginStart="8dp" android:background="@drawable/widget_block" android:orientation="vertical"
+                    android:gravity="center" android:paddingStart="8dp" android:paddingEnd="8dp">
+                    <TextView android:id="@+id/num3" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                        android:textColor="#FFFFFFFF" android:textSize="18sp" android:textStyle="bold" android:maxLines="1" android:includeFontPadding="false" />
+                    <TextView android:id="@+id/unit3" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                        android:textColor="#FFFFFFFF" android:textSize="11sp" android:maxLines="1" />
+                </LinearLayout>
             </LinearLayout>
-        </LinearLayout>
+        </FrameLayout>
     </LinearLayout>
 </LinearLayout>

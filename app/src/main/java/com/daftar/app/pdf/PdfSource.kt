@@ -41,10 +41,7 @@ class PdfSource(val file: File) : PageSource {
     private val markPaint = Paint().apply { color = 0xFFFFE27A.toInt(); xfermode = PorterDuffXfermode(PorterDuff.Mode.MULTIPLY) }
     private val activePaint = Paint().apply { color = 0xFFFFA94D.toInt(); xfermode = PorterDuffXfermode(PorterDuff.Mode.MULTIPLY) }
 
-    /** Night paper: rendered pages are post-processed with [NightFilter] (hue-preserving inversion onto dark paper). */
-    @Volatile var night: Boolean = false
-
-    /** Drawn after the page and the search marks (before the night filter, so overlays follow the paper colour). */
+    /** Drawn after the page and the search marks (the editor's night mode inverts it with the page, so overlays follow the paper). */
     @Volatile var overlay: PageOverlay? = null
 
     init {
@@ -80,7 +77,6 @@ class PdfSource(val file: File) : PageSource {
                     o.draw(i, c)
                 }
             }
-            if (night) NightFilter.apply(dest)
         }
     }
 
@@ -121,36 +117,3 @@ class PdfSource(val file: File) : PageSource {
     }
 }
 
-/**
- * Night paper as a post-process on a rendered bitmap: lightness is inverted with hue and chroma kept
- * (c' = c + 255 − max − min per pixel, so red stays red and blue stays blue), then compressed onto a dark paper
- * range so white paper becomes #1A1B1E and black text a soft #E6E6E6.
- */
-object NightFilter {
-    private val lutR = IntArray(256) { 0x1A + it * (0xE6 - 0x1A) / 255 }
-    private val lutG = IntArray(256) { 0x1B + it * (0xE6 - 0x1B) / 255 }
-    private val lutB = IntArray(256) { 0x1E + it * (0xE8 - 0x1E) / 255 }
-
-    fun apply(bmp: Bitmap) {
-        if (bmp.isRecycled || !bmp.isMutable) return
-        val w = bmp.width; val h = bmp.height
-        val rows = (65536 / w.coerceAtLeast(1)).coerceIn(1, h.coerceAtLeast(1))
-        val buf = IntArray(w * rows)
-        var y = 0
-        while (y < h) {
-            val n = minOf(rows, h - y)
-            bmp.getPixels(buf, 0, w, 0, y, w, n)
-            for (k in 0 until w * n) buf[k] = map(buf[k])
-            bmp.setPixels(buf, 0, w, 0, y, w, n)
-            y += n
-        }
-    }
-
-    fun map(p: Int): Int {
-        val a = p ushr 24
-        val r = (p shr 16) and 0xFF; val g = (p shr 8) and 0xFF; val b = p and 0xFF
-        val mx = maxOf(r, maxOf(g, b)); val mn = minOf(r, minOf(g, b))
-        val d = 255 - mx - mn
-        return (a shl 24) or (lutR[r + d] shl 16) or (lutG[g + d] shl 8) or lutB[b + d]
-    }
-}

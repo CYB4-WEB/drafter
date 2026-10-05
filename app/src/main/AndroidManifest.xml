@@ -151,5 +151,23 @@
             </intent-filter>
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_exams" />
         </receiver>
+        <!-- countdown-agent: single-event countdown widget + its configure activity -->
+        <receiver android:name=".widget.CountdownWidget" android:exported="true" android:label="@string/cd_widget_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_countdown" />
+        </receiver>
+        <activity
+            android:name=".widget.CountdownWidgetConfigActivity"
+            android:exported="true"
+            android:label="@string/cd_widget_pick_title"
+            android:theme="@style/Theme.Daftar"
+            android:resizeableActivity="true"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|keyboard|navigation|density|uiMode">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
     </application>
 </manifest>

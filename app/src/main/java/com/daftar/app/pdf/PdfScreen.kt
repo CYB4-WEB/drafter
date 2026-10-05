@@ -250,10 +250,10 @@ private fun PdfReader(
     val ctx = LocalContext.current
     val prefs = remember { PdfPrefs(ctx) }
     val fx = remember(session) { PdfFeatures(prefs) }
-    // Night paper: post-processed in PdfSource (set before the editor's first render).
-    remember(session) { source.night = prefs.night; 0 }
+    // Night paper: the editor's night mode (ink5 API); the choice is persisted in PdfPrefs.
     LaunchedEffect(prefs.night, ctlRef) {
-        if (source.night != prefs.night) { source.night = prefs.night; ctlRef?.refreshPages() }
+        val ctl = ctlRef ?: return@LaunchedEffect
+        if (ctl.nightMode != prefs.night) ctl.nightMode = prefs.night
     }
     // New OCR text → re-translate the page shown in the translation panel.
     val ocrVersion = session.ocr.version

@@ -247,6 +247,11 @@ object PdfPages {
             texts = texts,
             images = p.images.map { rotateImage(it, d, f) },
             links = links,
+            // Stickers turn with the page: centre mapped, rotation field advanced (size is in the sticker's own frame).
+            stickers = p.stickers.map { k ->
+                val (cx, cy) = f(k.x + k.w / 2f, k.y + k.h / 2f)
+                k.copy(x = cx - k.w / 2f, y = cy - k.h / 2f, rot = ((k.rot + d) % 360f + 360f) % 360f)
+            },
         )
     }
 
