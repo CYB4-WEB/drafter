@@ -16,6 +16,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.CallMerge
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.rounded.MenuBook
+import androidx.compose.material.icons.rounded.DarkMode
+import androidx.compose.material.icons.rounded.DocumentScanner
+import androidx.compose.material.icons.rounded.TextSnippet
+import androidx.compose.material.icons.rounded.Translate
+import androidx.compose.material3.Switch
 import androidx.compose.material.icons.automirrored.rounded.NoteAdd
 import androidx.compose.material.icons.rounded.ArrowDownward
 import androidx.compose.material.icons.rounded.ArrowUpward
@@ -129,7 +135,12 @@ fun PdfScreen(path: String) {
     DisposableEffect(session) { onDispose { session.dispose() } }
     LaunchedEffect(session) {
         val r = withContext(Dispatchers.IO) { runCatching { PdfSource(file).takeIf { session.adopt(it) } } }
-        r.onSuccess { if (it != null) state = LoadState.Ready(it) }
+        r.onSuccess {
+            if (it != null) {
+                withContext(Dispatchers.IO) { runCatching { session.loadOcr() } }
+                state = LoadState.Ready(it)
+            }
+        }
             .onFailure {
                 Log.e(TAG, "open $path", it)
                 state = LoadState.Failed(password = it is SecurityException)
@@ -211,7 +222,16 @@ private fun OverflowOnly(actions: ViewerActions) {
     }
 }
 
-/** The reader: ink editor + header actions + side panel (Pages | Outline) + search overlay. */
+/** v3 reader features driven from the header / Tools menu. */
+internal class PdfFeatures(val prefs: PdfPrefs) {
+    var reading by mutableStateOf(false)
+    /** Page a "Recognize text" request came from (-1 = none). */
+    var ocrPage by mutableIntStateOf(-1)
+    var translateAsk by mutableStateOf(false)
+    val translate = TranslateState()
+}
+
+/** The reader: ink editor + header actions + side panel (Pages | Outline) + search overlay + v3 features. */
 @Composable
 private fun PdfReader(
     file: File,
@@ -227,6 +247,17 @@ private fun PdfReader(
     var tab by remember(session) { mutableStateOf(PanelTab.PAGES) }
     var ctlRef by remember(session) { mutableStateOf<EditorController?>(null) }
     var confirmDelete by remember(session) { mutableIntStateOf(-1) }
+    val ctx = LocalContext.current
+    val prefs = remember { PdfPrefs(ctx) }
+    val fx = remember(session) { PdfFeatures(prefs) }
+    // Night paper: post-processed in PdfSource (set before the editor's first render).
+    remember(session) { source.night = prefs.night; 0 }
+    LaunchedEffect(prefs.night, ctlRef) {
+        if (source.night != prefs.night) { source.night = prefs.night; ctlRef?.refreshPages() }
+    }
+    // New OCR text → re-translate the page shown in the translation panel.
+    val ocrVersion = session.ocr.version
+    LaunchedEffect(ocrVersion) { if (fx.translate.open) fx.translate.retry++ }
 
     // Declared before the editor so it is disposed after it (the editor's own dispose saves the ink).
     DisposableEffect(Unit) { onDispose { host.editorGone?.complete(Unit) } }
@@ -263,7 +294,7 @@ private fun PdfReader(
                         ctl.goToPage(p.coerceIn(0, ctl.pageCount - 1))
                     }
                 }
-                PdfHeaderActions(ctl, file, session, actions, narrow, search, ::pageAction, editPages, host.gotoRequest)
+                PdfHeaderActions(ctl, file, session, actions, narrow, search, ::pageAction, editPages, host.gotoRequest, fx)
             },
             sidePanel = { ctl -> PdfSidePanel(ctl, session, tab, { tab = it }, ::pageAction) },
             sidePanelLabel = stringResource(R.string.pdf_panel),
@@ -271,7 +302,25 @@ private fun PdfReader(
             onPageChipClick = { host.gotoRequest++ },
         )
         val ctl = ctlRef
+        if (ctl != null) TranslatePanel(fx.translate, session.textIndex, session.translations, source, ctl, narrow, maxHeight) { fx.ocrPage = it }
         if (search.open && ctl != null) PdfSearchOverlay(search, session, source, ctl, narrow, maxHeight)
+        if (fx.reading && ctl != null) ReadingMode(
+            file, session, prefs, ocrVersion, ctl.currentPage,
+            onClose = { fx.reading = false },
+            onJump = { p -> fx.reading = false; ctl.goToPage(p) },
+            onRecognize = { p -> fx.ocrPage = p },
+        )
+    }
+
+    OcrFlow(file, session, fx.ocrPage) { fx.ocrPage = -1 }
+    val ctlNow = ctlRef
+    if (fx.translateAsk && ctlNow != null) {
+        TranslateDialog(session.textIndex, ctlNow.currentPage, fx.translate.target, onDismiss = { fx.translateAsk = false }) { target ->
+            fx.translateAsk = false
+            if (fx.translate.target != target) { fx.translate.pages.clear(); fx.translate.target = target }
+            fx.translate.open = true
+            fx.translate.retry++
+        }
     }
 
     if (confirmDelete >= 0) {
@@ -327,6 +376,7 @@ private fun PdfHeaderActions(
     onPageAction: (PageAction, Int) -> Unit,
     editPages: (List<PageSpec>, Int) -> Unit,
     gotoRequest: Int = 0,
+    fx: PdfFeatures? = null,
 ) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -385,6 +435,9 @@ private fun PdfHeaderActions(
 
     fun closeMenu() { menu = false; level = MenuLevel.MAIN }
 
+    if (fx != null && !narrow) IconButton(onClick = { fx.reading = true }) {
+        Icon(Icons.AutoMirrored.Rounded.MenuBook, stringResource(R.string.pdf3_reading_mode), tint = c.ink)
+    }
     IconButton(onClick = { search.open = true }) {
         Icon(Icons.Rounded.Search, stringResource(R.string.pdf_search), tint = if (search.open) c.accent else c.ink)
     }
@@ -405,6 +458,30 @@ private fun PdfHeaderActions(
                 MenuLevel.MAIN -> {
                     item(stringResource(R.string.pdf_go_to_page), Icons.Rounded.FindInPage) { closeMenu(); dlg = Dlg.GOTO }
                     item(stringResource(R.string.pdf_pages_menu), Icons.Rounded.AutoStories, trailing = true) { level = MenuLevel.PAGES }
+                    if (fx != null) {
+                        item(stringResource(R.string.pdf3_reading_mode), Icons.AutoMirrored.Rounded.MenuBook) { closeMenu(); fx.reading = true }
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.pdf3_night_mode), color = c.ink) },
+                            leadingIcon = { Icon(Icons.Rounded.DarkMode, null, tint = c.muted) },
+                            trailingIcon = { Switch(checked = fx.prefs.night, onCheckedChange = null) },
+                            onClick = { fx.prefs.night = !fx.prefs.night; fx.prefs.save() },
+                        )
+                        item(stringResource(R.string.pdf3_translate_page), Icons.Rounded.Translate) { closeMenu(); fx.translateAsk = true }
+                        item(stringResource(R.string.pdf3_recognize_text), Icons.Rounded.DocumentScanner) { closeMenu(); fx.ocrPage = cur }
+                        item(stringResource(R.string.pdf3_save_searchable), Icons.Rounded.TextSnippet, enabled = session.ocr.version >= 0 && !session.ocr.isEmpty) {
+                            closeMenu()
+                            run(ctx.getString(R.string.pdf3_saving_searchable), cancellable = true) { st ->
+                                val out = withContext(Dispatchers.IO) {
+                                    val target = Storage.uniqueFile(file.parentFile!!, ctx.getString(R.string.pdf3_file_searchable, name), "pdf")
+                                    PdfOcr.writeSearchable(ctx, file, session.ocr, target, isCancelled = { cancelled.get() }) { d, t ->
+                                        scope.launch { st.done = d; st.total = t }
+                                    }
+                                }
+                                Storage.touch()
+                                saved = out
+                            }
+                        }
+                    }
                     item(stringResource(R.string.pdf_sign), Icons.Rounded.Draw) { closeMenu(); dlg = Dlg.SIGN }
                     item(stringResource(R.string.pdf_export_annotated), Icons.Rounded.Save) {
                         closeMenu()
@@ -446,7 +523,7 @@ private fun PdfHeaderActions(
     when (dlg) {
         Dlg.NONE -> {}
         Dlg.GOTO -> GoToPageDialog(pageCount, cur, onDismiss = { dlg = Dlg.NONE }) { ctl.goToPage(it); dlg = Dlg.NONE }
-        Dlg.TEXT -> CopyTextDialog(file, pageCount, cur, onDismiss = { dlg = Dlg.NONE })
+        Dlg.TEXT -> CopyTextDialog(file, pageCount, cur, onDismiss = { dlg = Dlg.NONE }, ocr = session.ocr)
         Dlg.SIGN -> SignatureDialog(onDismiss = { dlg = Dlg.NONE }) { bmp -> dlg = Dlg.NONE; ctl.addImage(bmp, 160f) }
         Dlg.ORGANIZE -> OrganizePagesDialog(
             session, runCatching { ctl.doc().pages.toList() }.getOrDefault(emptyList()), cur,

@@ -257,7 +257,7 @@ internal fun TranscriptPanel(
             return@Column
         }
         LazyColumn(Modifier.fillMaxWidth().heightIn(max = listMaxHeight), state = list, contentPadding = PaddingValues(vertical = 4.dp)) {
-            itemsIndexed(segs, key = { i, s -> i.toLong() * 31 + s.start }) { i, s ->
+            itemsIndexed(segs) { i, s ->
                 SegmentRow(s, current = i == cur, match = i in hitSet, focused = hits.getOrNull(hit) == i) { onSeek(s.start) }
             }
         }
