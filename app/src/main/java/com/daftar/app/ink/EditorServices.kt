@@ -233,7 +233,13 @@ fun audioDuration(f: File): Long = runCatching {
  * A whiteboard becomes one page cropped to its content plus a margin (scaled down if it exceeds the 14 400 pt PDF limit).
  * Tapes are drawn hidden.
  */
-fun exportNoteToPdf(doc: InkDoc, out: File, withPaper: Boolean = true) {
+fun exportNoteToPdf(doc: InkDoc, out: File, withPaper: Boolean = true, night: Boolean = false) {
+    // "export as shown": night paper colour, dimmed lines and the on-screen ink mapping (saved colours untouched)
+    InkRender.setNight(night)
+    try { exportNoteToPdfImpl(doc, out, withPaper, night) } finally { InkRender.setNight(false) }
+}
+
+private fun exportNoteToPdfImpl(doc: InkDoc, out: File, withPaper: Boolean, night: Boolean) {
     val pdf = PdfDocument()
     try {
         doc.pages.forEachIndexed { i, p ->
@@ -243,11 +249,11 @@ fun exportNoteToPdf(doc: InkDoc, out: File, withPaper: Boolean = true) {
             val ph = (r.height() * k).toInt().coerceAtLeast(1)
             val page = pdf.startPage(PdfDocument.PageInfo.Builder(pw, ph, i + 1).create())
             val c: Canvas = page.canvas
-            c.drawColor(doc.paperColor)
+            c.drawColor(if (night) InkNight.PAPER else doc.paperColor)
             c.save()
             c.scale(k, k)
             c.translate(-r.left, -r.top)
-            if (withPaper) InkRender.drawPaper(c, p, clip = r, bounded = !doc.infinite)
+            if (withPaper) InkRender.drawPaper(c, p, night, clip = r, bounded = !doc.infinite)
             InkRender.drawPageContent(c, p)
             c.restore()
             pdf.finishPage(page)

@@ -10,6 +10,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Gesture
 import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -269,11 +270,12 @@ private fun ShapePreview(shape: String, selected: Boolean, onClick: () -> Unit) 
 /** Shape tray (Insert → Shapes). A table asks for rows × columns first. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun ShapeTray(onDismiss: () -> Unit, onPick: (String) -> Unit) {
+internal fun ShapeTray(onDismiss: () -> Unit, current: String? = null, withAuto: Boolean = false, onPick: (String) -> Unit) {
     val c = D.c
-    var tableMode by remember { mutableStateOf(false) }
-    var rows by remember { mutableIntStateOf(3) }
-    var cols by remember { mutableIntStateOf(3) }
+    var tableMode by remember { mutableStateOf(current != null && InkShapes.base(current) == InkShapes.TABLE) }
+    val dims = current?.let { InkShapes.tableDims(it) }
+    var rows by remember { mutableIntStateOf(dims?.first ?: 3) }
+    var cols by remember { mutableIntStateOf(dims?.second ?: 3) }
     Dialog(onDismissRequest = onDismiss) {
         Column(
             Modifier.widthIn(max = 520.dp).fillMaxWidth().background(c.surface, RoundedCornerShape(24.dp))
@@ -285,11 +287,27 @@ internal fun ShapeTray(onDismiss: () -> Unit, onPick: (String) -> Unit) {
             }
             FlowRow {
                 InkShapes.all.forEach { s ->
-                    ShapePreview(s, tableMode && s == InkShapes.TABLE) {
+                    val on = if (s == InkShapes.TABLE) tableMode else current == s
+                    ShapePreview(s, on) {
                         if (s == InkShapes.TABLE) tableMode = true else onPick(s)
                     }
                 }
+                if (withAuto) {
+                    // Auto: draw freehand, the shape is recognized
+                    val label = stringResource(R.string.ink5_shape_auto)
+                    Column(
+                        Modifier.padding(4.dp).width(160.dp).clip(RoundedCornerShape(12.dp))
+                            .background(if (current == "") c.accent.copy(alpha = 0.12f) else c.surfaceAlt)
+                            .clickable { onPick("") }.padding(8.dp).semantics { contentDescription = label },
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Icon(Icons.Rounded.Gesture, null, tint = c.ink, modifier = Modifier.size(44.dp).padding(6.dp))
+                        Text(label, style = MaterialTheme.typography.labelSmall, color = c.muted, maxLines = 2)
+                    }
+                }
             }
+            if (withAuto) Text(stringResource(R.string.ink5_shape_hint), style = MaterialTheme.typography.bodySmall, color = c.muted,
+                modifier = Modifier.padding(4.dp))
             if (tableMode) {
                 Spacer(Modifier.height(8.dp))
                 @Composable

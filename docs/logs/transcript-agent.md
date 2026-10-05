@@ -38,4 +38,91 @@ and a mic-driven SpeechRecognizer can't run together. `InkEditorImpl` stamps eve
    released on stop / dispose.
 
 ## Progress
-(see below)
+- Session 1 (cut off by usage limit while writing the UI): `Transcript.kt`, `TranscriptAudio.kt`, `TranscriptEngine.kt`,
+  `Recorder` facade, `Recording.transcript` field, most of `TranscriptUi.kt`.
+- Session 2: finished `TranscriptUi.kt`, 28 `tr_*` strings en + ar (both XML files parse), `InkEditorImpl` hooks, compile.
+- Files:
+  - NEW `ink/Transcript.kt` — `TranscriptSeg(start, end, text, rec, lang)`, `LiveTranscript` (Compose state),
+    `PlayClock`, `TranscriptPrefs` (own prefs file: live on/off, strip open), `TranscriptText` (indexAt binary search,
+    plain / export text, Arabic-aware search folding).
+  - NEW `ink/TranscriptAudio.kt` — `LiveAudioCapture` (API 33): AudioRecord 32 kHz mono → MediaCodec AAC-LC 64 kbps →
+    MediaMuxer `.m4a`; same PCM → [1 2 1]/4 low-pass + decimate → 16 kHz PCM16 → non-blocking pipe write.
+  - NEW `ink/TranscriptEngine.kt` — `LiveTranscription.isSupported`, `LiveTranscriber` (recognizer, fallback ladder,
+    segmented sessions, restarts, partial keeping, final-words wait), `TranscriptSession` (editor-facing wrapper).
+  - NEW `ink/TranscriptUi.kt` — `LectureRecordingBar` + live strip, `LecturePlaybackBar`, `TranscriptPanel`
+    (karaoke / search / copy / insert / export), `TranscriptDialog`, `transcriptPreview`.
+  - `ink/EditorServices.kt` — `Recorder` only: `start(out, live)`, `live`, `openPcmPipe()`, `pause()/resume()`,
+    `stop()`; MediaRecorder path unchanged (now released if prepare/start throws).
+  - `ink/InkModel.kt` — one change: `Recording(..., val transcript: List<TranscriptSeg> = emptyList())`.
+  - `ink/InkEditorImpl.kt` hooks (all local): state block after `isPlaying` (session, PlayClock, recPaused, curRecId,
+    stripOpen, trPanelOpen, trDialog); `startRecording` (live capture + `transcript.begin` on the stroke clock); new
+    `pauseRecording` / `resumeRecording`; `stopRecording` (transcript.finish → replaces the stored transcript when the
+    final words arrive; Recording gets the snapshot); onDispose (`transcript.finishNow()` before stop, `release()` after);
+    new `exportTranscript(r)` after `exportPdf`; bars → `LectureRecordingBar` / `LecturePlaybackBar` + `TranscriptPanel`;
+    recordings dialog rows (preview + transcript button); `TranscriptDialog`; private `RecordingBar` / `PlaybackBar`
+    deleted (moved into TranscriptUi.kt).
+  - `res/values{,-ar}/strings_ink.xml` — 28 `tr_*` keys.
+- Compile (`FILTER=ink/ tools/compile.sh`): no errors in any file or hook of mine. The build still fails on
+  ink5-agent's in-progress work. On the last run only 4 errors were left, all in `InkStickers.kt:266/270`
+  (`width`/`height` used as properties).
+
+## Decisions & limits
+- **API levels.** API 33+ with a recognizer service: one AudioRecord capture → AAC file + recognizer pipe. API 26–32,
+  no recognizer, or a capture that fails to start (mic busy, codec refused): today's MediaRecorder recording. The strip
+  then says "Transcribe while recording isn't supported on this device. The audio is still recorded." No crash.
+- **Recognizer ladder.** on-device + segmented session → on-device classic → default + segmented → default classic →
+  unsupported. The ladder only steps while a mode has produced nothing yet. Language not supported / unavailable on
+  device: `triggerModelDownload` (for next time), then the default recognizer; if that refuses too, the strip asks to
+  try the other language. A working mode that errors is recreated with back-off (0.7 s × n, ≤ 4 s); after 6 failures in
+  a row the strip shows "stopped" with Retry. No-match / silence timeout → immediate restart.
+- **Seamless segments.** A segmented session (`EXTRA_SEGMENTED_SESSION = EXTRA_AUDIO_SOURCE`) runs the whole
+  lecture. Classic sessions restart right after each result. Each session gets a new pipe, and the capture thread starts
+  writing into it at once, so audio during the restart waits in the pipe (~2 s buffer) and isn't lost. The write end
+  is non-blocking: a stalled recognizer only drops ASR audio and never stalls the recording.
+- **Timing.** Recognizers give no per-word times on API 33. Segment start = stroke clock at onBeginningOfSpeech − 300 ms,
+  or at the first partial − 1 s, or estimated from the word count (380 ms/word). It is clamped to the previous segment
+  end. End = clock at the result. This is the same clock as the strokes' `t`, so karaoke and ink ghosting agree.
+  Expect ±1 s accuracy.
+- **Partials** are committed as segments on restart, error, pause, language switch and stop. When stopping, the session
+  waits up to 1.5 s for the final words. The Recording is saved at once with what is there; the final transcript replaces
+  it when it arrives. On dispose, the transcript is committed synchronously (no wait).
+- **Storage.** The transcript lives in `Recording.transcript` inside the `.note` / `.ink.json`, so it moves with copies,
+  versions and renames. Older files load with `[]` (defaults), and older app versions ignore the key
+  (`ignoreUnknownKeys`). I didn't use a sidecar file.
+- **Pause** (new on the recording bar): MediaRecorder.pause / AudioRecord stopped (mic released; capture thread waits
+  on a lock, no CPU); recognizer destroyed; stroke clock frozen (`recOffset`); ink drawn while paused isn't timed.
+  The audio file has no gap (encoder timestamps continue).
+- **Battery.** No wakelock or service. While recording: one capture thread + recognizer. On pause, stop and dispose,
+  the recognizer is destroyed, AudioRecord / MediaCodec / MediaMuxer are released and pipes are closed. Playback's
+  position ticker runs only while playing. The panel recomposes only when the current segment changes
+  (`derivedStateOf`).
+- **Background.** Without a foreground service, Android silences the mic when the app is backgrounded or the screen is
+  off (true for the old MediaRecorder path too). I didn't add a service, to stay within "no wakelocks beyond recording".
+- **UI.** The strip and panel sit under their bars, are collapsible, and have a fixed max height (88 dp live,
+  128 dp / 200 dp wide for the panel), so they fit split panes. Each segment keeps its own text direction (AR/EN). Search
+  ignores case, Arabic diacritics, tatweel, alef/ya/ta-marbuta variants and Arabic-Indic digits. "Insert as text box"
+  uses `view.addTextAtCenter` (visible centre on whiteboards; 1/3 down the current page on paged notes, as dictation
+  does). Export writes "<name> transcript.txt" next to the note with [m:ss] times and shows the existing Open/Share bar.
+  Tapping a segment calls `view.listener.onSeek(rec, start)`, the same path as tapping ink, which seeks audio and ink
+  replay. Tapping ink moves the highlight through the shared `PlayClock`.
+- **Not verified on a device** (no emulator here). Engine support for `EXTRA_AUDIO_SOURCE` / segmented sessions differs:
+  Google's on-device service on Android 13+ supports it. Samsung's own recognizer may not; then the ladder moves to
+  Google or reports unsupported.
+
+## Requests to lead
+1. Please test on the Tab S11 Ultra (Android 16): start recording in AR and EN; switch language mid-lecture; pause and
+   resume; stop then play; tap segments and ink; search Arabic with and without tashkeel; export .txt. Also check
+   whether the strip says "Transcribed on this device".
+2. Optional later: a microphone foreground service so lectures keep recording with the screen off. That needs a manifest
+   change (`FOREGROUND_SERVICE_MICROPHONE`) and is outside my ownership.
+
+## Self-check
+1. Live transcription while recording — **PASS (compile + reasoning; not device-tested)**: single capture → AAC + pipe
+   (API 33+), on-device preferred with fallbacks, seamless restarts, partials kept, MediaRecorder fallback with the
+   unsupported message, language from `Prefs.speechLang` with a quick switch on the bar.
+2. Transcript model — **PASS**: segments (start, end, text, rec, lang) in `Recording.transcript`, `.note` compatible.
+3. UI — **PASS**: live strip (partial greyed, collapsible); karaoke panel (highlight, auto-scroll, tap → seek, ink tap →
+   highlight); search, copy all, insert as text box, export .txt; transcript in the recordings dialog (preview + full).
+4. Battery — **PASS**: no wakelocks; recognizer and codecs released on stop, pause and dispose.
+- Build: my files are clean. The whole module doesn't compile yet because of ink5-agent's in-progress files —
+  **PARTIAL** until they land.

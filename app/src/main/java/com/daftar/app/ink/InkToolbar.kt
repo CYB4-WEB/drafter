@@ -63,6 +63,13 @@ internal class InkToolState {
         private set
     var tapeWidth by mutableFloatStateOf(InkPrefs.tapeWidth)
         private set
+    /** Shape tool: library shape dragged out on the canvas ("" = Auto, freehand → recognized). */
+    var shapeKind by mutableStateOf(InkPrefs.shapeKind)
+        private set
+    /** Ruler overlay shown (not a tool: drawing tools keep working, strokes near its edges snap to it). */
+    var ruler by mutableStateOf(false)
+
+    fun selectShape(k: String) { shapeKind = k; InkPrefs.shapeKind = k; if (tool != Tool.SHAPE) selectTool(Tool.SHAPE) }
 
     fun selectTool(t: Int) { tool = t; InkPrefs.tool = t }
 
@@ -161,6 +168,8 @@ internal fun InkToolbar(
     onLink: () -> Unit,
     onDictate: () -> Unit,
     onAddPage: () -> Unit,
+    onStickers: () -> Unit = {},
+    onShapes: () -> Unit = {},
 ) {
     val c = D.c
     val big = Prefs.largeControls
@@ -193,19 +202,22 @@ internal fun InkToolbar(
             Triple(Tool.ERASER, Icons.Rounded.CleaningServices, R.string.ink_tool_eraser),
             Triple(Tool.LASSO, Icons.Rounded.Gesture, R.string.ink_tool_lasso),
             Triple(Tool.TEXT, Icons.Rounded.TextFields, R.string.ink_tool_text),
-            Triple(Tool.SHAPE, Icons.Rounded.Category, R.string.ink_tool_shape),
             Triple(Tool.TAPE, Icons.Rounded.VisibilityOff, R.string.ink_tool_tape),
             Triple(Tool.LASER, Icons.Rounded.AdsClick, R.string.ink_tool_laser),
             Triple(Tool.HAND, Icons.Rounded.PanTool, R.string.ink_tool_hand),
         ).forEach { (t, ic, label) ->
             ToolButton(ic, stringResource(label), st.tool == t, btn, icon) { st.selectTool(t); onToolChanged() }
+            if (t == Tool.TEXT) ShapeButton(st, btn, icon, onToolChanged)
         }
+        ToolButton(Icons.Rounded.Straighten, stringResource(R.string.ink5_ruler), st.ruler, btn, icon) { st.ruler = !st.ruler }
     }
 
     @Composable
     fun RowScope.Insert() {
         ToolButton(Icons.Rounded.AddPhotoAlternate, stringResource(R.string.ink_insert_image), false, btn, icon, onImage)
         ToolButton(Icons.Rounded.AddLink, stringResource(R.string.ink_insert_link), false, btn, icon, onLink)
+        ToolButton(Icons.Rounded.Approval, stringResource(R.string.ink5_stickers), false, btn, icon, onStickers)
+        ToolButton(Icons.Rounded.Interests, stringResource(R.string.ink5_shapes), false, btn, icon, onShapes)
         ToolButton(Icons.Rounded.KeyboardVoice, stringResource(R.string.ink_dictate), false, btn, icon, onDictate)
         if (showAddPage) ToolButton(Icons.Rounded.NoteAdd, stringResource(R.string.ink_add_page), false, btn, icon, onAddPage)
     }
@@ -308,6 +320,16 @@ private fun PenButton(st: InkToolState, btn: Dp, icon: Dp, onToolChanged: () -> 
             if (st.tool == Tool.PEN) open = true else { st.selectTool(Tool.PEN); onToolChanged() }
         }
         if (open) PenStyleMenu(st, onDismiss = { open = false }) { st.selectStyle(it); open = false; onToolChanged() }
+    }
+}
+
+/** Shape tool button: tap opens the shape picker; picking selects the Shape tool with that shape (drag to draw). */
+@Composable
+private fun ShapeButton(st: InkToolState, btn: Dp, icon: Dp, onToolChanged: () -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    ToolButton(Icons.Rounded.Category, stringResource(R.string.ink_tool_shape), st.tool == Tool.SHAPE, btn, icon) { open = true }
+    if (open) ShapeTray(onDismiss = { open = false }, current = st.shapeKind, withAuto = true) { k ->
+        open = false; st.selectShape(k); onToolChanged()
     }
 }
 

@@ -87,4 +87,8 @@ internal object InkPrefs {
     var nightPaper: Boolean
         get() = sp?.getBoolean("nightPaper", false) ?: false
         set(v) { sp?.edit()?.putBoolean("nightPaper", v)?.apply() }
+    /** Shape tool: last library shape picked ("" = Auto, freehand → recognized). */
+    var shapeKind: String
+        get() = sp?.getString("shapeKind", InkShapes.RECT)?.takeIf { it.isEmpty() || InkShapes.base(it) in InkShapes.all } ?: InkShapes.RECT
+        set(v) { sp?.edit()?.putString("shapeKind", v)?.apply() }
 }

@@ -44,7 +44,7 @@ internal object NoteExport {
      * Page [i] as a bitmap at [scale] × its size in points (2× ≈ 144 dpi). Whiteboards are cropped to their content
      * ([InkDoc.exportRect]); huge boards are scaled down to stay within memory. Tapes are drawn hidden.
      */
-    fun renderPage(doc: InkDoc, i: Int, scale: Float = 2f): Bitmap {
+    fun renderPage(doc: InkDoc, i: Int, scale: Float = 2f, night: Boolean = false): Bitmap {
         val page = doc.pages[i]
         val r = doc.exportRect(i)
         var s = scale.toDouble()
@@ -55,11 +55,12 @@ internal object NoteExport {
         val h = (r.height() * s).roundToInt().coerceAtLeast(1)
         val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         val c = Canvas(bmp)
-        c.drawColor(doc.paperColor or 0xFF000000.toInt())
+        c.drawColor(if (night) InkNight.PAPER else doc.paperColor or 0xFF000000.toInt())
         c.scale(s.toFloat(), s.toFloat())
         c.translate(-r.left, -r.top)
-        InkRender.drawPaper(c, page, clip = RectF(r), bounded = !doc.infinite)
-        InkRender.drawPageContent(c, page)
+        InkRender.drawPaper(c, page, night, clip = RectF(r), bounded = !doc.infinite)
+        InkRender.setNight(night)
+        try { InkRender.drawPageContent(c, page) } finally { InkRender.setNight(false) }
         return bmp
     }
 
@@ -68,14 +69,14 @@ internal object NoteExport {
     }
 
     /** Writes the given pages as images next to the note ("Name.png", or "Name - 3.png" per page). */
-    suspend fun exportImages(doc: InkDoc, pages: List<Int>, dir: File, base: String, png: Boolean, progress: (Int, Int) -> Unit): List<File> {
+    suspend fun exportImages(doc: InkDoc, pages: List<Int>, dir: File, base: String, png: Boolean, night: Boolean = false, progress: (Int, Int) -> Unit): List<File> {
         val ext = if (png) "png" else "jpg"
         val out = ArrayList<File>()
         try {
             pages.forEachIndexed { k, i ->
                 coroutineContext.ensureActive()
                 progress(k + 1, pages.size)
-                val bmp = renderPage(doc, i)
+                val bmp = renderPage(doc, i, night = night)
                 try {
                     val f = Storage.uniqueFile(dir, if (pages.size == 1 && doc.pages.size == 1) base else "$base - ${i + 1}", ext)
                     writeBitmap(bmp, f, png)
