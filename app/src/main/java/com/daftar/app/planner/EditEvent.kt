@@ -94,7 +94,14 @@ fun EditEventScreen(id: Long?, presetType: Int) {
     var description by rememberSaveable { mutableStateOf(existing?.description ?: "") }
     var remindersCsv by rememberSaveable { mutableStateOf((existing?.reminders ?: defaultReminders(initType)).joinToString(",")) }
     var remindersTouched by rememberSaveable { mutableStateOf(existing != null) }
-    var folder by rememberSaveable { mutableStateOf(existing?.folder ?: "") }
+    var folder by rememberSaveable {
+        // countdown-agent: "+" on a subject-filtered Countdowns list pre-links that subject folder (consumed once).
+        mutableStateOf(existing?.folder ?: (com.daftar.app.planner.countdown.CountdownDraft.folder ?: "").also { com.daftar.app.planner.countdown.CountdownDraft.folder = null })
+    }
+    // countdown-agent: optional countdown style (card colour + counting unit), stored per event id.
+    val initStyle = remember(id) { existing?.let { com.daftar.app.planner.countdown.CountdownStyles.get(ctx, it.id) } ?: com.daftar.app.planner.countdown.CountdownStyles.Style() }
+    var cdColor by rememberSaveable { mutableIntStateOf(initStyle.color) }
+    var cdUnit by rememberSaveable { mutableIntStateOf(initStyle.unit) }
     // Phone calendar copy: per event; new events default from the remembered choice (Always = on).
     var calSync by rememberSaveable { mutableStateOf(existing?.calendarSync ?: (CalendarPrefs.mode == CalendarPrefs.ALWAYS)) }
     var calTouched by rememberSaveable { mutableStateOf(false) }
@@ -193,6 +200,7 @@ fun EditEventScreen(id: Long?, presetType: Int) {
             calendarSync = calSync, importKey = existing?.importKey ?: "",
         )
         Planner.upsert(ev) // the store keeps the phone copy in step (insert / update / remove)
+        com.daftar.app.planner.countdown.CountdownStyles.put(ctx, ev.id, com.daftar.app.planner.countdown.CountdownStyles.Style(cdColor, cdUnit))
         val hasReminders = ev.reminders.isNotEmpty()
         when {
             existing == null && !calTouched && CalendarPrefs.mode == CalendarPrefs.ASK -> { askReminders = hasReminders; askId = ev.id }
@@ -210,6 +218,7 @@ fun EditEventScreen(id: Long?, presetType: Int) {
             onBack = { pane.back() },
         ) {
             if (existing != null) com.daftar.app.grades.GradeItButton(existing) // grades-agent: past exams → "Grade it"
+            if (existing != null) com.daftar.app.planner.countdown.ShowCountdownButton(existing) // countdown-agent
             if (existing != null) IconButton(onClick = { confirmDelete = true }) {
                 Icon(Icons.Rounded.DeleteOutline, stringResource(R.string.delete), tint = D.c.muted)
             }
@@ -379,6 +388,11 @@ fun EditEventScreen(id: Long?, presetType: Int) {
                         }
                     }
                 }
+                // countdown-agent: optional countdown style
+                val autoColor = remember(folder, type) {
+                    com.daftar.app.planner.countdown.Subjects.of(folder)?.let { com.daftar.app.ui.theme.folderColor(it.color) } ?: typeColor(type)
+                }
+                com.daftar.app.planner.countdown.CountdownStyleSection(cdColor, cdUnit, autoColor, { cdColor = it }, { cdUnit = it })
                 if (existing != null) {
                     TextButton(onClick = { confirmDelete = true }, modifier = Modifier.fillMaxWidth()) {
                         Icon(Icons.Rounded.DeleteOutline, null, tint = D.c.danger)

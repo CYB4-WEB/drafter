@@ -2,6 +2,7 @@ package com.daftar.app.planner
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
@@ -263,12 +264,14 @@ private fun DayColumn(d: LocalDate, blocks: List<Block>, minH: Int, hourH: Dp, n
             val e = b.o.event
             val c = typeColor(e.type)
             val done = e.type == EventType.ASSIGNMENT && e.done
+            var menu by remember { mutableStateOf(false) } // countdown-agent: long-press → "Show countdown"
             Row(
                 Modifier.offset(x = w * b.lane, y = top).width(w).height(h).padding(1.dp)
                     .background(c.copy(alpha = if (D.c.dark) 0.30f else 0.20f), RoundedCornerShape(6.dp))
-                    .clickable { pane.push(Screen.EditEvent(e.id)) }
+                    .combinedClickable(onClick = { pane.push(Screen.EditEvent(e.id)) }, onLongClick = { menu = true })
                     .alpha(if (done) 0.5f else 1f),
             ) {
+                EventLongPressMenu(b.o, menu) { menu = false }
                 Box(Modifier.width(3.dp).fillMaxHeight().background(c, RoundedCornerShape(topStart = 6.dp, bottomStart = 6.dp)))
                 Column(Modifier.padding(horizontal = 4.dp, vertical = 2.dp)) {
                     Text(e.title, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = D.c.ink,

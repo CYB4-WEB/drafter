@@ -49,9 +49,6 @@ import com.daftar.app.data.Prefs
 import com.daftar.app.data.Storage
 import com.daftar.app.ink.InkEditorScaffold
 import com.daftar.app.ink.InkDoc
-import com.daftar.app.planner.EventType
-import com.daftar.app.planner.Occurrence
-import com.daftar.app.planner.Planner
 import com.daftar.app.ui.theme.D
 import com.daftar.app.ui.workspace.fileItemGestures
 import com.daftar.app.ui.theme.folderColor
@@ -64,10 +61,6 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
-
-private fun eventColor(type: Int) = folderColor(
-    when (type) { EventType.EXAM -> 0; EventType.ASSIGNMENT -> 2; EventType.MEETING -> 7; EventType.CLASS -> 6; else -> 11 }
-)
 
 @Composable
 private fun gutter() = if (LocalWidthClass.current == WidthClass.Compact) D.gutter else D.gutterWide
@@ -102,7 +95,6 @@ fun HomeScreen() {
     val subjects = remember(v) { Storage.list(Storage.root).filter { it.kind == Kind.FOLDER } }
     val recents = remember(v, Storage.recents.size) { Storage.recents.map { File(it) }.filter { it.exists() }.take(8).map { Storage.entry(it) } }
     val pins = remember(v, Storage.pins.size) { Storage.pins.map { File(it) }.filter { it.exists() }.map { Storage.entry(it) } }
-    val upcoming = remember(Planner.version) { Planner.upcoming(5) }
 
     val pending by MainActivity.pendingAction
     LaunchedEffect(pending) {
@@ -143,14 +135,14 @@ fun HomeScreen() {
                             RecentSection(recents, actions)
                         }
                         Column(Modifier.weight(1f)) {
-                            UpcomingSection(upcoming)
+                            com.daftar.app.planner.countdown.HomeUpcomingSection()  // countdown-agent: countdown cards
                             com.daftar.app.study.StudyHomeCard()
                             com.daftar.app.grades.GpaHomeStat()
                             if (pins.isNotEmpty()) PinnedSection(pins, actions)
                         }
                     }
                 } else {
-                    UpcomingSection(upcoming)
+                    com.daftar.app.planner.countdown.HomeUpcomingSection()  // countdown-agent: countdown cards
                     com.daftar.app.study.StudyHomeCard()
                     com.daftar.app.grades.GpaHomeStat()
                     SubjectsSection(subjects, actions, columns = if (compact) 0 else 3)
@@ -237,79 +229,6 @@ private fun PinnedSection(pins: List<Entry>, actions: Actions) {
     SectionTitle(stringResource(R.string.pinned))
     Column(Modifier.fillMaxWidth().card(D.c).padding(4.dp)) {
         pins.forEach { e -> EntryRow(e, { pane.open(ctx, e.file) }, { actions.menu(e) }) }
-    }
-}
-
-@Composable
-private fun UpcomingSection(items: List<Occurrence>) {
-    val c = D.c
-    SectionTitle(stringResource(R.string.upcoming)) {
-        TextButton(onClick = { Nav.tab(Screen.Planner) }) { Text(stringResource(R.string.see_all)) }
-    }
-    // Ticks every 20 s so the countdowns stay live (minutes resolution).
-    val now = rememberTickingNow(60_000)
-    Column(Modifier.fillMaxWidth().card(c).padding(4.dp)) {
-        if (items.isEmpty()) EmptyState(Icons.Rounded.EventAvailable, stringResource(R.string.nothing_upcoming)) {
-            OutlinedButton(onClick = { pane.push(Screen.EditEvent(null)) }) { Text(stringResource(R.string.add_event)) }
-        }
-        items.forEach { o ->
-            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { pane.push(Screen.EditEvent(o.event.id)) }.padding(10.dp),
-                verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.width(4.dp).height(38.dp).clip(RoundedCornerShape(2.dp)).background(eventColor(o.event.type)))
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(o.event.title, style = MaterialTheme.typography.bodyLarge, color = c.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(whenLabel(o), style = MaterialTheme.typography.bodySmall, color = c.muted, maxLines = 1)
-                }
-                Spacer(Modifier.width(8.dp))
-                Countdown(o.start, o.end, now, eventColor(o.event.type))
-            }
-        }
-    }
-}
-
-/** "2d 4h", "3h 12m", "12m" until [start]; "Now" while it runs. Shown at the row's end (left side in Arabic). */
-@Composable
-private fun Countdown(start: Long, end: Long, now: Long, tint: Color) {
-    val c = D.c
-    val left = start - now
-    val text = when {
-        left <= 0 && now <= maxOf(end, start) -> stringResource(R.string.countdown_now)
-        left <= 0 -> stringResource(R.string.countdown_now)
-        else -> {
-            val mins = (left + 59_999) / 60_000
-            val d = mins / (24 * 60); val h = (mins / 60) % 24; val m = mins % 60
-            when {
-                d > 0 -> stringResource(R.string.countdown_dh, d, h)
-                h > 0 -> stringResource(R.string.countdown_hm, h, m)
-                else -> stringResource(R.string.countdown_m, m)
-            }
-        }
-    }
-    val urgent = left in 0..(24 * 3600_000L)
-    Column(horizontalAlignment = Alignment.End) {
-        Text(text, style = MaterialTheme.typography.labelLarge, color = if (urgent) tint else c.ink, maxLines = 1,
-            modifier = Modifier.background(if (urgent) tint.copy(alpha = 0.12f) else c.surfaceAlt, RoundedCornerShape(8.dp))
-                .padding(horizontal = 8.dp, vertical = 4.dp))
-        if (left > 0) Text(stringResource(R.string.countdown_left), style = MaterialTheme.typography.bodySmall, color = c.muted,
-            modifier = Modifier.padding(top = 2.dp))
-    }
-}
-
-@Composable
-private fun whenLabel(o: Occurrence): String {
-    val day = DateUtilsCompat.dayLabel(o.start, stringResource(R.string.today), stringResource(R.string.tomorrow))
-    return if (o.event.allDay) day else day + " · " + DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(o.start))
-}
-
-private object DateUtilsCompat {
-    fun dayLabel(t: Long, today: String, tomorrow: String): String {
-        val a = Calendar.getInstance(); val b = Calendar.getInstance().apply { timeInMillis = t }
-        fun same(x: Calendar, y: Calendar) = x.get(Calendar.YEAR) == y.get(Calendar.YEAR) && x.get(Calendar.DAY_OF_YEAR) == y.get(Calendar.DAY_OF_YEAR)
-        if (same(a, b)) return today
-        a.add(Calendar.DAY_OF_YEAR, 1)
-        if (same(a, b)) return tomorrow
-        return SimpleDateFormat("EEE d MMM", Locale.getDefault()).format(Date(t))
     }
 }
 

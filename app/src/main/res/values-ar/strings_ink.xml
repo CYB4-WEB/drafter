@@ -232,4 +232,7 @@
     <string name="ink5_night_paper">ورق ليلي</string>
     <string name="ink5_export_as_shown">تصدير كما يظهر (ليلي)</string>
     <string name="ink5_page_spread">%1$d–%2$d / %3$d</string>
+    <string name="tr_channel">تسجيل المحاضرات</string>
+    <string name="tr_notif_recording">جارٍ تسجيل المحاضرة</string>
+    <string name="tr_notif_paused">التسجيل متوقف مؤقتًا · %1$s</string>
 </resources>

@@ -228,6 +228,8 @@ internal fun InkEditorImpl(
     var stripOpen by remember { mutableStateOf(TranscriptPrefs.stripOpen(ctx)) }
     var trPanelOpen by remember { mutableStateOf(true) }
     var trDialog by remember { mutableStateOf<Recording?>(null) }
+    /** Notification Pause / Resume / Stop (RecordingService) → set below, once the recording functions exist. */
+    var onRecAction: (RecordingService.Action) -> Unit = {}
 
     fun stopPlayback() {
         player?.release(); player = null; playing = null; isPlaying = false
@@ -246,6 +248,8 @@ internal fun InkEditorImpl(
             if (recPaused) view.recOffset else SystemClock.elapsedRealtime() - view.recClockStart + view.recOffset
         }
         recording = true
+        // microphone foreground service: keeps recording with the screen off / app in the background
+        RecordingService.start(ctx, title) { a -> onRecAction(a) }
     }
 
     fun pauseRecording() {
@@ -255,6 +259,7 @@ internal fun InkEditorImpl(
         view.recOffset += SystemClock.elapsedRealtime() - view.recClockStart
         view.recId = 0          // ink drawn during the pause is not tied to the audio
         recPaused = true
+        RecordingService.update(true, view.recOffset)
     }
 
     fun resumeRecording() {
@@ -264,6 +269,7 @@ internal fun InkEditorImpl(
         view.recId = curRecId
         recPaused = false
         transcript.resumeRec()
+        RecordingService.update(false, view.recOffset)
     }
 
     fun stopRecording() {
@@ -277,12 +283,21 @@ internal fun InkEditorImpl(
             }
         }
         recorder.stop()
+        RecordingService.stop()
         val f = recorder.file
         view.recId = 0; curRecId = 0; recPaused = false
         recording = false
         if (f != null && f.exists()) {
             view.doc.recordings = view.doc.recordings + Recording(id, f.name, audioDuration(f), System.currentTimeMillis(), transcript.state.snapshot())
             scheduleSave()
+        }
+    }
+
+    onRecAction = { a ->
+        when (a) {
+            RecordingService.Action.PAUSE -> pauseRecording()
+            RecordingService.Action.RESUME -> resumeRecording()
+            RecordingService.Action.STOP -> if (recorder.active) stopRecording()
         }
     }
 
