@@ -89,6 +89,13 @@ class InkView(context: Context) : View(context) {
     var hlColor = 0x66F2C94C
     var hlWidth = 14f
     var shapeColor = 0xFF1F2937.toInt()
+    /** Shape tool: the library shape drawn by dragging ([InkShapes] kind), or "" = Auto (freehand → recognized). */
+    var shapeKind = ""
+    /** Shape being dragged out: start (page coords of [drawPage]) and its live preview. */
+    private var shapeDrag = false
+    private var shX0 = 0f
+    private var shY0 = 0f
+    private var shapePreview: Stroke? = null
     var eraserRadiusDp = 12f
     var tapeColor = InkRender.tapeColors[0]
     var tapeWidth = 26f
@@ -1022,6 +1029,7 @@ class InkView(context: Context) : View(context) {
     }
 
     private fun drawLive(c: Canvas) {
+        if (shapeDrag) { shapePreview?.let { InkRender.drawStroke(c, it) }; return }
         if (ruled != 0) {
             // stroke along the ruler: a straight line, drawn in the tool's look
             val hl = activeTool == Tool.HIGHLIGHTER
@@ -1222,6 +1230,7 @@ class InkView(context: Context) : View(context) {
                     return true
                 }
                 if (mode == Mode.TEXT_PINCH) return true
+                if (mode == Mode.DRAW && shapeDrag) { invalidate(); return true }   // second finger: constrain the shape
                 if (mode == Mode.DRAW && !isPen(e, 0)) {
                     // second finger: user wants to zoom, not draw
                     npts = 0; live = null; mode = Mode.NAV; ruled = 0
@@ -1247,7 +1256,7 @@ class InkView(context: Context) : View(context) {
             MotionEvent.ACTION_CANCEL -> {
                 main.removeCallbacks(longPress)
                 if (mode == Mode.TEXT_DRAG || mode == Mode.TEXT_PINCH) finishTextGesture()
-                npts = 0; live = null; ruled = 0; mode = Mode.NONE; eraserOn = false; velocity?.recycle(); velocity = null; invalidate()
+                npts = 0; live = null; ruled = 0; shapeDrag = false; shapePreview = null; mode = Mode.NONE; eraserOn = false; velocity?.recycle(); velocity = null; invalidate()
             }
         }
         return true
@@ -1352,11 +1361,14 @@ class InkView(context: Context) : View(context) {
         when (activeTool) {
             Tool.PEN -> live = InkRender.liveGeom(Tool.PEN, penStyle, penWidth)
             Tool.HIGHLIGHTER -> live = InkRender.liveGeom(Tool.HIGHLIGHTER, PenStyle.BALL, hlWidth)
-            Tool.SHAPE -> live = InkRender.liveGeom(Tool.SHAPE, PenStyle.BALL, penWidth)
+            Tool.SHAPE -> if (shapeKind.isEmpty()) live = InkRender.liveGeom(Tool.SHAPE, PenStyle.BALL, penWidth)
             Tool.TAPE -> live = InkRender.liveGeom(Tool.TAPE, PenStyle.BALL, tapeWidth)
             Tool.LASSO -> lassoPath.rewind()
         }
         ruled = 0
+        shapeDrag = activeTool == Tool.SHAPE && shapeKind.isNotEmpty() && h != null
+        shapePreview = null
+        if (shapeDrag) { shX0 = h!!.second; shY0 = h.third }
         when (activeTool) {
             Tool.PEN, Tool.HIGHLIGHTER, Tool.SHAPE, Tool.LASSO, Tool.TAPE -> if (h != null) addPoint(h.second, h.third, pressureOf(e, -1))
             Tool.ERASER -> { eraserOn = true; eraserX = e.x; eraserY = e.y; eraseAt(e.x, e.y) }
@@ -1451,6 +1463,15 @@ class InkView(context: Context) : View(context) {
         if (!moved && hypot(e.x - downX, e.y - downY) > slop) { moved = true; main.removeCallbacks(longPress) }
         when (mode) {
             Mode.DRAW -> {
+                if (shapeDrag) {
+                    if (drawPage >= 0) {
+                        val x = toDocX(e.x) - pageLeft(drawPage); val y = toDocY(e.y) - pageTops[drawPage]
+                        val constrain = e.pointerCount >= 2 || (e.buttonState and (MotionEvent.BUTTON_STYLUS_PRIMARY or MotionEvent.BUTTON_SECONDARY)) != 0
+                        shapePreview = dragShape(x, y, constrain)
+                        invalidate()
+                    }
+                    return
+                }
                 if (ruled != 0) {
                     val t = ruler.along(e.x, e.y)
                     if (t < rT0) rT0 = t
@@ -1541,15 +1562,20 @@ class InkView(context: Context) : View(context) {
                     Tool.PEN, Tool.HIGHLIGHTER -> if (drawPage >= 0 && ruled != 0 && hypot(rulA[2] - rulA[0], rulA[3] - rulA[1]) * scale > density) {
                         commitStroke(makeRuled())
                     } else if (drawPage >= 0 && npts > 0) commitStroke(makeStroke())
-                    Tool.SHAPE -> if (drawPage >= 0 && npts > 1) commitStroke(recognizeShape(makeStroke()))
-                    Tool.LASSO -> if (!moved) { if (!lassoTap(e.x, e.y)) textAtScreen(e.x, e.y)?.let { (pg, t) -> selectText(pg, t) } }
+                    Tool.SHAPE -> if (shapeDrag) {
+                        val st = shapePreview
+                        if (!moved || st == null) lassoTap(e.x, e.y)       // tap: select the shape under it (handles)
+                        else if (drawPage >= 0) commitStroke(st)
+                    } else if (!moved) lassoTap(e.x, e.y)
+                    else if (drawPage >= 0 && npts > 1) commitStroke(recognizeShape(makeStroke()))
+                    Tool.LASSO -> if (!moved) { val tx = textAtScreen(e.x, e.y); if (tx != null) selectText(tx.first, tx.second) else lassoTap(e.x, e.y) }
                         else if (drawPage >= 0 && npts > 2) lassoSelect()
                     Tool.TAPE -> if (drawPage >= 0 && npts > 1) commitTape()
                     Tool.TEXT -> if (!moved) textTap(e.x, e.y) else textDragCreate(downX, downY, e.x, e.y)
                     Tool.ERASER -> { eraserOn = false; if (eraseUndoPushed) changed() }
                 }
                 eraserOn = false
-                npts = 0; live = null; ruled = 0
+                npts = 0; live = null; ruled = 0; shapeDrag = false; shapePreview = null
             }
             Mode.NAV -> {
                 if (wasTap) navTap(e.x, e.y)
@@ -1599,6 +1625,7 @@ class InkView(context: Context) : View(context) {
         if (tapAction(x, y)) return
         if (tool == Tool.TEXT && h != null) { textTap(x, y); return }
         if (h != null) textAt(h.first, h.second, h.third)?.let { selectText(h.first, it); return }
+        if (h != null) stickerAt(h.first, h.second, h.third)?.let { liftOne(h.first, sticker = it); return }
         if (now - lastTapTime < 300) {
             // double tap (finger, or pen with the Hand tool): toggle fit <-> 2x
             if (scale > fitScale * 1.2f) zoomAt(x, y, fitScale / scale) else zoomAt(x, y, 2f)
@@ -1612,6 +1639,15 @@ class InkView(context: Context) : View(context) {
         val h = hit(x, y) ?: return
         val existing = textAt(h.first, h.second, h.third)
         if (existing != null) { beginEdit(h.first, existing, false); return }
+        // inside a table cell: the box fills the cell's width
+        doc.pages[h.first].strokes.lastOrNull { InkShapes.tableDims(it.shape) != null && InkShapes.boxOf(it).contains(h.second, h.third) }
+            ?.let { InkShapes.cellAt(it, h.second, h.third) }?.let { cell ->
+                val pad = max(2f, min(6f, cell.width() * 0.06f))
+                val size = min(textSize, max(6f, (cell.height() - 2 * pad) * 0.7f))
+                beginEdit(h.first, TextItem(System.nanoTime(), cell.left + pad, cell.top + pad, max(16f, cell.width() - 2 * pad), "", size,
+                    textColor, textFont, textBold), true)
+                return
+            }
         val p = doc.pages[h.first]
         val size = textSize
         var w = if (doc.infinite) 320f else min(320f, max(120f, p.w - 24f))
@@ -1836,6 +1872,41 @@ class InkView(context: Context) : View(context) {
         return s
     }
 
+    /**
+     * Library shape from the drag start to ([x], [y]) (page coords). [constrain] (S Pen button / second finger): square
+     * box (circle, equal-sided star…), lines snapped to 45°.
+     */
+    private fun dragShape(x: Float, y: Float, constrain: Boolean): Stroke {
+        var ex = x; var ey = y
+        if (constrain) {
+            val dx = x - shX0; val dy = y - shY0
+            if (InkShapes.isLine(shapeKind)) {
+                val len = hypot(dx, dy)
+                val a = Math.round(Math.toDegrees(kotlin.math.atan2(dy, dx).toDouble()) / 45.0) * 45.0
+                val r = Math.toRadians(a)
+                ex = shX0 + (cos(r) * len).toFloat(); ey = shY0 + (sin(r) * len).toFloat()
+            } else {
+                val m = max(abs(dx), abs(dy))
+                ex = shX0 + (if (dx < 0) -m else m); ey = shY0 + (if (dy < 0) -m else m)
+            }
+        }
+        if (!InkShapes.isLine(shapeKind)) {
+            // never a zero-sized box
+            if (abs(ex - shX0) < 1f) ex = shX0 + 1f
+            if (abs(ey - shY0) < 1f) ey = shY0 + 1f
+        }
+        return InkShapes.build(shapeKind, shX0, shY0, ex, ey, shapeColor, penWidth)
+    }
+
+    /** The straight stroke drawn along the ruler (two points; geometry built like any saved stroke). */
+    private fun makeRuled(): Stroke {
+        val p = rP.coerceIn(0f, 1f)
+        val q = { v: Float -> (v * 10f).toInt() / 10f }
+        val arr = floatArrayOf(q(rulA[0]), q(rulA[1]), p, q(rulA[2]), q(rulA[3]), p)
+        return if (activeTool == Tool.HIGHLIGHTER) Stroke(Tool.HIGHLIGHTER, hlColor, hlWidth, arr)
+        else Stroke(Tool.PEN, penColor, penWidth, arr, style = penStyle)
+    }
+
     private fun commitStroke(s: Stroke) {
         pushUndo()
         val p = doc.pages[drawPage]
@@ -1967,11 +2038,31 @@ class InkView(context: Context) : View(context) {
         val texts = page.texts.filter { InkRender.layout(it); val b = it.bounds(); inPoly(b.centerX(), b.centerY(), poly, n) }
         val images = page.images.filter { val b = it.bounds(); inPoly(b.centerX(), b.centerY(), poly, n) }
         val links = page.links.filter { inPoly(it.x + it.w / 2f, it.y + it.h / 2f, poly, n) }
-        if (strokes.isEmpty() && texts.isEmpty() && images.isEmpty() && links.isEmpty()) return
-        lift(drawPage, strokes, texts, images, links)
+        val stickers = page.stickers.filter { inPoly(it.x + it.w / 2f, it.y + it.h / 2f, poly, n) }
+        if (strokes.isEmpty() && texts.isEmpty() && images.isEmpty() && links.isEmpty() && stickers.isEmpty()) return
+        lift(drawPage, strokes, texts, images, links, stickers)
     }
 
-    private fun lift(pageIdx: Int, strokes: List<Stroke>, texts: List<TextItem>, images: List<ImageItem>, links: List<LinkItem>) {
+    private fun stickerAt(page: Int, x: Float, y: Float): StickerItem? =
+        doc.pages.getOrNull(page)?.stickers?.lastOrNull { it.bounds().contains(x, y) }
+
+    /** Lasso tap: picks the sticker, or else the library shape, under the tap. True when something was selected. */
+    private fun lassoTap(x: Float, y: Float): Boolean {
+        val h = hit(x, y, strict = false) ?: return false
+        stickerAt(h.first, h.second, h.third)?.let { liftOne(h.first, sticker = it); return true }
+        val r = 12f * density / scale
+        doc.pages[h.first].strokes.lastOrNull { it.shape.isNotEmpty() && strokeNear(it, h.second, h.third, r) }?.let {
+            liftOne(h.first, stroke = it); return true
+        }
+        return false
+    }
+
+    private fun liftOne(page: Int, sticker: StickerItem? = null, stroke: Stroke? = null) {
+        commitSelection()
+        lift(page, listOfNotNull(stroke), emptyList(), emptyList(), emptyList(), listOfNotNull(sticker))
+    }
+
+    private fun lift(pageIdx: Int, strokes: List<Stroke>, texts: List<TextItem>, images: List<ImageItem>, links: List<LinkItem>, stickers: List<StickerItem> = emptyList()) {
         pushUndo()
         val page = doc.pages[pageIdx]
         val box = RectF(Float.MAX_VALUE, Float.MAX_VALUE, -Float.MAX_VALUE, -Float.MAX_VALUE)
@@ -1979,33 +2070,50 @@ class InkView(context: Context) : View(context) {
         texts.forEach { InkRender.layout(it); box.union(it.bounds()) }
         images.forEach { box.union(it.bounds()) }
         links.forEach { box.union(it.bounds()) }
+        stickers.forEach { box.union(it.bounds()) }
         val sIds = strokes.toHashSet()
         val tIds = texts.map { it.id }.toHashSet(); val iIds = images.map { it.id }.toHashSet(); val lIds = links.map { it.id }.toHashSet()
+        val kIds = stickers.map { it.id }.toHashSet()
         setPage(pageIdx, page.copy(
             strokes = page.strokes.filterNot { it in sIds },
             texts = page.texts.filterNot { it.id in tIds },
             images = page.images.filterNot { it.id in iIds },
             links = page.links.filterNot { it.id in lIds },
+            stickers = page.stickers.filterNot { it.id in kIds },
         ))
-        sel = Sel(pageIdx, strokes, texts, images, links, box)
+        sel = Sel(pageIdx, strokes, texts, images, links, box, stickers)
         listener?.onSelectionChanged(true)
         invalidate()
     }
 
-    private class Mapped(val strokes: List<Stroke>, val texts: List<TextItem>, val images: List<ImageItem>, val links: List<LinkItem>)
+    private class Mapped(val strokes: List<Stroke>, val texts: List<TextItem>, val images: List<ImageItem>, val links: List<LinkItem>,
+        val stickers: List<StickerItem> = emptyList())
 
     private fun mappedSelection(s: Sel): Mapped {
-        if (!s.changed) return Mapped(s.strokes, s.texts, s.images, s.links)
-        val st = s.strokes.map { it.mapped({ x, y -> s.map(x, y) }, s.s) }
+        if (!s.changed) return Mapped(s.strokes, s.texts, s.images, s.links, s.stickers)
+        val st = s.strokes.map {
+            val m = it.mapped({ x, y -> s.map(x, y) }, s.s)
+            // a rotated box shape is no longer an upright box: it stays a plain shape (no box handles)
+            if (s.rot != 0f && InkShapes.isBox(m.shape)) Stroke(m.tool, m.color, m.width, m.pts, m.rec, m.t, m.style) else m
+        }
+        val sk = s.stickers.map { k ->
+            val (cx, cy) = s.map(k.x + k.w / 2f, k.y + k.h / 2f)
+            val w = k.w * s.s; val h = k.h * s.s
+            var r = (k.rot + s.rot) % 360f
+            if (r > 180f) r -= 360f
+            if (r < -180f) r += 360f
+            k.copy(x = cx - w / 2f, y = cy - h / 2f, w = w, h = h, rot = r)
+        }
         val tx = s.texts.map { t -> t.copy(x = s.mapX(t.x), y = s.mapY(t.y), w = t.w * s.s, size = t.size * s.s) }
         val im = s.images.map { i -> i.copy(x = s.mapX(i.x), y = s.mapY(i.y), w = i.w * s.s, h = i.h * s.s).also { it.bmp = i.bmp } }
         val ln = s.links.map { l -> l.copy(x = s.mapX(l.x), y = s.mapY(l.y), w = l.w * s.s, h = l.h * s.s) }
-        return Mapped(st, tx, im, ln)
+        return Mapped(st, tx, im, ln, sk)
     }
 
     private fun putBack(pageIdx: Int, m: Mapped) {
         val page = doc.pages[pageIdx]
-        setPage(pageIdx, page.copy(strokes = page.strokes + m.strokes, texts = page.texts + m.texts, images = page.images + m.images, links = page.links + m.links))
+        setPage(pageIdx, page.copy(strokes = page.strokes + m.strokes, texts = page.texts + m.texts, images = page.images + m.images, links = page.links + m.links,
+            stickers = page.stickers + m.stickers))
     }
 
     fun commitSelection() {
@@ -2033,7 +2141,8 @@ class InkView(context: Context) : View(context) {
                 it.tool == Tool.HIGHLIGHTER -> it.withColor((color and 0x00FFFFFF) or 0x66000000)
                 else -> it.withColor(color)
             }
-        }, s.texts.map { it.copy(color = color) }, s.images, s.links, s.box).also { it.dx = s.dx; it.dy = s.dy; it.s = s.s; it.changed = true }
+        }, s.texts.map { it.copy(color = color) }, s.images, s.links, s.box, s.stickers.map { it.copy(color = color) })
+            .also { it.dx = s.dx; it.dy = s.dy; it.s = s.s; it.rot = s.rot; it.changed = true }
         sel = ns; invalidate()
     }
 
@@ -2048,7 +2157,12 @@ class InkView(context: Context) : View(context) {
             m.texts.mapIndexed { k, t -> t.copy(id = now + k, x = t.x + off, y = t.y + off) },
             m.images.mapIndexed { k, i -> i.copy(id = now + 1000 + k, x = i.x + off, y = i.y + off).also { it.bmp = i.bmp } },
             m.links.mapIndexed { k, l -> l.copy(id = now + 2000 + k, x = l.x + off, y = l.y + off) },
-            RectF(s.box).apply { offset(s.dx + off, s.dy + off); right = left + s.box.width() * s.s; bottom = top + s.box.height() * s.s },
+            RectF(Float.MAX_VALUE, Float.MAX_VALUE, -Float.MAX_VALUE, -Float.MAX_VALUE).apply {
+                m.strokes.forEach { union(it.bounds()) }; m.texts.forEach { InkRender.layout(it); union(it.bounds()) }
+                m.images.forEach { union(it.bounds()) }; m.links.forEach { union(it.bounds()) }; m.stickers.forEach { union(it.bounds()) }
+                offset(off, off)
+            },
+            m.stickers.mapIndexed { k, t -> t.copy(id = now + 3000 + k, x = t.x + off, y = t.y + off) },
         ).also { it.changed = true }
         invalidate()
     }
@@ -2068,13 +2182,15 @@ class InkView(context: Context) : View(context) {
         val item = TextItem(System.nanoTime(), b.left, b.top, max(b.width(), size * 4), text, size, pens.firstOrNull()?.color ?: penColor)
         val m = mappedSelection(s)
         sel = null
-        putBack(s.page, Mapped(m.strokes.filter { it.tool != Tool.PEN }, m.texts + item, m.images, m.links))
+        putBack(s.page, Mapped(m.strokes.filter { it.tool != Tool.PEN }, m.texts + item, m.images, m.links, m.stickers))
         notifyUndo(); listener?.onSelectionChanged(false); changed()
     }
 
     // ---- text, images, links ----
 
     /** Centre of the visible part of page [i], in page coordinates. */
+    private fun visibleCenterOf(i: Int) = visibleCenter(i)
+
     private fun visibleCenter(i: Int): Pair<Float, Float> {
         val p = doc.pages[i]
         val x = toDocX(width / 2f) - pageLeft(i)
@@ -2310,6 +2426,50 @@ class InkView(context: Context) : View(context) {
         upsertText(page, TextItem(System.nanoTime(), left, y, w, text, 16f, penColor))
     }
 
+    /** Sticker / shape size factor: the same on-screen size whatever the zoom (whiteboards zoomed out, pages zoomed in). */
+    private fun insertScale() = if (fitScale > 0f) (fitScale / scale).coerceIn(0.4f, 4f) else 1f
+
+    /**
+     * Inserts a sticker at the middle of the view (page under it); it floats selected so it can be moved, resized and
+     * rotated right away. One undo step.
+     */
+    fun addSticker(kind: String, text: String, color: Int = InkStickers.defaultColor(kind)) {
+        if (doc.pages.isEmpty()) return
+        finishEditing()
+        val i = targetPage()
+        val p = doc.pages[i]
+        val (nw, nh) = InkStickers.naturalSize(kind, text)
+        val k = insertScale()
+        val w = nw * k; val h = nh * k
+        val (cx, cy) = visibleCenterOf(i)
+        var x = cx - w / 2f; var y = cy - h / 2f
+        if (!doc.infinite) { x = x.coerceIn(0f, max(0f, p.w - w)); y = y.coerceIn(0f, max(0f, p.h - h)) }
+        val item = StickerItem(System.nanoTime(), x, y, w, h, kind, color, 0f, text)
+        pushUndo()
+        sel = Sel(i, emptyList(), emptyList(), emptyList(), emptyList(), item.bounds(), listOf(item)).also { it.changed = true }
+        listener?.onSelectionChanged(true)
+        changed()
+    }
+
+    /** Inserts a library shape (pen colour / width) at the middle of the view, floating selected with its handles. */
+    fun addShape(shape: String, color: Int = penColor, width: Float = penWidth) {
+        if (doc.pages.isEmpty()) return
+        finishEditing()
+        val i = targetPage()
+        val p = doc.pages[i]
+        val (dw, dh) = InkShapes.defaultSize(shape)
+        var k = insertScale()
+        if (!doc.infinite) k = min(k, p.w * 0.9f / dw)
+        val w = dw * k; val h = dh * k
+        val (cx, cy) = visibleCenterOf(i)
+        val st = if (InkShapes.isLine(shape)) InkShapes.build(shape, cx - w / 2f, cy, cx + w / 2f, cy, color, width)
+        else InkShapes.build(shape, cx - w / 2f, cy - h / 2f, cx + w / 2f, cy + h / 2f, color, width)
+        pushUndo()
+        sel = Sel(i, listOf(st), emptyList(), emptyList(), emptyList(), RectF(st.bounds())).also { it.changed = true }
+        listener?.onSelectionChanged(true)
+        changed()
+    }
+
     /** Insert a picture at the visible centre; it floats selected so the user can move/resize it. */
     fun addImage(b: Bitmap, widthPt: Float = 0f) {
         commitSelection()
@@ -2478,7 +2638,8 @@ class InkView(context: Context) : View(context) {
         m.texts.forEach { InkRender.layout(it); box.union(it.bounds()) }
         m.images.forEach { box.union(it.bounds()) }
         m.links.forEach { box.union(it.bounds()) }
-        sel = Sel(s.page, tidied, m.texts, m.images, m.links, box).also { it.changed = true }
+        m.stickers.forEach { box.union(it.bounds()) }
+        sel = Sel(s.page, tidied, m.texts, m.images, m.links, box, m.stickers).also { it.changed = true }
         invalidate()
         return true
     }
@@ -2503,7 +2664,7 @@ class InkView(context: Context) : View(context) {
         val paper = if (source != null) Color.WHITE else doc.paperColor or 0xFF000000.toInt()
         c.drawColor(paper)
         c.scale(k, k); c.translate(-b.left, -b.top)
-        InkRender.drawPageContent(c, InkPage(strokes = m.strokes, texts = m.texts, images = m.images, links = m.links))
+        InkRender.drawPageContent(c, InkPage(strokes = m.strokes, texts = m.texts, images = m.images, links = m.links, stickers = m.stickers))
         return bmp
     }
 
@@ -2563,7 +2724,7 @@ class InkView(context: Context) : View(context) {
         finishEditing()
         if (doc.pages[i].isEmpty()) return
         pushUndo()
-        setPage(i, doc.pages[i].copy(strokes = emptyList(), texts = emptyList(), images = emptyList(), links = emptyList()))
+        setPage(i, doc.pages[i].copy(strokes = emptyList(), texts = emptyList(), images = emptyList(), links = emptyList(), stickers = emptyList()))
         changed()
     }
 
