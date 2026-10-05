@@ -134,6 +134,7 @@ fun HomeScreen() {
                     QuickAction(Icons.Rounded.Transform, stringResource(R.string.convert), Color(0xFFEF4444)) { Nav.tab(Screen.Convert()) }
                     QuickAction(Icons.Rounded.EventAvailable, stringResource(R.string.add_event), Color(0xFF8B5CF6)) { pane.push(Screen.EditEvent(null)) }
                 }
+                com.daftar.app.ui.tags.SmartFiltersSection()  // tags-agent hook: "Smart filters" row
 
                 if (expanded) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
@@ -324,9 +325,14 @@ fun LibraryScreen(dir: String) {
     val actions = rememberActions()
     val v = Storage.version
     val sort = Prefs.sortMode
-    val entries = remember(dir, v, sort) { if (folder.exists()) Storage.list(folder) else emptyList() }
+    val listed = remember(dir, v, sort) { if (folder.exists()) Storage.list(folder) else emptyList() }
     val compact = LocalWidthClass.current == WidthClass.Compact
     val isRoot = Storage.isRoot(folder)
+    // tags-agent hook: smart filter chips at the library root (results replace the listing) + multi-select tagging
+    var smart by androidx.compose.runtime.saveable.rememberSaveable(dir) { mutableStateOf<String?>(null) }
+    val smartResults = com.daftar.app.ui.tags.rememberSmartResults(if (isRoot) smart else null)
+    val entries = smartResults ?: listed
+    var bulkTags by remember { mutableStateOf(false) }
     val meta = remember(dir, v) { if (isRoot) null else Storage.meta(folder) }
     var sortMenu by remember { mutableStateOf(false) }
     val grid = Prefs.gridView && !compact
@@ -348,6 +354,7 @@ fun LibraryScreen(dir: String) {
                     if (!meta?.desc.isNullOrBlank()) Text(meta!!.desc, style = MaterialTheme.typography.bodyMedium, color = c.muted, maxLines = 1)
                 }
                 IconButton(onClick = { actions.quick("scan", folder) }) { Icon(Icons.Rounded.DocumentScanner, stringResource(R.string.files_scan), tint = c.ink) }  // files-agent hook
+                if (entries.isNotEmpty()) IconButton(onClick = { bulkTags = true }) { Icon(Icons.Rounded.Sell, stringResource(R.string.tags_select_items), tint = c.ink) }  // tags-agent hook
                 if (!isRoot) IconButton(onClick = { actions.menu(Storage.entry(folder)) }) { Icon(Icons.Rounded.MoreVert, stringResource(R.string.more), tint = c.ink) }
                 Box {
                     IconButton(onClick = { sortMenu = true }) { Icon(Icons.AutoMirrored.Rounded.Sort, stringResource(R.string.sort), tint = c.ink) }
@@ -379,7 +386,13 @@ fun LibraryScreen(dir: String) {
                 }
             }
 
-            if (entries.isEmpty()) {
+            if (isRoot) com.daftar.app.ui.tags.SmartFilterChips(smart, { smart = it },
+                Modifier.padding(horizontal = gutter()).padding(bottom = 8.dp))  // tags-agent hook
+            if (bulkTags) com.daftar.app.ui.tags.BulkTagDialog(entries) { bulkTags = false }  // tags-agent hook
+
+            if (entries.isEmpty() && smartResults != null) {
+                EmptyState(Icons.Rounded.FilterAltOff, stringResource(R.string.tags_filter_no_matches), Modifier.padding(top = 48.dp))
+            } else if (entries.isEmpty()) {
                 EmptyState(Icons.Rounded.FolderOpen, stringResource(R.string.empty_folder), Modifier.padding(top = 48.dp)) {
                     Button(onClick = { actions.create(folder) }) { Text(stringResource(R.string.new_item)) }
                 }
@@ -394,7 +407,7 @@ fun LibraryScreen(dir: String) {
                 }
             } else {
                 LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = gutter(), end = gutter(), top = 4.dp, bottom = 120.dp)) {
-                    items(entries, key = { it.file.absolutePath }) { e -> EntryRow(e, { pane.open(ctx, e.file) }, { actions.menu(e) }, showParent = false) }
+                    items(entries, key = { it.file.absolutePath }) { e -> EntryRow(e, { pane.open(ctx, e.file) }, { actions.menu(e) }, showParent = smartResults != null) }
                 }
             }
         }
@@ -430,6 +443,7 @@ fun NotesScreen() {
     val actions = rememberActions()
     val v = Storage.version
     var filter by remember { mutableStateOf<String?>(null) }
+    var tagFilter by remember { mutableStateOf<String?>(null) }  // tags-agent hook
     var notes by remember { mutableStateOf<List<NoteInfo>>(emptyList()) }
     LaunchedEffect(v) {
         notes = withContext(Dispatchers.IO) {
@@ -440,7 +454,9 @@ fun NotesScreen() {
         }
     }
     val subjects = notes.mapNotNull { it.subject }.distinctBy { it.absolutePath }
-    val shown = notes.filter { filter == null || it.subject?.absolutePath == filter }
+    val tv = com.daftar.app.data.Tags.version
+    val shown = notes.filter { (filter == null || it.subject?.absolutePath == filter) &&
+        (tagFilter == null || tv >= 0 && tagFilter in com.daftar.app.data.Tags.idsOf(it.e.file)) }
 
     Box(Modifier.fillMaxSize().background(c.bg)) {
         Column(Modifier.fillMaxSize()) {
@@ -451,6 +467,7 @@ fun NotesScreen() {
                     val m = Storage.meta(s)
                     Chip(s.name, filter == s.absolutePath, { filter = s.absolutePath }, tint = folderColor(m.color))
                 }
+                com.daftar.app.ui.tags.NotesTagChips(notes.map { it.e.file }, tagFilter) { tagFilter = it }  // tags-agent hook
             }
             if (shown.isEmpty()) EmptyState(Icons.AutoMirrored.Rounded.StickyNote2, stringResource(R.string.no_notes), Modifier.padding(top = 40.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -470,6 +487,7 @@ fun NotesScreen() {
                         Column(Modifier.weight(1f)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(n.e.name, style = MaterialTheme.typography.titleMedium, color = c.ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                                com.daftar.app.ui.tags.TagDots(n.e.file, modifier = Modifier.padding(horizontal = 6.dp))  // tags-agent hook
                                 Text(DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(n.e.file.lastModified())), style = MaterialTheme.typography.bodySmall, color = c.muted)
                             }
                             Text(n.preview.ifBlank { if (n.whiteboard) stringResource(R.string.whiteboard) else stringResource(R.string.pages_n, n.pages) },
@@ -507,16 +525,20 @@ fun SearchScreen(query: String) {
     val ctx = LocalContext.current
     val c = D.c
     val actions = rememberActions()
-    var q by remember { mutableStateOf(query) }
+    // tags-agent hook: "#tag" in the query, tag chips, smart filter chips ("smart:<id>" query from Home)
+    var q by remember(query) { mutableStateOf(com.daftar.app.ui.tags.TagSearch.initialText(query)) }
+    var tagSel by remember(query) { mutableStateOf(setOf<String>()) }
+    var smart by remember(query) { mutableStateOf(com.daftar.app.ui.tags.TagSearch.initialSmart(query)) }
     var type by remember { mutableIntStateOf(0) }   // 0 all, 1 folders, 2 files, 3 notes
     var results by remember { mutableStateOf<List<Entry>>(emptyList()) }
     val v = Storage.version
-    LaunchedEffect(q, v) { results = withContext(Dispatchers.IO) { Storage.search(q.trim()) } }
+    val tv = com.daftar.app.data.Tags.version
+    LaunchedEffect(q, v, tv, tagSel, smart) { results = withContext(Dispatchers.IO) { com.daftar.app.ui.tags.TagSearch.run(ctx, q, tagSel, smart) } }
     val shown = results.filter {
         when (type) { 1 -> it.kind == Kind.FOLDER; 2 -> it.kind != Kind.FOLDER && it.kind != Kind.NOTE; 3 -> it.kind == Kind.NOTE; else -> true }
     }
     val fr = remember { FocusRequester() }
-    LaunchedEffect(Unit) { runCatching { fr.requestFocus() } }
+    LaunchedEffect(Unit) { if (smart == null) runCatching { fr.requestFocus() } }
 
     Column(Modifier.fillMaxSize().background(c.bg)) {
         Header(stringResource(R.string.search))
@@ -534,7 +556,9 @@ fun SearchScreen(query: String) {
         FlowRow(Modifier.padding(horizontal = gutter(), vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf(R.string.all, R.string.folders, R.string.files, R.string.notes).forEachIndexed { i, l -> Chip(stringResource(l), type == i, { type = i }) }
         }
-        if (q.isNotBlank() && shown.isEmpty()) EmptyState(Icons.Rounded.SearchOff, stringResource(R.string.no_results))
+        com.daftar.app.ui.tags.SearchTagFilters(tagSel, { tagSel = it }, smart, { smart = it },
+            Modifier.padding(horizontal = gutter()).padding(bottom = 12.dp))  // tags-agent hook
+        if (com.daftar.app.ui.tags.TagSearch.active(q, tagSel, smart) && shown.isEmpty()) EmptyState(Icons.Rounded.SearchOff, stringResource(R.string.no_results))
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = gutter(), end = gutter(), bottom = 48.dp)) {
             items(shown, key = { it.file.absolutePath }) { e -> EntryRow(e, { pane.open(ctx, e.file) }, { actions.menu(e) }) }
         }

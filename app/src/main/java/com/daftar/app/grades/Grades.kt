@@ -81,7 +81,7 @@ fun GradesScreen() {
             }
             Row(Modifier.weight(1f).fillMaxWidth()) {
                 if (!detailOnly) {
-                    Box(Modifier.weight(if (twoPane) 1f else 1f).fillMaxHeight()) {
+                    Box(Modifier.weight(1f).fillMaxHeight()) {
                         TermsList(
                             data, scale, selected, gutter, compactSummary = compact || twoPane,
                             onCourse = { selected = it.id },

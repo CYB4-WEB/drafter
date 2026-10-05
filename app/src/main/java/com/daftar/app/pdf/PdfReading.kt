@@ -99,13 +99,10 @@ internal class PdfPrefs(ctx: Context) {
     var font by mutableStateOf(sp.getString("read_font", "serif") ?: "serif")
     var theme by mutableStateOf(sp.getString("read_theme", "auto") ?: "auto")
     var night by mutableStateOf(sp.getBoolean("night", false))
-    var twoPages by mutableStateOf(sp.getBoolean("two_pages", false))
-    var coverAlone by mutableStateOf(sp.getBoolean("cover_alone", true))
 
     fun save() {
         sp.edit().putFloat("read_size", fontSize).putFloat("read_spacing", lineSpacing).putString("read_font", font)
-            .putString("read_theme", theme).putBoolean("night", night).putBoolean("two_pages", twoPages)
-            .putBoolean("cover_alone", coverAlone).apply()
+            .putString("read_theme", theme).putBoolean("night", night).apply()
     }
 
     private fun posKey(f: File) = "pos:" + f.absolutePath

@@ -154,6 +154,8 @@ internal class InkTiles(private val pages: () -> List<InkPage>, private val onRe
     private var budgetPts = 0
     private var foldPosted = false
     private val fold = Runnable { foldPosted = false; onReady() }
+    /** Night paper ink mapping baked into rendered tiles (the view clears the tiles when it changes). */
+    var night = false
 
     /** The page's stroke index (cached per stroke list). */
     fun grid(page: Int, st: List<Stroke>): StrokeGrid {
@@ -424,6 +426,7 @@ internal class InkTiles(private val pages: () -> List<InkPage>, private val onRe
             val reuse = pool.removeLastOrNull()
             val myGen = gen
             val level = r.level
+            val nt = night
             val ex = exec ?: Executors.newSingleThreadExecutor { run -> Thread(run, "ink-tiles").apply { priority = Thread.MIN_PRIORITY + 1 } }.also { exec = it }
             inFlight++
             val ok = runCatching {
@@ -433,7 +436,8 @@ internal class InkTiles(private val pages: () -> List<InkPage>, private val onRe
                         b.eraseColor(0)
                         val cv = Canvas(b)
                         cv.scale(sc, sc); cv.translate(-l, -tp)
-                        for (j in todo) InkRender.drawStroke(cv, st[j])
+                        InkRender.setNight(nt)
+                        try { for (j in todo) InkRender.drawStroke(cv, st[j]) } finally { InkRender.setNight(false) }
                         b
                     }.getOrNull()
                     main.post {

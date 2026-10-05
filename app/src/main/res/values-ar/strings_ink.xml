@@ -169,4 +169,33 @@
     <string name="ink4_math_helper">مساعد الرياضيات</string>
     <string name="ink4_no_math">لم يُعثر على عملية حسابية في التحديد</string>
     <string name="ink4_nothing_to_tidy">حدّد خط اليد لترتيبه</string>
+    <!-- transcript-agent: live lecture transcript -->
+    <string name="tr_transcript">التفريغ النصي</string>
+    <string name="tr_live_on">التفريغ المباشر مفعّل</string>
+    <string name="tr_live_off">التفريغ المباشر متوقف</string>
+    <string name="tr_show">إظهار التفريغ النصي</string>
+    <string name="tr_hide">إخفاء التفريغ النصي</string>
+    <string name="tr_starting">جارٍ بدء التفريغ النصي…</string>
+    <string name="tr_listening">أستمع… سيظهر الكلام هنا</string>
+    <string name="tr_unsupported">التفريغ النصي أثناء التسجيل غير مدعوم على هذا الجهاز. الصوت ما زال يُسجَّل.</string>
+    <string name="tr_off_hint">التفريغ المباشر متوقف. اضغط زر الترجمة النصية لتشغيله.</string>
+    <string name="tr_lang_unavailable">التعرّف على الكلام بهذه اللغة غير متاح على هذا الجهاز. جرّب اللغة الأخرى.</string>
+    <string name="tr_failed">توقف التفريغ: خدمة التعرّف على الكلام لا تستجيب.</string>
+    <string name="tr_retry">إعادة المحاولة</string>
+    <string name="tr_on_device">يُفرَّغ على هذا الجهاز</string>
+    <string name="tr_pause_rec">إيقاف التسجيل مؤقتًا</string>
+    <string name="tr_resume_rec">استئناف التسجيل</string>
+    <string name="tr_paused_now">متوقف مؤقتًا · %1$s</string>
+    <string name="tr_search">ابحث في التفريغ</string>
+    <string name="tr_matches">%1$d / %2$d</string>
+    <string name="tr_no_matches">لا نتائج</string>
+    <string name="tr_prev_match">النتيجة السابقة</string>
+    <string name="tr_next_match">النتيجة التالية</string>
+    <string name="tr_copy_all">نسخ الكل</string>
+    <string name="tr_insert">إدراج كمربع نص</string>
+    <string name="tr_export">تصدير ملف ‎.txt</string>
+    <string name="tr_empty">لا يوجد تفريغ نصي لهذا التسجيل</string>
+    <string name="tr_seek_hint">اضغط على سطر لتشغيل الصوت والحبر من عنده</string>
+    <string name="tr_export_name">%1$s تفريغ نصي</string>
+    <string name="tr_recording_title">%1$s — التسجيل %2$d</string>
 </resources>

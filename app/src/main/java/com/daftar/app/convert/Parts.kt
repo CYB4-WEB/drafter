@@ -89,7 +89,7 @@ fun ConvBadges(conv: Conv, size: Dp = 32.dp) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         FileBadge(conv.from, size)
         Icon(Icons.AutoMirrored.Rounded.ArrowForward, null, tint = D.c.muted, modifier = Modifier.padding(horizontal = 4.dp).size(size * 0.5f))
-        FileBadge(conv.to, size)
+        FileBadge(conv.to, size, conv.toExt)
     }
 }
 

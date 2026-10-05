@@ -12,6 +12,8 @@ import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import androidx.annotation.RequiresApi
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 
 /** Whether live transcription can be attempted on this device (it may still refuse at run time). */
 object LiveTranscription {
