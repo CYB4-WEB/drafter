@@ -3,6 +3,9 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- transcript-agent: lecture recording keeps going with the screen off (microphone foreground service) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
@@ -103,6 +106,12 @@
                 android:name="autoStoreLocales"
                 android:value="true" />
         </service>
+
+        <!-- transcript-agent: ongoing "Recording lecture" notification (Pause / Stop) while a lecture is recorded -->
+        <service
+            android:name=".ink.RecordingService"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
 
         <!-- study-agent: focus timer phase ends / notification actions / daily cards-due reminder / re-arm after reboot -->
         <receiver android:name=".study.StudyReceiver" android:exported="false" />

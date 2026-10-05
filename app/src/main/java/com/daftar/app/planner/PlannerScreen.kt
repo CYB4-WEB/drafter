@@ -12,6 +12,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -114,6 +115,7 @@ fun PlannerScreen() {
             if (compact) {
                 Row(Modifier.fillMaxWidth().padding(start = gutter, end = 4.dp, top = 8.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(stringResource(R.string.planner_title), style = MaterialTheme.typography.headlineSmall, color = D.c.ink, modifier = Modifier.weight(1f))
+                    CountdownsButton()
                     PlannerMenu { dialog = it }
                 }
                 Segmented(tabs.map { stringResource(it) }, tab, { tab = it }, Modifier.padding(horizontal = gutter).fillMaxWidth())
@@ -122,6 +124,7 @@ fun PlannerScreen() {
                     Text(stringResource(R.string.planner_title), style = MaterialTheme.typography.displaySmall, color = D.c.ink, modifier = Modifier.weight(1f))
                     Segmented(tabs.map { stringResource(it) }, tab, { tab = it }, Modifier.widthIn(max = 420.dp))
                     Spacer(Modifier.width(4.dp))
+                    CountdownsButton()
                     PlannerMenu { dialog = it }
                 }
             }
@@ -173,6 +176,14 @@ fun PlannerScreen() {
         1 -> CalendarSyncDialog { dialog = 0 }
         2 -> ImportCalendarDialog { dialog = 0 }
         3 -> ExportIcsDialog { dialog = 0 }
+    }
+}
+
+/** countdown-agent: header entry to the Countdowns list. */
+@Composable
+private fun CountdownsButton() {
+    IconButton(onClick = { pane.push(Screen.Countdowns) }) {
+        Icon(Icons.Rounded.HourglassTop, stringResource(R.string.cd_countdowns), tint = D.c.ink)
     }
 }
 
@@ -308,11 +319,14 @@ internal fun EventRow(o: Occurrence, now: Long, onToggleDone: (PlanEvent, Boolea
     val e = o.event
     val done = e.type == EventType.ASSIGNMENT && e.done
     val past = o.end < now && !(e.type == EventType.ASSIGNMENT && !e.done)
+    var menu by remember { mutableStateOf(false) } // countdown-agent: long-press → "Show countdown"
     Row(
-        Modifier.fillMaxWidth().heightIn(min = 64.dp).clickable { pane.push(Screen.EditEvent(e.id)) }
+        Modifier.fillMaxWidth().heightIn(min = 64.dp)
+            .combinedClickable(onClick = { pane.push(Screen.EditEvent(e.id)) }, onLongClick = { menu = true })
             .padding(start = 12.dp, end = 4.dp, top = 8.dp, bottom = 8.dp).alpha(if (past || done) 0.55f else 1f),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        EventLongPressMenu(o, menu) { menu = false }
         Box(Modifier.width(4.dp).height(40.dp).background(typeColor(e.type), RoundedCornerShape(2.dp)))
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
@@ -345,5 +359,22 @@ internal fun EventRow(o: Occurrence, now: Long, onToggleDone: (PlanEvent, Boolea
                 colors = CheckboxDefaults.colors(checkedColor = D.c.accent, uncheckedColor = D.c.muted, checkmarkColor = D.c.onAccent),
             )
         } else Spacer(Modifier.width(8.dp))
+    }
+}
+
+/** countdown-agent: long-press menu on planner events — Show countdown · Edit event. */
+@Composable
+internal fun EventLongPressMenu(o: Occurrence, open: Boolean, onClose: () -> Unit) {
+    DropdownMenu(open, onClose) {
+        DropdownMenuItem(
+            text = { Text(stringResource(R.string.cd_show_countdown)) },
+            leadingIcon = { Icon(Icons.Rounded.HourglassTop, null, tint = D.c.muted) },
+            onClick = { onClose(); pane.push(Screen.Countdown(o.event.id, o.start)) },
+        )
+        DropdownMenuItem(
+            text = { Text(stringResource(R.string.cd_edit_event)) },
+            leadingIcon = { Icon(Icons.Rounded.Edit, null, tint = D.c.muted) },
+            onClick = { onClose(); pane.push(Screen.EditEvent(o.event.id)) },
+        )
     }
 }

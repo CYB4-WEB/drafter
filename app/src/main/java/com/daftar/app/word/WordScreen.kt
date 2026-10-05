@@ -46,6 +46,7 @@ import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Description
+import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
@@ -53,6 +54,15 @@ import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Print
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.FindReplace
+import androidx.compose.material.icons.rounded.Save
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -100,6 +110,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
@@ -155,7 +166,11 @@ private fun stepDown(steps: FloatArray, v: Float) = steps.lastOrNull { it < v * 
 fun WordScreen(path: String) {
     val ctx = LocalContext.current
     val file = remember(path) { File(path) }
-    val load by produceState<DocLoad>(DocLoad.Loading, path) {
+    val scope = rememberCoroutineScope()
+    remember { WordFonts.init(ctx); 0 }
+    var editing by rememberSaveable(path) { mutableStateOf(WordEditRequests.consume(path)) }
+    var reloadKey by remember { mutableIntStateOf(0) }
+    val load by produceState<DocLoad>(DocLoad.Loading, path, reloadKey) {
         value = withContext(Dispatchers.IO) {
             try {
                 if (!file.exists()) DocLoad.Error else DocLoad.Ready(DocLoader.load(file))
@@ -167,9 +182,77 @@ fun WordScreen(path: String) {
         }
     }
     val actions = rememberViewerActions(file)
-    val images = remember(path) { DocxImages(path) }
+    val images = remember(path, reloadKey) { DocxImages(path) }
     DisposableEffect(images) { onDispose { images.close() } }
     val doc = (load as? DocLoad.Ready)?.doc
+
+    // ---------------------------------------------------------------- edit mode
+    var editor by remember(path) { mutableStateOf<EditorState?>(null) }
+    var editFind by remember { mutableStateOf(false) }
+    var editMenu by remember { mutableStateOf(false) }
+    var editPaper by rememberSaveable(path) { mutableStateOf<Boolean?>(null) }
+    var readOnlyAsk by remember { mutableStateOf(false) }
+    val lifecycle = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    LaunchedEffect(editing) {
+        if (!editing || editor != null) return@LaunchedEffect
+        val r = withContext(Dispatchers.IO) { runCatching { DocxEdit.load(file) } }
+        r.onSuccess { (src, blocks) ->
+            editor = EditorState(src, blocks).also { st ->
+                blocks.forEachPara { p -> st.look(p) }
+                (blocks.firstOrNull { it is EPara } as? EPara ?: run {
+                    var first: EPara? = null; blocks.forEachPara { if (first == null) first = it }; first
+                })?.let { st.requestFocus(it.id, TextRange(0)) }
+            }
+        }.onFailure { e ->
+            editing = false
+            toast(ctx, ctx.getString(when ((e as? NotEditableException)?.reason) {
+                NotEditableException.REASON_FORMAT -> R.string.word_not_editable
+                NotEditableException.REASON_SIZE -> R.string.word_too_large_edit
+                else -> R.string.word_edit_failed
+            }))
+        }
+    }
+    val ed = editor
+    fun finishEditing() {
+        val st = editor ?: run { editing = false; return }
+        st.save { ok ->
+            if (ok) { editing = false; editor = null; editFind = false; reloadKey++ }
+            else toast(ctx, ctx.getString(R.string.word_save_failed))
+        }
+    }
+    BackHandler(enabled = editing) { finishEditing() }
+    if (ed != null) {
+        LaunchedEffect(ed) {
+            while (true) { delay(30_000); if (ed.dirty && !ed.saving) ed.save() }
+        }
+        DisposableEffect(ed, lifecycle) {
+            val obs = androidx.lifecycle.LifecycleEventObserver { _, ev -> if (ev == androidx.lifecycle.Lifecycle.Event.ON_PAUSE && ed.dirty) ed.save() }
+            lifecycle.lifecycle.addObserver(obs)
+            onDispose { lifecycle.lifecycle.removeObserver(obs); ed.saveDetached() }
+        }
+    }
+    val convertFailed = stringResource(R.string.word_convert_failed)
+    fun startEdit() {
+        if (DocxEdit.kindFor(file) != null) editing = true else readOnlyAsk = true
+    }
+    if (readOnlyAsk && doc != null) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { readOnlyAsk = false },
+            title = { Text(stringResource(R.string.word_readonly_title)) },
+            text = { Text(stringResource(R.string.word_readonly_body)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    readOnlyAsk = false
+                    scope.launch {
+                        val out = withContext(Dispatchers.IO) { runCatching { saveAsDocx(file, doc) }.getOrNull() }
+                        if (out == null) toast(ctx, convertFailed)
+                        else { WordEditRequests.request(out.absolutePath); pane.open(ctx, out) }
+                    }
+                }) { Text(stringResource(R.string.word_save_as_docx)) }
+            },
+            dismissButton = { TextButton(onClick = { readOnlyAsk = false }) { Text(stringResource(R.string.cancel)) } },
+        )
+    }
 
     var finding by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
@@ -187,7 +270,6 @@ fun WordScreen(path: String) {
     val sheetList = rememberLazyListState()
     val printH = rememberScrollState()
     val sheetH = rememberScrollState()
-    val scope = rememberCoroutineScope()
     val density = LocalDensity.current
 
     val mode = when {
@@ -340,11 +422,21 @@ fun WordScreen(path: String) {
     }
 
     // ---------------------------------------------------------------- UI
+    if (editing) {
+        EditScreen(file, ed, images, editPaper, { editPaper = it }, editFind, { editFind = it }, editMenu, { editMenu = it },
+            actions = { ViewerMenuItems(actions, close = { editMenu = false }) }, onDone = { finishEditing() })
+        return
+    }
     BoxWithConstraints(Modifier.fillMaxSize().background(D.c.bg)) {
         val narrow = maxWidth < 400.dp
         val wideScreen = maxWidth >= 840.dp
         Column(Modifier.fillMaxSize()) {
             ViewerTopBar(title = file.nameWithoutExtension, onBack = { pane.back() }) {
+                if (doc != null && doc.kind != DocKind.LOG) {
+                    IconButton(onClick = { startEdit() }) {
+                        Icon(Icons.Rounded.Edit, stringResource(R.string.word_edit), tint = D.c.ink)
+                    }
+                }
                 if (doc != null) {
                     IconButton(onClick = { finding = !finding; if (!finding) query = "" }) {
                         Icon(Icons.Rounded.Search, stringResource(R.string.word_find), tint = if (finding) D.c.accent else D.c.ink)
@@ -719,5 +811,88 @@ private fun OutlineSheet(headings: List<Heading>, onDismiss: () -> Unit, onPick:
             modifier = Modifier.padding(start = 20.dp, end = 16.dp, bottom = 8.dp))
         if (headings.isEmpty()) Text(stringResource(R.string.word_outline_empty), color = D.c.muted, modifier = Modifier.padding(20.dp))
         OutlineList(headings, Modifier.navigationBarsPadding(), onPick)
+    }
+}
+
+// ------------------------------------------------------------------ edit mode chrome
+
+/** Header (title, find & replace, overflow, Done) + the editor, or a spinner while the document is prepared. */
+@Composable
+private fun EditScreen(
+    file: File, st: EditorState?, images: DocxImages, paper: Boolean?, setPaper: (Boolean?) -> Unit,
+    find: Boolean, setFind: (Boolean) -> Unit, menu: Boolean, setMenu: (Boolean) -> Unit,
+    actions: @Composable () -> Unit, onDone: () -> Unit,
+) {
+    Column(
+        Modifier.fillMaxSize().background(D.c.bg).onPreviewKeyEvent { e ->
+            if (st == null || e.type != KeyEventType.KeyDown || !e.isCtrlPressed) return@onPreviewKeyEvent false
+            when (e.key) {
+                Key.Z -> { if (e.isShiftPressed) st.redo() else st.undo(); true }
+                Key.Y -> { st.redo(); true }
+                Key.B -> { st.toggleBold(); true }
+                Key.I -> { st.toggleItalic(); true }
+                Key.U -> { st.toggleUnderline(); true }
+                Key.S -> { st.save(); true }
+                Key.F, Key.H -> { setFind(true); true }
+                else -> false
+            }
+        },
+    ) {
+        ViewerTopBar(title = file.nameWithoutExtension, onBack = onDone) {
+            if (st != null) {
+                IconButton(onClick = { setFind(!find) }) {
+                    Icon(Icons.Rounded.FindReplace, stringResource(R.string.word_find_replace), tint = if (find) D.c.accent else D.c.ink)
+                }
+                Box {
+                    IconButton(onClick = { setMenu(true) }) { Icon(Icons.Rounded.MoreVert, stringResource(R.string.more), tint = D.c.ink) }
+                    DropdownMenu(expanded = menu, onDismissRequest = { setMenu(false) }) {
+                        if (st.docx) {
+                            CheckRow(stringResource(R.string.word_layout_print), Icons.Rounded.Print, paper != false) { setMenu(false); setPaper(true) }
+                            CheckRow(stringResource(R.string.word_layout_read), Icons.AutoMirrored.Rounded.MenuBook, paper == false) { setMenu(false); setPaper(false) }
+                            HorizontalDivider(color = D.c.line)
+                        }
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.word_save_now)) },
+                            leadingIcon = { Icon(Icons.Rounded.Save, null, tint = D.c.muted) },
+                            onClick = { setMenu(false); st.save() },
+                        )
+                        actions()
+                    }
+                }
+            }
+            TextButton(onClick = onDone) {
+                Icon(Icons.Rounded.Check, null, tint = D.c.accent, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(4.dp))
+                Text(stringResource(R.string.word_done), color = D.c.accent)
+            }
+        }
+        if (st == null) {
+            Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+                CircularProgressIndicator(color = D.c.accent)
+                Spacer(Modifier.height(12.dp))
+                Text(stringResource(R.string.word_loading_editor), color = D.c.muted, style = MaterialTheme.typography.bodyLarge)
+            }
+        } else {
+            WordEditor(st, images, paper, find, onCloseFind = { setFind(false) }, modifier = Modifier.weight(1f))
+        }
+    }
+}
+
+/** Copy of a read-only document (rtf, csv, doc, …) as a new .docx next to it, ready to edit. */
+private fun saveAsDocx(file: File, doc: DocxDoc): File {
+    val dir = file.absoluteFile.parentFile ?: throw IllegalStateException("no folder")
+    var f = File(dir, file.nameWithoutExtension + ".docx")
+    var n = 2
+    while (f.exists()) f = File(dir, "${file.nameWithoutExtension} ($n).docx").also { n++ }
+    try {
+        if (!DocxExport.writeDocx(emptyList(), f)) throw IllegalStateException("write")
+        val (src, blocks) = DocxEdit.loadDocx(f)
+        val body = DocxEdit.fromModel(src, doc)
+        val tail = blocks.filter { it is EObject && it.kind == OKind.HIDDEN }
+        DocxEdit.save(src, body + tail)
+        return f
+    } catch (e: Throwable) {
+        f.delete()
+        throw e
     }
 }

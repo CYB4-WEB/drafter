@@ -121,6 +121,12 @@ class MainActivity : AppCompatActivity() {
             }
             i.removeExtra(EXTRA_ACTION)
         }
+        if (i.hasExtra(EXTRA_COUNTDOWN_EVENT)) { // countdown-agent: widget tap → live countdown
+            val id = i.getLongExtra(EXTRA_COUNTDOWN_EVENT, 0)
+            val start = i.getLongExtra(EXTRA_COUNTDOWN_START, 0)
+            Nav.tab(Screen.Planner); Nav.push(Screen.Countdown(id, start))
+            i.removeExtra(EXTRA_COUNTDOWN_EVENT); i.removeExtra(EXTRA_COUNTDOWN_START)
+        }
         if (i.hasExtra(EXTRA_EVENT_ID)) {
             val id = i.getLongExtra(EXTRA_EVENT_ID, 0)
             Nav.tab(Screen.Planner); Nav.push(Screen.EditEvent(id))
@@ -299,5 +305,7 @@ fun Route(s: Screen) {
         is Screen.Review -> com.daftar.app.study.ReviewScreen(s.deck)
         Screen.Trash -> com.daftar.app.ui.TrashScreen()
         Screen.Grades -> com.daftar.app.grades.GradesScreen()
+        Screen.Countdowns -> com.daftar.app.planner.countdown.CountdownsScreen()
+        is Screen.Countdown -> com.daftar.app.planner.countdown.LiveCountdownScreen(s.eventId, s.occStart)
     }
 }

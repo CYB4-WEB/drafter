@@ -45,6 +45,10 @@ sealed class Screen {
     data object Trash : Screen()
     /** GPA / grades tracker (grades-agent). */
     data object Grades : Screen()
+    /** Countdown list built on planner events (countdown-agent). */
+    data object Countdowns : Screen()
+    /** Live countdown of one event occurrence; occStart 0 = next occurrence (countdown-agent). */
+    data class Countdown(val eventId: Long, val occStart: Long = 0L) : Screen()
 
     val isTopLevel get() = this is Home || this is Planner || this is Settings || this is Notes || this is Search || this is Convert || this is Study || (this is Library && dir == Storage.root.absolutePath)
 }
@@ -57,6 +61,9 @@ const val ACTION_IMPORT = "import"
 const val ACTION_ADD_EVENT = "add_event"
 /** Extra with a PlanEvent id (Long) to open that event's editor. */
 const val EXTRA_EVENT_ID = "daftar.event_id"
+/** Extras (Long) used by countdown widgets to open the live countdown of an event occurrence. */
+const val EXTRA_COUNTDOWN_EVENT = "daftar.countdown_event"
+const val EXTRA_COUNTDOWN_START = "daftar.countdown_start"
 
 /**
  * Navigation seen by a screen. In the normal app it is the global [Nav]; inside a split-screen pane

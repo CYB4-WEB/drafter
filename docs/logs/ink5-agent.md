@@ -118,3 +118,36 @@ Use it from any `InkEditorScaffold` host: e.g. in `extraActions = { ctl -> … }
 are mapped for readability; nothing is saved into the `.ink.json`, exports are unaffected. Persisting the choice is the
 host's job (InkPrefs only stores the notes' "Night paper"). No `PageSource` change needed; `refreshPages()` is not
 required after toggling.
+
+## Requests to lead
+1. **pdf3-agent**: use `ctl.nightMode` (API above) for the PDF viewer's night toggle; persist it on your side.
+2. **pdf-agent / pdf3-agent** (FYI, not blocking): `PdfPages.rotateInkPage` builds rotated pages with `copy(...)`; if it
+   does not map `stickers`, stickers on a rotated PDF page keep their unrotated positions. Mapping them is
+   `stickers = p.stickers.map { k -> /* rotate centre like the strokes */ k.copy(x = …, y = …, rot = k.rot + deg) }`.
+3. **transcript-agent**: at my last compile `ink/TranscriptEngine.kt:322/338` had a JVM "Platform declaration clash
+   setOn(Z)V" (a `var on` property plus a `fun setOn(Boolean)`); not my code, left untouched.
+4. Please test on the Tab: ruler two-finger rotate + pen snapping on both edges; drag-to-draw shapes on a whiteboard
+   zoomed to 10 % and 800 %; two-page spreads on a PDF in landscape; night paper on a PDF with photos.
+
+## Self-check
+1. Ruler — **PASS** (compiled, not device-tested): toolbar toggle; translucent body, cm/mm + inch ticks, live angle;
+   one-finger move, two-finger move+rotate on the ruler, page pinch elsewhere (hit-test first); pen + highlighter snap
+   to both edges; 15° snaps with haptic tick; works on notes / whiteboards / PDF / slides (same InkView); screen-anchored
+   so it survives zoom / pan; never saved; preallocated drawing.
+2. Stickers — **PASS**: tray with recent row, symbols, en/ar text stamps, arrows (→ ← ↑ ↓ ↗ curved), numbers 1–9, flat
+   Daftar colours; placed floating selected (move / resize / rotate); `StickerItem` model list (backward compatible,
+   omitted when empty); vector in exports, thumbnails and PDF. Placement is at the visible centre (not a tap point).
+3. Shapes — **PASS**: Insert → Shapes (centre, floating) and the Shape tool (picker + drag-to-draw with constraints,
+   Auto last, remembered) — lead addendum included; all 10 kinds incl. table with cell text boxes; pen colour / width;
+   lasso moves; corner handles (box kinds) and end-point handles (line / arrows); vector in PDF (stroke paths).
+4. Two-page view — **PASS** (opt-in, landscape ≥ 600 dp): spreads with cover-alone option, ⋮ toggle persisted, flows by
+   spreads, ink / selection / text overlay / tiles / zoom pill unchanged, chip "3–4 / 20", RTL mirrored. Auto mode not
+   implemented (optional).
+5. Night paper — **PASS**: notes ⋮ toggle (persisted), dark paper + dimmed lines + ink mapping on screen only, saved
+   colours untouched, exports unaffected unless "Export as shown"; `EditorController.nightMode` for PDF / slides with
+   hue-preserving inverted page bitmaps + ink mapping.
+- Signatures: `InkEditorScaffold` unchanged; `EditorController` gained a default-implemented member (source compatible);
+  `exportNoteToPdf` / `NoteExport.renderPage` / `exportImages` gained trailing defaulted params. `.note` compatibility:
+  new fields default + never encoded when default. `isPen()` mouse rule and `penOnly` rule untouched.
+- Performance: no per-frame allocations added in onDraw (ruler arrays/labels cached; sticker paints/paths per thread);
+  shape previews allocate only per drag move; tiles re-rendered only on night toggle (once) and as before otherwise.

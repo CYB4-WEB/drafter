@@ -108,7 +108,7 @@ internal class EditorState(val src: EditSource, initial: List<EBlock>) {
     fun runFmt(p: EPara, look: PLook, idx: Int): RunFmt {
         val pkg = src.docx
         val f = src.fmts[idx]
-        if (pkg == null) return RunFmt(sizePt = look.para.basePt, bold = look.para.heading > 0, mono = src.kind == EditKind.TXT && false)
+        if (pkg == null) return RunFmt(sizePt = look.para.basePt, bold = look.para.heading > 0)
         val key = (idx.toLong() shl 20) xor ((look.styleId?.hashCode()?.toLong() ?: 0L) and 0xFFFFF) xor (if (look.para.rtl) 1L shl 62 else 0L)
         synchronized(runCache) { runCache[key]?.let { return it } }
         var r = pkg.session.runFmt(look.styleId, src.writer.rPrXml(idx, null).ifEmpty { null }, look.para.rtl)
@@ -265,7 +265,7 @@ internal class EditorState(val src: EditSource, initial: List<EBlock>) {
         // Enter on an empty list item leaves the list (like Word).
         if (old.isEmpty() && ins == "\n") {
             val lk = look(p)
-            if (lk.numId != null || (md && false)) { setList(id, null); return }
+            if (lk.numId != null) { setList(id, null); return }
         }
         // Split into paragraphs.
         val parts = ArrayList<EPara>()
