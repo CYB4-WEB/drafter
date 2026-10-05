@@ -253,12 +253,12 @@ object InkStickers {
 
 /** One sticker preview drawn with the real artwork (crisp, vector). */
 @Composable
-private fun StickerPreview(kind: String, text: String, size: Dp, onClick: () -> Unit) {
+private fun StickerPreview(kind: String, text: String, cell: Dp, onClick: () -> Unit) {
     val c = D.c
     val (nw, nh) = remember(kind, text) { InkStickers.naturalSize(kind, text) }
-    val boxW = if (InkStickers.isStamp(kind)) size * 2 else size
+    val boxW = if (InkStickers.isStamp(kind)) cell * 2 else cell
     Box(
-        Modifier.padding(4.dp).size(boxW, size).clip(RoundedCornerShape(12.dp)).background(c.surfaceAlt)
+        Modifier.padding(4.dp).size(boxW, cell).clip(RoundedCornerShape(12.dp)).background(c.surfaceAlt)
             .clickable(onClick = onClick).semantics { contentDescription = text.ifEmpty { kind } },
         contentAlignment = Alignment.Center,
     ) {

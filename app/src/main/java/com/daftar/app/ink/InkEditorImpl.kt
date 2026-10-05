@@ -109,6 +109,12 @@ private class EditorStateImpl(val view: InkView) : EditorController {
     var saver: (() -> Unit)? = null
     override fun saveNow() { saver?.invoke() }
     override fun doc(): InkDoc = view.doc
+    /** Second page of the visible two-page spread (-1 = none). Observable (page chip). */
+    var spreadEnd by mutableIntStateOf(-1)
+    private var night by mutableStateOf(false)
+    override var nightMode: Boolean
+        get() = night
+        set(v) { night = v; view.night = v }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -165,6 +171,13 @@ internal fun InkEditorImpl(
     var mathOn by remember { mutableStateOf(run { InkPrefs.init(ctx); InkPrefs.mathHelper }) }
     var exported by remember { mutableStateOf<List<File>?>(null) }
     var workJob by remember { mutableStateOf<Job?>(null) }
+    // ink5-agent: stickers / shapes trays, two-page view, night paper
+    var showStickers by remember { mutableStateOf(false) }
+    var showShapes by remember { mutableStateOf(false) }
+    var twoOn by remember { mutableStateOf(run { InkPrefs.init(ctx); InkPrefs.twoPages }) }
+    var coverOn by remember { mutableStateOf(InkPrefs.coverAlone) }
+    var exportShown by remember { mutableStateOf(false) }
+    remember(view) { view.setTwoPages(InkPrefs.twoPages, InkPrefs.coverAlone); if (isNote) ctl.nightMode = InkPrefs.nightPaper; true }
     val wide = LocalWidthClass.current == WidthClass.Expanded
     // Window got narrow (split / pop-up): close the side panel rather than turning it into a sheet nobody asked for.
     LaunchedEffect(wide) { if (!wide) showPanel = false else if (sidePanelOpen) showPanel = true }
@@ -343,7 +356,7 @@ internal fun InkEditorImpl(
             override fun onLinkOpen(link: LinkItem) { view.finishEditing(); saveAsync(); openLink(ctx, link) }
             override fun onLinkMenu(page: Int, link: LinkItem, x: Float, y: Float) { linkMenu = Triple(page, link, x to y) }
             override fun onDropFailed() { toast(ctx, ctx.getString(R.string.ink_drop_failed)) }
-            override fun onPageChanged(current: Int, count: Int) { ctl.currentPage = current; ctl.pageCount = count }
+            override fun onPageChanged(current: Int, count: Int) { ctl.currentPage = current; ctl.pageCount = count; ctl.spreadEnd = view.spreadLast }
             override fun onTextRequest(page: Int, x: Float, y: Float, existing: TextItem?) { textReq = Triple(page, x to y, existing) }
             override fun onSelectionChanged(active: Boolean) { hasSel = active }
             override fun onSeek(rec: Int, t: Long) {
@@ -468,7 +481,8 @@ internal fun InkEditorImpl(
     }
     fun exportPdf() {
         val d = snapshot()
-        runWork({ val out = Storage.uniqueFile(outDir, baseName, "pdf"); exportNoteToPdf(d, out); listOf(out) }, ::finished)
+        val nightOut = exportShown && ctl.nightMode
+        runWork({ val out = Storage.uniqueFile(outDir, baseName, "pdf"); exportNoteToPdf(d, out, night = nightOut); listOf(out) }, ::finished)
     }
     /** transcript-agent: "<host name> transcript.txt" next to the note, with the open/share bar. */
     fun exportTranscript(r: Recording) {
@@ -482,7 +496,8 @@ internal fun InkEditorImpl(
     fun exportImages(png: Boolean, all: Boolean) {
         val d = snapshot()
         val pages = if (all) d.pages.indices.toList() else listOf(ctl.currentPage.coerceIn(0, d.pages.size - 1))
-        runWork({ msg -> NoteExport.exportImages(d, pages, outDir, baseName, png) { k, n -> if (n > 1) msg(ctx.getString(R.string.ink_exporting_page, k, n)) } }, ::finished)
+        val nightOut = exportShown && ctl.nightMode
+        runWork({ msg -> NoteExport.exportImages(d, pages, outDir, baseName, png, nightOut) { k, n -> if (n > 1) msg(ctx.getString(R.string.ink_exporting_page, k, n)) } }, ::finished)
     }
     fun sharePageImage() {
         val d = snapshot()
@@ -490,7 +505,7 @@ internal fun InkEditorImpl(
         runWork({
             val name = if (d.pages.size > 1) "$baseName - ${i + 1}" else baseName
             val f = File(Storage.cacheDir(), Storage.sanitize(name).ifBlank { "page" } + ".png")
-            val b = NoteExport.renderPage(d, i)
+            val b = NoteExport.renderPage(d, i, night = exportShown && ctl.nightMode)
             try { NoteExport.writeBitmap(b, f, true) } finally { b.recycle() }
             listOf(f)
         }) { files -> if (files != null) shareFiles(ctx, files) else toast(ctx, ctx.getString(R.string.error_generic)) }
@@ -577,6 +592,30 @@ internal fun InkEditorImpl(
                         leadingIcon = { Icon(Icons.Rounded.Calculate, null) },
                         trailingIcon = { Checkbox(checked = mathOn, onCheckedChange = null) },
                     )
+                    if (!whiteboard) {
+                        DropdownMenuItem(
+                            { Text(stringResource(R.string.ink5_two_pages)) },
+                            {
+                                twoOn = !twoOn; InkPrefs.twoPages = twoOn; view.setTwoPages(twoOn, coverOn); showMore = false
+                                if (twoOn && (view.width <= view.height || view.width < 600 * view.resources.displayMetrics.density))
+                                    toast(ctx, ctx.getString(R.string.ink5_two_pages_landscape))
+                            },
+                            leadingIcon = { Icon(Icons.Rounded.MenuBook, null) },
+                            trailingIcon = { Checkbox(checked = twoOn, onCheckedChange = null) },
+                        )
+                        if (twoOn) DropdownMenuItem(
+                            { Text(stringResource(R.string.ink5_cover_alone)) },
+                            { coverOn = !coverOn; InkPrefs.coverAlone = coverOn; view.setTwoPages(twoOn, coverOn); showMore = false },
+                            leadingIcon = { Icon(Icons.Rounded.Book, null) },
+                            trailingIcon = { Checkbox(checked = coverOn, onCheckedChange = null) },
+                        )
+                    }
+                    if (isNote) DropdownMenuItem(
+                        { Text(stringResource(R.string.ink5_night_paper)) },
+                        { val v = !ctl.nightMode; ctl.nightMode = v; InkPrefs.nightPaper = v; showMore = false },
+                        leadingIcon = { Icon(Icons.Rounded.DarkMode, null) },
+                        trailingIcon = { Checkbox(checked = ctl.nightMode, onCheckedChange = null) },
+                    )
                     DropdownMenuItem(
                         { Text(stringResource(if (Prefs.penOnly) R.string.ink_finger_draw_off else R.string.ink_finger_draw_on)) },
                         { showMore = false; Prefs.putPenOnly(!Prefs.penOnly) },
@@ -612,6 +651,8 @@ internal fun InkEditorImpl(
                     Item(R.string.ink_share_page_image, Icons.Rounded.Share) { sharePageImage() }
                     Item(R.string.ink_export_docx, Icons.Rounded.Description) { exportText(docx = true) }
                     Item(R.string.ink_export_txt, Icons.AutoMirrored.Rounded.Notes) { exportText(docx = false) }
+                    if (ctl.nightMode) DropdownMenuItem({ Text(stringResource(R.string.ink5_export_as_shown)) }, { exportShown = !exportShown },
+                        leadingIcon = { Icon(Icons.Rounded.DarkMode, null) }, trailingIcon = { Checkbox(checked = exportShown, onCheckedChange = null) })
                 }
             }
         }
@@ -626,6 +667,8 @@ internal fun InkEditorImpl(
             onLink = { linkEdit = ctl.currentPage to null },
             onDictate = { if (hasMic()) showDictation = true else dictPermission.launch(Manifest.permission.RECORD_AUDIO) },
             onAddPage = { view.addPage(ctl.currentPage, view.doc.pages.getOrNull(ctl.currentPage)?.paper?.let { PaperTemplates.nextKey(it) } ?: PaperTemplates.stamp(Prefs.defaultPaper)) },
+            onStickers = { view.finishEditing(); showStickers = true },
+            onShapes = { view.finishEditing(); showShapes = true },
         )
 
         if (recording) LectureRecordingBar(view, recPaused, transcript, stripOpen,
@@ -759,6 +802,16 @@ internal fun InkEditorImpl(
             })
     }
 
+    if (showStickers) StickerTray(onDismiss = { showStickers = false }) { kind, text ->
+        showStickers = false
+        InkPrefs.useSticker(kind)
+        view.addSticker(kind, text); ts.selectTool(Tool.LASSO); view.tool = Tool.LASSO
+    }
+    if (showShapes) ShapeTray(onDismiss = { showShapes = false }) { shape ->
+        showShapes = false
+        view.addShape(shape, ts.penColor, ts.penWidth); ts.selectTool(Tool.LASSO); view.tool = Tool.LASSO
+    }
+
     if (showPaper) PaperTemplates.PaperPickerDialog(view, whiteboard, onDismiss = { showPaper = false })
     if (showPages && isNote && !whiteboard) PageManagerPanel(view, inkFile, title, onDismiss = { showPages = false },
         onOpenFile = { f -> saveAsync(); com.daftar.app.ui.pane.open(ctx, f) })
@@ -863,6 +916,8 @@ private fun ToolSync(view: InkView, ts: InkToolState, bg: Int) {
     view.hlColor = ts.hlColor; view.hlWidth = ts.hlWidth; view.eraserRadiusDp = ts.eraserRadius
     view.tapeColor = ts.tapeColor; view.tapeWidth = ts.tapeWidth
     view.shapeColor = ts.penColor
+    view.shapeKind = ts.shapeKind
+    view.rulerOn = ts.ruler
     view.keepScreenOn = Prefs.keepScreenOn
     // "Pen only" is enforced only once this device has shown it has a stylus; otherwise fingers must be able to write.
     view.penOnly = Prefs.penOnly && Prefs.stylusSeen
@@ -941,8 +996,10 @@ private fun ZoomPill(ctl: EditorController, modifier: Modifier) {
 private fun PageChip(ctl: EditorController, onClick: (() -> Unit)?, modifier: Modifier) {
     val c = D.c
     if (ctl.pageCount <= 0) return
+    val end = (ctl as? EditorStateImpl)?.spreadEnd ?: -1
     Text(
-        stringResource(R.string.page_of, ctl.currentPage + 1, ctl.pageCount),
+        if (end > ctl.currentPage) stringResource(R.string.ink5_page_spread, ctl.currentPage + 1, end + 1, ctl.pageCount)
+        else stringResource(R.string.page_of, ctl.currentPage + 1, ctl.pageCount),
         style = MaterialTheme.typography.labelMedium, color = c.muted,
         modifier = modifier
             .clip(RoundedCornerShape(10.dp))
