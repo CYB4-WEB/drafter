@@ -16,13 +16,11 @@ import com.daftar.app.planner.PlanEvent
 import com.daftar.app.planner.Planner
 import com.daftar.app.planner.localized
 import com.daftar.app.planner.occurrenceSummary
-import com.daftar.app.planner.typeColorArgb
 import com.daftar.app.ui.ACTION_ADD_EVENT
 import com.daftar.app.ui.ACTION_IMPORT
 import com.daftar.app.ui.ACTION_NEW_NOTE
 import com.daftar.app.ui.ACTION_PLANNER
 import com.daftar.app.ui.EXTRA_ACTION
-import com.daftar.app.ui.EXTRA_EVENT_ID
 import java.time.LocalDate
 import java.time.ZoneId
 
@@ -49,8 +47,11 @@ class QuickWidget : AppWidgetProvider() {
 object Widgets {
     private val rowIds = intArrayOf(R.id.row0, R.id.row1, R.id.row2, R.id.row3)
     private val barIds = intArrayOf(R.id.bar0, R.id.bar1, R.id.bar2, R.id.bar3)
+    private val iconIds = intArrayOf(R.id.icon0, R.id.icon1, R.id.icon2, R.id.icon3)
     private val titleIds = intArrayOf(R.id.title0, R.id.title1, R.id.title2, R.id.title3)
     private val subIds = intArrayOf(R.id.sub0, R.id.sub1, R.id.sub2, R.id.sub3)
+    private val numIds = intArrayOf(R.id.num0, R.id.num1, R.id.num2, R.id.num3)
+    private val unitIds = intArrayOf(R.id.unit0, R.id.unit1, R.id.unit2, R.id.unit3)
 
     /** Refresh every placed widget (call after any planner change; safe from any thread). */
     fun refresh(ctx: Context) = refreshNow(ctx.applicationContext)
@@ -63,6 +64,7 @@ object Widgets {
             val q = m.getAppWidgetIds(ComponentName(ctx, QuickWidget::class.java))
             if (q.isNotEmpty()) updateQuick(ctx, m, q)
             ExamWidgets.refresh(ctx, list) // grades-agent: exam countdown widget follows every planner change
+            CountdownWidgets.refresh(ctx, list) // countdown-agent: single-event countdown widget
         }
     }
 
@@ -75,7 +77,7 @@ object Widgets {
     private fun rowsFor(m: AppWidgetManager, id: Int): Int {
         val h = runCatching { m.getAppWidgetOptions(id).getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT) }.getOrDefault(0)
         if (h <= 0) return 4
-        return ((h - 56) / 46).coerceIn(1, 4)
+        return ((h - 52) / 58).coerceIn(1, 4) // card rows: 52dp + 6dp gap
     }
 
     internal fun updateUpcoming(ctx: Context, m: AppWidgetManager, ids: IntArray, list: List<PlanEvent>) {
@@ -95,10 +97,11 @@ object Widgets {
                 val o = shown.getOrNull(k)
                 if (o == null) { v.setViewVisibility(rowIds[k], View.GONE); continue }
                 v.setViewVisibility(rowIds[k], View.VISIBLE)
-                v.setTextViewText(titleIds[k], o.event.title)
-                v.setTextViewText(subIds[k], occurrenceSummary(c, o, withLocation = false))
-                v.setInt(barIds[k], "setColorFilter", typeColorArgb(o.event.type))
-                v.setOnClickPendingIntent(rowIds[k], launch(ctx, 7410 + k) { putExtra(EXTRA_EVENT_ID, o.event.id) })
+                // countdown-agent: colour card row with the end number block; tap → live countdown.
+                val (num, unit) = WidgetCards.calendarBlock(c, o, now)
+                WidgetCards.fillRow(ctx, v, intArrayOf(barIds[k], iconIds[k], titleIds[k], subIds[k], numIds[k], unitIds[k]),
+                    o, occurrenceSummary(c, o, withLocation = false), num, unit)
+                v.setOnClickPendingIntent(rowIds[k], WidgetCards.openCountdown(ctx, 7410 + k, o))
             }
             m.updateAppWidget(wid, v)
         }
@@ -106,7 +109,8 @@ object Widgets {
             // Next refresh: when a shown item ends (it leaves the list) or at midnight ("Today"/"Tomorrow" labels).
             val zone = ZoneId.systemDefault()
             val midnight = LocalDate.now(zone).plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
-            val nextEnd = items.map { it.end + 1000 }.filter { it > now }.minOrNull() ?: Long.MAX_VALUE
+            // Block labels ("Today" → "Now") also change when a shown item starts.
+            val nextEnd = items.flatMap { listOf(it.start + 1000, it.end + 1000) }.filter { it > now }.minOrNull() ?: Long.MAX_VALUE
             Alarms.scheduleWidgetRefresh(ctx, minOf(midnight + 1000, nextEnd))
         }
     }

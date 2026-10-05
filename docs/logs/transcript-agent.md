@@ -126,3 +126,36 @@ and a mic-driven SpeechRecognizer can't run together. `InkEditorImpl` stamps eve
 4. Battery — **PASS**: no wakelocks; recognizer and codecs released on stop, pause and dispose.
 - Build: my files are clean. The whole module doesn't compile yet because of ink5-agent's in-progress files —
   **PARTIAL** until they land.
+
+## Follow-up: microphone foreground service (lead-approved request 2)
+- NEW `ink/RecordingService.kt`. It is a `foregroundServiceType="microphone"` service that does no audio work; the
+  recorder stays in the editor.
+  - `start(ctx, title, onAction)` is called from `startRecording` while the editor is in the foreground. It uses
+    `ContextCompat.startForegroundService`, then `ServiceCompat.startForeground` with `FOREGROUND_SERVICE_TYPE_MICROPHONE`
+    (API 30+). If the system refuses, recording continues without the service.
+  - `update(paused, elapsed)` is called from pause and resume.
+  - `stop()` is called from `stopRecording`, which also runs on dispose.
+  - If `stop()` comes before `onStartCommand`, the service still calls startForeground first and then stops itself. This
+    avoids the "did not call startForeground" crash.
+- Notification: low-importance silent channel "Lecture recording".
+  - Recording: title "Recording lecture", with the note title as text and a system chronometer
+    (`setUsesChronometer` + `setWhen`), so there are no per-second updates.
+  - Paused: "Recording paused · m:ss", with no chronometer.
+  - Actions: Pause or Resume, and Stop (`PendingIntent.getService`, immutable). They go to the editor through a callback
+    on the main thread (`onRecAction` in InkEditorImpl). Tapping the notification opens the app.
+  - An action that arrives with no editor recording just removes the service.
+- No wakelock: while AudioRecord or MediaRecorder is capturing, the audio system keeps the CPU awake as needed.
+- Manifest: added `FOREGROUND_SERVICE` and `FOREGROUND_SERVICE_MICROPHONE`, and the `<service .ink.RecordingService
+  exported=false foregroundServiceType=microphone>`. POST_NOTIFICATIONS was already there. Without it (Android 13+) the
+  service still runs; only the notification is hidden.
+- InkEditorImpl hooks:
+  - an `onRecAction` var next to the transcript state;
+  - `RecordingService.start` at the end of `startRecording`;
+  - `update` in pause and resume;
+  - `stop()` in `stopRecording`;
+  - the `onRecAction` assignment before `play()`.
+- Strings: `tr_channel`, `tr_notif_recording`, `tr_notif_paused` in en and ar.
+- Fixed my build blocker: `TranscriptSession.setOn()` clashed with the `on` property setter. It is now `switchLive()`.
+- Limit: the editor composition must stay alive while the app is backgrounded. If the system kills the activity, dispose
+  stops the recording cleanly (the audio is kept).
+- Full `tools/compile.sh` → **BUILD OK** (after the switchLive rename; the whole module compiles, including ink5's files).

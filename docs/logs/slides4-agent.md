@@ -35,3 +35,31 @@ then rewrite from disk, then reopen at the focus page).
 - `res/values{,-ar}/strings_slides.xml` — `slides4_*` strings (en + ar).
 - Verification: compile PptxEdit.kt with the cached kotlin-compiler-embeddable on the JVM, apply ops to
   docs/testdata/lecture_{en,ar}.pptx, check with python (zip, XML, rels, content types, python-pptx open).
+
+## Progress
+- 2026-10-05 — Read round2b brief, slides-agent and pdf-agent (Round 2) logs, all of slides/**, ink/InkModel.kt, InkEditor.kt,
+  PageSource.kt, InkEditorImpl (save-on-dispose, `InkSaver`), PdfScreen/PdfPages reload pattern.
+- `slides/PptxEdit.kt` (pure JVM): package model streaming unchanged entries; `layouts()`, `layoutOf()`, `rewrite()` for
+  Insert (Blank on a layout with its placeholders + optional title / Note page / Duplicate) / Delete / Move / SetHidden,
+  `check()` validator. Delete drops parts that become unreachable (slide, its notes page, comments, charts + embeddings)
+  and their Overrides; custom shows lose deleted slides; p14 sections stay consistent (new/moved slides join the section
+  of the slide before them). Duplicate copies the slide bytes, copies notes page / charts / diagrams / tags / embeddings
+  (retargeting the notes page's back-link), shares layout + media, drops comments (and any `ext` that pointed at them).
+- `slides/SlideEdits.kt`: temp → `PptxEdit.check` (only problems the edit introduced) + `PptxParser.open` slide count →
+  rename; ink (`InkDoc`, one page per slide; duplicate copies the source slide's ink, new slides empty) and My notes
+  remapped and swapped in after the deck.
+- `slides/SlideEditUi.kt`: `SlideEditState`, Insert dialog (Blank slide with layout chips named from the deck's
+  slideLayouts + optional title / Note page / Duplicate slide N), slide menu items, delete confirmation, "+" gap button.
+- `SlidesPanels.kt`: "+" between every thumbnail (and after the last) in the rail and the filmstrip; long-press on a
+  thumbnail → Insert before/after, Duplicate, Move up/down, Hide/Show, Delete. `MyNotes.frozen`.
+- `SlidesScreen.kt`: edit flow (freeze My notes → editor leaves composition → `InkSaver.flush()` → rewrite on IO,
+  NonCancellable → reload via `version` key → go to the edited slide); header "Insert slide after current" (AddBox) on
+  non-compact widths; the header menu now starts with the current slide's actions (Insert after current, Duplicate,
+  Move, Hide/Show, Delete).
+- Strings: 29 `slides4_*` keys in `values/` and `values-ar/strings_slides.xml`.
+- JVM verification: compiled `PptxEdit.kt` + a test driver with the cached kotlin-compiler-embeddable 2.1.21 and ran it on
+  `docs/testdata/lecture_en.pptx`, `lecture_ar.pptx` and a python-pptx deck with a chart, notes, 2 sections and a custom
+  show (11 single ops per deck + a 6-step chain). python3 check of every output: all XML parses, every internal rel target
+  exists, content types cover every part, no orphan Overrides, sldIdLst ids/rIds unique ≥ 256, python-pptx opens each
+  file with the expected slide order/titles/layouts/hidden flag. Changed parts per op = exactly presentation.xml (+ its
+  rels + [Content_Types] when parts are added/removed) or the one slide (hide); all other parts byte-identical.

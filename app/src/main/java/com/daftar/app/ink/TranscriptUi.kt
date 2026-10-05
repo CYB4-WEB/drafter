@@ -84,7 +84,7 @@ internal fun LectureRecordingBar(
                     modifier = Modifier.clip(RoundedCornerShape(10.dp)).border(1.dp, c.line, RoundedCornerShape(10.dp))
                         .clickable { onLang(if (code == "ar-SA") "en-US" else "ar-SA") }.padding(horizontal = 10.dp, vertical = 4.dp),
                 )
-                IconButton(onClick = { session.setOn(!session.on) }) {
+                IconButton(onClick = { session.switchLive(!session.on) }) {
                     Icon(if (session.on) Icons.Rounded.Subtitles else Icons.Rounded.SubtitlesOff,
                         stringResource(if (session.on) R.string.tr_live_on else R.string.tr_live_off),
                         tint = if (session.on) c.accent else c.muted)

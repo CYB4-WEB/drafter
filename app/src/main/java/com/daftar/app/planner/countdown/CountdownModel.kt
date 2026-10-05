@@ -271,6 +271,7 @@ object CountdownStyles {
     fun get(c: Context, id: Long): Style = synchronized(this) { load(c)[id] ?: Style() }
 
     fun put(c: Context, id: Long, s: Style) {
+        if (get(c, id) == s) return
         synchronized(this) {
             val m = HashMap(load(c))
             if (s == Style()) m.remove(id) else m[id] = s
@@ -278,6 +279,8 @@ object CountdownStyles {
             prefs(c).edit().apply { if (s == Style()) remove("style_$id") else putString("style_$id", "${s.color},${s.unit}") }.apply()
         }
         version++
+        val app = c.applicationContext
+        Planner.afterIo { com.daftar.app.widget.Widgets.refreshNow(app) } // card colours on widgets follow the style
     }
 }
 

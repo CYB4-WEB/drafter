@@ -335,7 +335,7 @@ class TranscriptSession(private val ctx: Context) {
         if (on) engine = starter?.invoke()
     }
 
-    fun setOn(v: Boolean) {
+    fun switchLive(v: Boolean) {
         on = v
         TranscriptPrefs.setLiveOn(ctx, v)
         if (!capable || Build.VERSION.SDK_INT < 33) return
