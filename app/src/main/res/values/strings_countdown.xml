@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- countdown-agent: countdown list, live countdown, countdown widget. Prefix cd_. -->
+<resources>
+    <string name="cd_countdowns">Countdowns</string>
+    <string name="cd_live_title">Countdown</string>
+    <string name="cd_done">Done</string>
+    <string name="cd_now">Now</string>
+    <string name="cd_today">Today</string>
+    <string name="cd_started">Started</string>
+    <string name="cd_finished">Finished</string>
+    <string name="cd_date_time">%1$s · %2$s</string>
+    <string name="cd_weekly">Every week</string>
+    <string name="cd_until">until %1$s</string>
+    <string name="cd_ends_at">Ends at %1$s</string>
+    <string name="cd_due_on">Due %1$s</string>
+    <string name="cd_filter">Filter</string>
+    <string name="cd_filter_all">All events</string>
+    <string name="cd_filter_exams">Exams</string>
+    <string name="cd_filter_assignments">Assignments</string>
+    <string name="cd_filter_classes">Classes</string>
+    <string name="cd_filter_meetings">Meetings</string>
+    <string name="cd_filter_other">Other</string>
+    <string name="cd_filter_subjects">Subjects</string>
+    <string name="cd_search">Search</string>
+    <string name="cd_search_hint">Search countdowns</string>
+    <string name="cd_clear">Clear</string>
+    <string name="cd_past_n">Past %1$d</string>
+    <string name="cd_future_n">Future %1$d</string>
+    <string name="cd_hint">Tap an event to view a live countdown</string>
+    <string name="cd_dismiss">Dismiss</string>
+    <string name="cd_no_match">No matching events</string>
+    <string name="cd_empty_past">No past events yet</string>
+    <string name="cd_empty_future">Nothing to count down to</string>
+    <string name="cd_show_countdown">Show countdown</string>
+    <string name="cd_edit_event">Edit event</string>
+    <string name="cd_mark_done">Mark done</string>
+    <string name="cd_mark_not_done">Mark not done</string>
+    <string name="cd_open_folder">Open linked folder</string>
+    <string name="cd_add_to_calendar">Add to calendar</string>
+    <string name="cd_open_in_calendar">Open in calendar app</string>
+    <string name="cd_share">Share</string>
+    <string name="cd_more">More options</string>
+    <string name="cd_not_found">This event no longer exists</string>
+    <string name="cd_previous">Previous event</string>
+    <string name="cd_next">Next event</string>
+    <string name="cd_page">%1$s of %2$s</string>
+    <string name="cd_share_text">%1$s: %2$s (%3$s)</string>
+    <string name="cd_style">Countdown style</string>
+    <string name="cd_style_desc">Card colour and how the countdown counts</string>
+    <string name="cd_color_auto">Automatic colour (subject or type)</string>
+    <string name="cd_color_n">Colour %1$d</string>
+    <string name="cd_unit_auto">Automatic</string>
+    <string name="cd_unit_days_only">Days</string>
+    <string name="cd_unit_weeks">Weeks</string>
+    <string name="cd_widget_name">Countdown</string>
+    <string name="cd_widget_desc">A live countdown to your next exam or any event</string>
+    <string name="cd_widget_pick_title">Choose a countdown</string>
+    <string name="cd_widget_next_exam">Next exam</string>
+    <string name="cd_widget_next_exam_desc">Always shows your next exam (automatic)</string>
+    <string name="cd_widget_next_any">Next event</string>
+    <string name="cd_widget_next_any_desc">Whatever comes next, any type</string>
+    <string name="cd_widget_events">Upcoming events</string>
+    <string name="cd_widget_empty">No upcoming exam</string>
+    <string name="cd_widget_empty_any">Nothing upcoming</string>
+    <string name="cd_widget_tap_add">Tap to add one</string>
+    <string name="cd_widget_left">left</string>
+    <string name="cd_widget_hours_line">%1$s · %2$s</string>
+    <plurals name="cd_days_to_go"><item quantity="one">day to go</item><item quantity="other">days to go</item></plurals>
+    <plurals name="cd_hours_to_go"><item quantity="one">hour to go</item><item quantity="other">hours to go</item></plurals>
+    <plurals name="cd_mins_to_go"><item quantity="one">min to go</item><item quantity="other">mins to go</item></plurals>
+    <plurals name="cd_weeks_to_go"><item quantity="one">week to go</item><item quantity="other">weeks to go</item></plurals>
+    <plurals name="cd_days_ago"><item quantity="one">day ago</item><item quantity="other">days ago</item></plurals>
+    <plurals name="cd_hours_ago"><item quantity="one">hour ago</item><item quantity="other">hours ago</item></plurals>
+    <plurals name="cd_mins_ago"><item quantity="one">min ago</item><item quantity="other">mins ago</item></plurals>
+    <plurals name="cd_days"><item quantity="one">day</item><item quantity="other">days</item></plurals>
+    <plurals name="cd_hours"><item quantity="one">hour</item><item quantity="other">hours</item></plurals>
+    <plurals name="cd_mins"><item quantity="one">min</item><item quantity="other">mins</item></plurals>
+    <plurals name="cd_weeks"><item quantity="one">week</item><item quantity="other">weeks</item></plurals>
+    <plurals name="cd_unit_days"><item quantity="one">day</item><item quantity="other">days</item></plurals>
+    <plurals name="cd_unit_hours"><item quantity="one">hour</item><item quantity="other">hours</item></plurals>
+    <plurals name="cd_unit_mins"><item quantity="one">min</item><item quantity="other">mins</item></plurals>
+    <plurals name="cd_unit_secs"><item quantity="one">sec</item><item quantity="other">secs</item></plurals>
+</resources>
