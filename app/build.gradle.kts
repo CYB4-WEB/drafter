@@ -13,22 +13,29 @@ android {
         applicationId = "com.daftar.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 4
-        versionName = "3.0"
+        versionCode = 5
+        versionName = "3.0.1"
     }
 
     androidResources {
         localeFilters += listOf("en", "ar")
     }
 
-    // Stable release key so every build (local or GitHub Actions) installs as an update over the previous one.
-    // CI can override it with secrets: DAFTAR_KEYSTORE_FILE / DAFTAR_KEYSTORE_PASSWORD / DAFTAR_KEY_ALIAS / DAFTAR_KEY_PASSWORD.
+    // Updates must be signed with the SAME key as the installed version (1.1 / 2.0 / 3.0 were signed with the build
+    // machine's Android debug key). The key is never committed: CI passes it via secrets (DAFTAR_KEYSTORE_FILE /
+    // DAFTAR_KEYSTORE_PASSWORD / DAFTAR_KEY_ALIAS / DAFTAR_KEY_PASSWORD); local builds fall back to ~/.android/debug.keystore.
     signingConfigs {
         create("release") {
-            storeFile = file(System.getenv("DAFTAR_KEYSTORE_FILE") ?: "${rootDir}/keystore/daftar-release.jks")
-            storePassword = System.getenv("DAFTAR_KEYSTORE_PASSWORD") ?: "daftar-release"
-            keyAlias = System.getenv("DAFTAR_KEY_ALIAS") ?: "daftar"
-            keyPassword = System.getenv("DAFTAR_KEY_PASSWORD") ?: "daftar-release"
+            val ks = System.getenv("DAFTAR_KEYSTORE_FILE")?.takeIf { it.isNotBlank() }
+            if (ks != null) {
+                storeFile = file(ks)
+                storePassword = System.getenv("DAFTAR_KEYSTORE_PASSWORD")?.takeIf { it.isNotBlank() } ?: "android"
+                keyAlias = System.getenv("DAFTAR_KEY_ALIAS")?.takeIf { it.isNotBlank() } ?: "androiddebugkey"
+                keyPassword = System.getenv("DAFTAR_KEY_PASSWORD")?.takeIf { it.isNotBlank() } ?: "android"
+            } else {
+                storeFile = file("${System.getProperty("user.home")}/.android/debug.keystore")
+                storePassword = "android"; keyAlias = "androiddebugkey"; keyPassword = "android"
+            }
         }
     }
     buildTypes {
