@@ -1208,9 +1208,76 @@ class InkView(context: Context) : View(context) {
         return t == MotionEvent.TOOL_TYPE_MOUSE
     }
 
+    // ---- pen tracking / palm rejection (fast handwriting: the palm often lands a moment before the pen tip) ----
+    /** Pointer id of the stylus that is drawing while other pointers (palm / fingers) are also down; -1 = none. */
+    private var penId = -1
+    /** Last time a stylus touched or hovered: finger touches right after it are treated as a resting palm. */
+    private var lastPenSeen = 0L
+    /** The current gesture started as a resting palm: ignore it until a pen joins or everything lifts. */
+    private var palmGesture = false
+
+    override fun onHoverEvent(e: MotionEvent): Boolean {
+        if (isPen(e)) lastPenSeen = SystemClock.uptimeMillis()
+        return super.onHoverEvent(e)
+    }
+
+    /** One-pointer copy of [e] for pointer [idx] (keeps tool type, pressure and the full batched history). */
+    private fun singlePointer(e: MotionEvent, idx: Int, action: Int): MotionEvent {
+        val props = arrayOf(MotionEvent.PointerProperties().also { e.getPointerProperties(idx, it) }.also { it.id = 0 })
+        val c = MotionEvent.PointerCoords()
+        val hs = if (action == MotionEvent.ACTION_MOVE) e.historySize else 0
+        if (hs > 0) e.getHistoricalPointerCoords(idx, 0, c) else e.getPointerCoords(idx, c)
+        val first = if (hs > 0) e.getHistoricalEventTime(0) else e.eventTime
+        val ev = MotionEvent.obtain(e.downTime, first, action, 1, props, arrayOf(c), e.metaState, e.buttonState,
+            e.xPrecision, e.yPrecision, e.deviceId, e.edgeFlags, e.source, e.flags)
+        for (k in 1 until hs) {
+            val ck = MotionEvent.PointerCoords(); e.getHistoricalPointerCoords(idx, k, ck)
+            ev.addBatch(e.getHistoricalEventTime(k), arrayOf(ck), e.metaState)
+        }
+        if (hs > 0) { val cn = MotionEvent.PointerCoords(); e.getPointerCoords(idx, cn); ev.addBatch(e.eventTime, arrayOf(cn), e.metaState) }
+        return ev
+    }
+
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(e: MotionEvent): Boolean {
         if (doc.pages.isEmpty()) return false
+        val am = e.actionMasked
+        val now = SystemClock.uptimeMillis()
+        if (isPen(e, if (am == MotionEvent.ACTION_POINTER_DOWN || am == MotionEvent.ACTION_POINTER_UP) e.actionIndex else 0)) lastPenSeen = now
+        if (am == MotionEvent.ACTION_DOWN) {
+            penId = -1
+            // a finger landing right after the pen hovered/wrote is the writing hand's palm: never scroll or draw with it
+            palmGesture = !isPen(e) && penOnly && now - lastPenSeen < PALM_MS
+            if (palmGesture) return true
+        }
+        // the pen joins a gesture that a palm / finger started: hand the gesture to the pen
+        if (am == MotionEvent.ACTION_POINTER_DOWN && penId == -1 && isPen(e, e.actionIndex) &&
+            (palmGesture || mode == Mode.NAV || mode == Mode.NONE)) {
+            scroller.forceFinished(true)
+            palmGesture = false
+            penId = e.getPointerId(e.actionIndex)
+            val ev = singlePointer(e, e.actionIndex, MotionEvent.ACTION_DOWN)
+            onDown(ev); ev.recycle()
+            return true
+        }
+        if (palmGesture) { if (am == MotionEvent.ACTION_UP || am == MotionEvent.ACTION_CANCEL) palmGesture = false; return true }
+        // the pen draws while other pointers rest on the screen: follow only the pen
+        if (penId != -1) {
+            val i = e.findPointerIndex(penId)
+            when {
+                i < 0 -> { penId = -1; return true }
+                am == MotionEvent.ACTION_MOVE -> { val ev = singlePointer(e, i, MotionEvent.ACTION_MOVE); onMove(ev); ev.recycle() }
+                (am == MotionEvent.ACTION_POINTER_UP && e.actionIndex == i) || am == MotionEvent.ACTION_UP -> {
+                    val ev = singlePointer(e, i, MotionEvent.ACTION_UP); onUp(ev); ev.recycle(); penId = -1
+                }
+                am == MotionEvent.ACTION_CANCEL -> {
+                    val ev = singlePointer(e, i, MotionEvent.ACTION_UP); onUp(ev); ev.recycle(); penId = -1   // keep the ink
+                }
+            }
+            return true
+        }
+        // pen is pointer 0 and a palm/finger joins: remember the pen so the rest of the stroke follows it alone
+        if (am == MotionEvent.ACTION_POINTER_DOWN && mode == Mode.DRAW && isPen(e, 0)) { penId = e.getPointerId(0); return true }
         if (mode == Mode.NAV || e.actionMasked == MotionEvent.ACTION_DOWN) scaleDetector.onTouchEvent(e)
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN -> onDown(e)
@@ -1255,6 +1322,10 @@ class InkView(context: Context) : View(context) {
             MotionEvent.ACTION_UP -> onUp(e)
             MotionEvent.ACTION_CANCEL -> {
                 main.removeCallbacks(longPress)
+                if (mode == Mode.DRAW && isPen(e) && npts > 1 && (activeTool == Tool.PEN || activeTool == Tool.HIGHLIGHTER)) {
+                    // Samsung palm rejection cancels the gesture: keep what the pen already wrote
+                    val ev = singlePointer(e, 0, MotionEvent.ACTION_UP); onUp(ev); ev.recycle(); return true
+                }
                 if (mode == Mode.TEXT_DRAG || mode == Mode.TEXT_PINCH) finishTextGesture()
                 npts = 0; live = null; ruled = 0; shapeDrag = false; shapePreview = null; mode = Mode.NONE; eraserOn = false; velocity?.recycle(); velocity = null; invalidate()
             }
@@ -1356,7 +1427,11 @@ class InkView(context: Context) : View(context) {
 
     private fun startTool(e: MotionEvent) {
         npts = 0; eraseUndoPushed = false; live = null
-        val h = hit(e.x, e.y)
+        var h = hit(e.x, e.y)
+        if (h == null && doc.infinite && doc.pages.isNotEmpty()) {
+            val dx = toDocX(e.x) - pageLeft(0); val dy = toDocY(e.y) - pageTops[0]
+            if (growToCover(dx - 1f, dy - 1f, dx + 1f, dy + 1f)) h = hit(e.x, e.y)
+        }
         drawPage = h?.first ?: -1
         when (activeTool) {
             Tool.PEN -> live = InkRender.liveGeom(Tool.PEN, penStyle, penWidth)
@@ -2739,6 +2814,8 @@ class InkView(context: Context) : View(context) {
     }
 
     companion object {
+        /** A finger touch this soon after the pen hovered / wrote is the writing hand resting on the screen. */
+        private const val PALM_MS = 450L
         const val FILE_PREFIX = "daftar:file:"
         /** Whiteboard growth step: a multiple of every paper period (lined 26, grid/dots 18) so the pattern never jumps. */
         private const val GROW_UNIT = 234f
