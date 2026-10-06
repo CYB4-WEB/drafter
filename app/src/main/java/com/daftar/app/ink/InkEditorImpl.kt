@@ -166,7 +166,7 @@ internal fun InkEditorImpl(
     var colorForText by remember { mutableStateOf(false) }
     var showExport by remember { mutableStateOf(false) }
     var showPrint by remember { mutableStateOf(false) }
-    var card by remember { mutableStateOf<Triple<android.graphics.Bitmap, String?, Int>?>(null) }   // flashcard front, text, page
+    val ai = com.daftar.app.ai.rememberAiSession(hostFile)
     var mathJob by remember { mutableStateOf<Job?>(null) }
     var mathOn by remember { mutableStateOf(run { InkPrefs.init(ctx); InkPrefs.mathHelper }) }
     var exported by remember { mutableStateOf<List<File>?>(null) }
@@ -451,8 +451,8 @@ internal fun InkEditorImpl(
         }
     }
 
-    /** Lasso → flashcard: image of the selection + (optional, quick, offline) recognized text, then the study dialog. */
-    fun makeFlashcard() {
+    /** Lasso → AI: image of the selection + (optional, quick, offline) recognized text → AI chat panel. */
+    fun askAi() {
         val bmp = view.selectionBitmap() ?: return
         val page = view.selectionPage.coerceAtLeast(0)
         val typed = view.selectedTexts()
@@ -463,7 +463,8 @@ internal fun InkEditorImpl(
                 kotlinx.coroutines.withTimeoutOrNull(900) { if (Handwriting.isReady(lang)) Handwriting.recognize(lang, strokes) else null }
             }.getOrNull()
             val text = (typed + listOfNotNull(hw?.takeIf { it.isNotBlank() })).joinToString("\n").ifBlank { null }
-            card = Triple(bmp, text, page)
+            ai.startFromSelection(bmp, page, text)
+            if (wide && !sidePanelAtStart) showPanel = false   // the AI panel takes the end side
         }
     }
 
@@ -573,7 +574,10 @@ internal fun InkEditorImpl(
             if (bottomPanel != null) IconButton(onClick = { showBottom = !showBottom }) {
                 Icon(Icons.Rounded.ViewAgenda, bottomPanelLabel, tint = if (showBottom) c.accent else c.ink)
             }
-            if (sidePanel != null) IconButton(onClick = { showPanel = !showPanel }) {
+            IconButton(onClick = { if (ai.open) ai.close() else { ai.show(); if (wide && !sidePanelAtStart) showPanel = false } }) {
+                Icon(Icons.Rounded.AutoAwesome, stringResource(R.string.ink_ai), tint = if (ai.open) c.accent else c.ink)
+            }
+            if (sidePanel != null) IconButton(onClick = { showPanel = !showPanel; if (showPanel && wide && !sidePanelAtStart) ai.close() }) {
                 Icon(Icons.AutoMirrored.Rounded.ViewSidebar, sidePanelLabel, tint = if (showPanel) c.accent else c.ink)
             }
             Box {
@@ -732,7 +736,7 @@ internal fun InkEditorImpl(
                     onText = { recognize(view.selectedStrokes(), true) },
                     onTidy = { if (!view.tidySelection()) toast(ctx, ctx.getString(R.string.ink4_nothing_to_tidy)) },
                     onSolve = { solveSelection() },
-                    onFlashcard = { makeFlashcard() },
+                    onAi = { askAi() },
                     onColor = { col -> view.recolorSelection(col) },
                     onDuplicate = { view.duplicateSelection() },
                     onDelete = { view.deleteSelection() },
@@ -793,6 +797,12 @@ internal fun InkEditorImpl(
                 Box(Modifier.width(320.dp).fillMaxHeight().background(c.surface)) {
                     Box(Modifier.width(1.dp).fillMaxHeight().background(c.line))
                     Box(Modifier.padding(start = 1.dp)) { sidePanel(ctl) }
+                }
+            }
+            if (ai.open && wide) {
+                Row(Modifier.width(380.dp).fillMaxHeight().background(c.surface)) {
+                    Box(Modifier.width(1.dp).fillMaxHeight().background(c.line))
+                    com.daftar.app.ai.AiPanel(ai, Modifier.weight(1f).fillMaxHeight())
                 }
             }
         }
@@ -895,9 +905,7 @@ internal fun InkEditorImpl(
             onDismiss = { trDialog = null })
     }
 
-    card?.let { (front, text, page) ->
-        com.daftar.app.study.MakeFlashcardDialog(source = hostFile, front = front, recognizedText = text, page = page, onDismiss = { card = null })
-    }
+    if (!wide) com.daftar.app.ai.AiSheetHost(ai)
 
     linkEdit?.let { (page, existing) ->
         LinkDialog(existing, exclude = hostFile, onDismiss = { linkEdit = null }) { target, label ->
@@ -969,7 +977,7 @@ fun loadBitmap(ctx: android.content.Context, uri: Uri, maxSide: Int): Bitmap? = 
 
 @Composable
 private fun SelectionBar(
-    modifier: Modifier, onText: () -> Unit, onTidy: () -> Unit, onSolve: () -> Unit, onFlashcard: () -> Unit,
+    modifier: Modifier, onText: () -> Unit, onTidy: () -> Unit, onSolve: () -> Unit, onAi: () -> Unit,
     onColor: (Int) -> Unit, onDuplicate: () -> Unit, onDelete: () -> Unit, onDone: () -> Unit,
 ) {
     val c = D.c
@@ -982,7 +990,7 @@ private fun SelectionBar(
         TextButton(onClick = onText) { Icon(Icons.Rounded.Spellcheck, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.ink_convert_to_text)) }
         TextButton(onClick = onTidy) { Icon(Icons.Rounded.AutoFixHigh, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.ink4_tidy)) }
         TextButton(onClick = onSolve) { Icon(Icons.Rounded.Calculate, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.ink4_solve)) }
-        TextButton(onClick = onFlashcard) { Icon(Icons.Rounded.Style, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.ink4_flashcard)) }
+        TextButton(onClick = onAi) { Icon(Icons.Rounded.AutoAwesome, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.ink_ai)) }
         Box {
             IconButton(onClick = { colors = true }) { Icon(Icons.Rounded.Palette, stringResource(R.string.color), tint = c.ink) }
             DropdownMenu(colors, { colors = false }) {
