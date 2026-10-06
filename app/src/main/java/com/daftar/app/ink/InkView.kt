@@ -2738,6 +2738,14 @@ class InkView(context: Context) : View(context) {
         val c = Canvas(bmp)
         val paper = if (source != null) Color.WHITE else doc.paperColor or 0xFF000000.toInt()
         c.drawColor(paper)
+        // PDF / slides: include the printed page under the selection so the AI sees the question, not only the ink.
+        // Rendered on the page-render thread (sources allow one call at a time), waiting briefly for it.
+        val src = source; val pi = selectionPage
+        if (src != null && pi in 0 until src.pageCount && pi in doc.pages.indices) {
+            val ip = doc.pages[pi]; val (pw, ph) = src.pageSize(pi)
+            val mx = Matrix().apply { setScale(ip.w / pw, ip.h / ph); postTranslate(-b.left, -b.top); postScale(k, k) }
+            runCatching { exec.submit { src.render(pi, bmp, mx) }.get(4, java.util.concurrent.TimeUnit.SECONDS) }
+        }
         c.scale(k, k); c.translate(-b.left, -b.top)
         InkRender.drawPageContent(c, InkPage(strokes = m.strokes, texts = m.texts, images = m.images, links = m.links, stickers = m.stickers))
         return bmp
