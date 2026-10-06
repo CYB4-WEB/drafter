@@ -564,7 +564,7 @@ fun SettingsScreen() {
             }
             Column(Modifier.padding(vertical = 24.dp)) {
                 DaftarBrand(28.dp, 20.sp)
-                Text(stringResource(R.string.app_tagline) + " · 3.5", color = c.muted, style = MaterialTheme.typography.bodySmall,
+                Text(stringResource(R.string.app_tagline) + " · 3.6", color = c.muted, style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.padding(top = 4.dp))
             }
         }

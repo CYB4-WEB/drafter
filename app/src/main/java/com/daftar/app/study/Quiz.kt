@@ -48,6 +48,8 @@ data class QuizQuestion(
     val correct: List<Int> = emptyList(),
     val answer: String = "",
     val explanation: String = "",
+    /** File the question is based on (multi-file quizzes; "" = not given). */
+    val source: String = "",
 ) {
     val multi get() = type == QType.MCQ && correct.size > 1
     /** Graded on the device (MCQ / TF) — the rest is graded by Gemini. */
@@ -81,6 +83,8 @@ data class Quiz(
     /** 1-based inclusive page range of [sourcePath] ("" = whole file / not paged). */
     val pages: String = "",
     val fromSelection: Boolean = false,
+    /** v3.6: every source (files / folders). Empty in older quizzes → [sourceName] / [pages] are used. */
+    val sources: List<QuizSourceInfo> = emptyList(),
     val difficulty: String = "",
     val language: String = "",
     val instructions: String = "",
@@ -216,6 +220,7 @@ internal object QuizAi {
                         }
                         put("answer", str("short/essay: a model answer and the key points needed for full marks. mcq/tf: the correct answer in words"))
                         put("explanation", str("Why the correct answer is correct (and why common wrong answers are wrong), 1-3 sentences"))
+                        put("source", str("Name of the file the question is based on, exactly as given in the material (empty if only one source)"))
                     }
                     putJsonArray("required") { listOf("type", "question", "options", "correct", "answer", "explanation").forEach { add(JsonPrimitive(it)) } }
                 }
@@ -265,6 +270,7 @@ internal object QuizAi {
         - ${languageLine(o.language)}
         - The user's own instructions below take priority over these defaults (count, topic, types, language), but always return the JSON format.
         - Plain text only (no Markdown); write math in plain notation such as x^2, sqrt(x), a/b.
+        - When the material comes from several files, cover them fairly (unless the instructions focus on some) and set each question's "source" to the file name it is based on.
     """.trimIndent()
 
     /** Calls Gemini and returns validated questions + a title. Throws [Gemini.AiException] / [QuizException]. */

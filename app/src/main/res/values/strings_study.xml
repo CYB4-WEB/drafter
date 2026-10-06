@@ -99,12 +99,7 @@
     <string name="quiz_selection_desc">The part you lassoed in the editor</string>
     <string name="quiz_remove">Remove</string>
     <string name="quiz_no_file">No file chosen</string>
-    <string name="quiz_add_file_too">Add a file for more context (optional)</string>
-    <string name="quiz_choose_file">Choose file</string>
-    <string name="quiz_pick_file">Choose a file for the quiz</string>
-    <string name="quiz_change">Change</string>
     <string name="quiz_counting">Counting pages…</string>
-    <string name="quiz_n_pages">%1$d pages</string>
     <string name="quiz_whole_file">Whole file</string>
     <string name="quiz_some_pages">Some pages</string>
     <string name="quiz_from">From</string>
@@ -169,7 +164,29 @@
     <string name="quiz_attempts">Attempts: %1$s</string>
     <string name="quiz_review_answers">Your answers</string>
     <string name="quiz_mistakes_only">Mistakes only</string>
+    <!-- v3.6: several files / folders -->
+    <string name="quiz_pick_files">Choose files for the quiz</string>
+    <string name="quiz_add_files">Add files</string>
+    <string name="quiz_add_folder">Add folder</string>
+    <string name="quiz_pick_folder">Choose a folder</string>
+    <string name="quiz_use_folder">Use this folder</string>
+    <string name="quiz_budget_note">Long material is shortened fairly across all sources (about 120,000 characters and 20 page images in total); text is preferred when there are many files.</string>
+    <string name="quiz_kind_note">Note</string>
+    <string name="quiz_kind_folder">Folder</string>
+    <string name="quiz_folder_empty">No readable files</string>
+    <string name="quiz_folder_capped">%1$d files (the first %2$d are used)</string>
+    <string name="quiz_stage_reading_n">Reading file %1$d of %2$d…</string>
+    <string name="quiz_question_source">Source: %1$s</string>
+    <string name="quiz_more_sources">%1$s +%2$d more</string>
 
+    <plurals name="quiz_n_files">
+        <item quantity="one">%d file</item>
+        <item quantity="other">%d files</item>
+    </plurals>
+    <plurals name="quiz_n_pages">
+        <item quantity="one">%d page</item>
+        <item quantity="other">%d pages</item>
+    </plurals>
     <plurals name="quiz_n_questions">
         <item quantity="one">%d question</item>
         <item quantity="other">%d questions</item>

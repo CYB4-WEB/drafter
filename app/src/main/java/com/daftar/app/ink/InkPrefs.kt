@@ -2,6 +2,8 @@ package com.daftar.app.ink
 
 import android.content.Context
 import android.content.SharedPreferences
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 
 /**
  * Last tool settings, remembered across sessions (own `ink_prefs` file so it never collides with app settings):
@@ -11,7 +13,25 @@ internal object InkPrefs {
     private var sp: SharedPreferences? = null
 
     fun init(ctx: Context) {
-        if (sp == null) sp = ctx.applicationContext.getSharedPreferences("ink_prefs", Context.MODE_PRIVATE)
+        if (sp == null) {
+            sp = ctx.applicationContext.getSharedPreferences("ink_prefs", Context.MODE_PRIVATE)
+            showLabels = sp?.getBoolean("showLabels", false) ?: false
+            recentColors = sp?.getString("recentColors", "")?.split(',')?.mapNotNull { it.toLongOrNull()?.toInt() } ?: emptyList()
+        }
+    }
+
+    /** Show the name under every toolbar button (otherwise only under the selected tool). Observable. */
+    var showLabels by androidx.compose.runtime.mutableStateOf(false)
+        private set
+    fun putShowLabels(v: Boolean) { showLabels = v; sp?.edit()?.putBoolean("showLabels", v)?.apply() }
+
+    /** Colours picked from the palette / custom picker, newest first (max 8). Observable. */
+    var recentColors by androidx.compose.runtime.mutableStateOf(emptyList<Int>())
+        private set
+    fun addRecentColor(col: Int) {
+        val c = col or 0xFF000000.toInt()
+        recentColors = (listOf(c) + recentColors.filter { it != c }).take(8)
+        sp?.edit()?.putString("recentColors", recentColors.joinToString(",") { (it.toLong() and 0xFFFFFFFFL).toString() })?.apply()
     }
 
     /** Default width per pen style (page points). */

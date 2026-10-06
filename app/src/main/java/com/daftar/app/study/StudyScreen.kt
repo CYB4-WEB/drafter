@@ -125,7 +125,8 @@ private fun QuizRow(q: Quiz) {
             Text(q.title, style = MaterialTheme.typography.bodyLarge, color = c.ink, maxLines = 2, overflow = TextOverflow.Ellipsis)
             val info = buildList {
                 add(pluralStringResource(R.plurals.quiz_n_questions, q.questions.size, q.questions.size))
-                if (q.sourceName.isNotEmpty()) add(if (q.pages.isNotEmpty()) stringResource(R.string.quiz_source_pages, q.sourceName, q.pages) else q.sourceName)
+                val src = quizSourceLabel(q)
+                if (src != null) add(src)
                 else if (q.fromSelection) add(stringResource(R.string.quiz_selection))
             }.joinToString(" · ")
             Text(info, style = MaterialTheme.typography.bodySmall, color = c.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)

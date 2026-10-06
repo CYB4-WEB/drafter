@@ -96,3 +96,57 @@
 | "Ask AI about this question" (optional) | not done |
 | No API key written anywhere | PASS |
 | Not tested on a device (no emulator) | — |
+
+# v3.6
+
+## Understanding
+New quiz sources: any mix of the selection image + several library files + whole folders (recursive, every
+AI-readable file, hidden / `.`-prefixed entries skipped). Each row: name, kind, page count (folders: file count),
+single files get an optional page range, remove per row. Generation reads every source within the shared caps
+(~120k chars, ≤20 images in total), split fairly across files, text preferred when there are many files, file names
+given to Gemini so questions can cite their source, per-file reading progress. All source names saved in the quiz
+JSON; old quizzes (single `sourcePath/sourceName/pages`) still load. `QuizRequests.prepare(...)` keeps its signature.
+
+## Plan
+- `QuizRequests`: `sources` list (`QuizSource(file, folder, whole, from, to)`) replaces the single file; `prepare()`
+  maps its `file/pages` to one source. Reading progress = (index, total, name).
+- `QuizContext.kt` (study/): expands folders, then builds parts with a budget: pass 1 text only (`FileContext.pages(…,
+  images = false)`), char budget water-filled across files; pass 2 images water-filled across visual files (with
+  many files only pages that have little text get images), rendered one page at a time and freed immediately.
+- `Quiz.sources: List<QuizSourceInfo>` (default empty → old files decode); helper falls back to the old fields.
+- `FolderPickerDialog` in study/ (built on `Storage.list`). NewQuiz source list UI. Strings en + ar.
+
+## Progress (v3.6)
+- New `study/QuizContext.kt`: `QuizSource`, `QuizSourceInfo` (saved), `expandFolder()` (recursive `walkTopDown`,
+  hidden `.`-entries and their subtrees skipped, only `quizAccepts` files, sorted), `build()`:
+  pass 1 = page count + text of every file (`FileContext.pages(images = false)`, no bitmaps); text budget
+  (120k − 4k for headers) water-filled across files; pass 2 = images water-filled over visual files (≤ 20 in total;
+  with > 3 files only pages with < 300 chars of text get an image, otherwise low-text pages first), rendered one page
+  at a time via `FileContext.pages(f, p, p)`, JPEG-encoded and recycled at once. Each file is introduced by
+  `=== File k of n: "name" (pages a–b of N) ===`; truncated files say so. At most 40 files are read (folder rows warn).
+- Gemini schema: optional `source` per question (file name) + prompt rule to cover files fairly and cite them;
+  shown under the question ("Source: …").
+- `QuizRequests`: `sources` list (+ `add`, `update`); `prepare(file, pages, image, instructions)` unchanged in
+  signature (a folder passed as `file` becomes a folder source). Reading progress `readIndex/readTotal/readName`.
+- `NewQuiz.kt`: source list (selection row, file rows with kind · page count + whole/some pages range, folder rows
+  with kind · recursive file count, remove per row), "Add files" (`LibraryFilePickerDialog(multiple = true)`, duplicates
+  ignored) and "Add folder" (new `study/FolderPicker.kt`, shows the readable-file count of the folder being browsed).
+  Progress card: "Reading file i of n…" + file name + determinate bar.
+- `Quiz.sources` (default empty) — old quizzes still decode and show via `sourceName/pages`; new quizzes also fill
+  those legacy fields (first source). `quizSourceLabel()` used in the hub and quiz header.
+- Strings en + ar added (`quiz_add_files`, `quiz_add_folder`, `quiz_n_files`, `quiz_n_pages` plural …); unused ones
+  removed. Full `tools/compile.sh` → **BUILD OK**.
+
+## Self-check (v3.6)
+| Requirement | Status |
+|---|---|
+| Multiple files (`LibraryFilePickerDialog` multiple) + folders (picker built in study/) + selection image | PASS |
+| Rows: name, kind, page count / file count, page range for single files, remove per row | PASS |
+| Folder = every supported file, recursive, hidden/internal skipped, count shown | PASS |
+| Shared caps (~120k chars, ≤ 20 images) split fairly; text preferred with many files | PASS |
+| File names given to Gemini; questions cite their source | PASS |
+| Per-file reading progress, cancellable | PASS |
+| All source names saved; old quizzes load (backward-compatible defaults) | PASS |
+| `QuizRequests.prepare(...)` source-compatible | PASS |
+| Arabic + English strings | PASS |
+| Device test | not possible here (no emulator) |

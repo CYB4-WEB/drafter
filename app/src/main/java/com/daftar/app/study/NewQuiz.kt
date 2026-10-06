@@ -20,6 +20,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -36,7 +37,8 @@ import com.daftar.app.ui.Screen
 import com.daftar.app.ui.SectionTitle
 import com.daftar.app.ui.ViewerTopBar
 import com.daftar.app.ui.card
-import com.daftar.app.ui.kindColor
+import com.daftar.app.ui.FileBadge
+import com.daftar.app.ui.FolderGlyph
 import com.daftar.app.ui.pane
 import com.daftar.app.ui.theme.D
 import kotlinx.coroutines.Dispatchers
@@ -55,6 +57,7 @@ internal fun NewQuizScreenImpl() {
     val r = QuizRequests
     val hasKey = AiPrefs.hasKey
     var picker by remember { mutableStateOf(false) }
+    var folderPicker by remember { mutableStateOf(false) }
     var privacy by remember { mutableStateOf(false) }
     val fallbackTitle = stringResource(R.string.quiz_default_title)
 
@@ -75,7 +78,7 @@ internal fun NewQuizScreenImpl() {
 
                 // ---------- source ----------
                 SectionTitle(stringResource(R.string.quiz_source))
-                SourceCard(onPick = { picker = true })
+                SourceCard(onAddFiles = { picker = true }, onAddFolder = { folderPicker = true })
 
                 // ---------- questions ----------
                 SectionTitle(stringResource(R.string.quiz_questions))
@@ -112,22 +115,29 @@ internal fun NewQuizScreenImpl() {
         }
     }
 
-    if (picker) LibraryFilePickerDialog(stringResource(R.string.quiz_pick_file), accept = ::quizAccepts, multiple = false,
-        onDismiss = { picker = false }, start = r.file?.parentFile ?: Storage.root) { files ->
+    if (picker) LibraryFilePickerDialog(stringResource(R.string.quiz_pick_files), accept = ::quizAccepts, multiple = true,
+        onDismiss = { picker = false }, start = r.sources.lastOrNull { !it.folder }?.file?.parentFile ?: Storage.root) { files ->
         picker = false
-        files.firstOrNull()?.let { r.file = it; r.wholeFile = true; r.from = 0; r.to = 0 }
+        r.add(files, folder = false)
+    }
+    if (folderPicker) FolderPickerDialog(onDismiss = { folderPicker = false }) { dir ->
+        folderPicker = false
+        r.add(listOf(dir), folder = true)
     }
     if (privacy) AiPrivacyDialog(onDismiss = { privacy = false }) { privacy = false; r.generate(fallbackTitle) }
 }
 
 @Composable
-private fun SourceCard(onPick: () -> Unit) {
+private fun SourceCard(onAddFiles: () -> Unit, onAddFolder: () -> Unit) {
     val c = D.c
     val r = QuizRequests
     Column(Modifier.fillMaxWidth().card(c).padding(4.dp)) {
+        var rows = 0
+        @Composable fun divider() { if (rows++ > 0) Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp).height(1.dp).background(c.line)) }
         // selection image
         val img = r.image
         if (img != null || r.imageLoading) {
+            divider()
             Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                 SelectionThumb(img?.bytes)
                 Spacer(Modifier.width(12.dp))
@@ -137,69 +147,114 @@ private fun SourceCard(onPick: () -> Unit) {
                 }
                 IconButton(onClick = { r.clearImage() }, enabled = !r.busy) { Icon(Icons.Rounded.Close, stringResource(R.string.quiz_remove), tint = c.muted) }
             }
-            Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp).height(1.dp).background(c.line))
         }
-        // file
-        val f = r.file
-        if (f == null) {
+        // files and folders
+        r.sources.forEachIndexed { i, s ->
+            key(s.file.absolutePath) {
+                divider()
+                if (s.folder) FolderSourceRow(s) { r.sources.removeAt(i) }
+                else FileSourceRow(i, s) { r.sources.removeAt(i) }
+            }
+        }
+        if (img == null && !r.imageLoading && r.sources.isEmpty()) {
+            divider()
             Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                 IconBadge(Icons.Rounded.Description, c.muted)
                 Spacer(Modifier.width(12.dp))
-                Text(stringResource(if (img != null) R.string.quiz_add_file_too else R.string.quiz_no_file), style = MaterialTheme.typography.bodyMedium,
-                    color = c.muted, modifier = Modifier.weight(1f))
-                OutlinedButton(onClick = onPick, enabled = !r.busy) {
-                    Icon(Icons.Rounded.FolderOpen, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.quiz_choose_file))
-                }
+                Text(stringResource(R.string.quiz_no_file), style = MaterialTheme.typography.bodyMedium, color = c.muted, modifier = Modifier.weight(1f))
             }
-        } else FileSource(f, onPick)
+        }
+        divider()
+        Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = onAddFiles, enabled = !r.busy) {
+                Icon(Icons.Rounded.NoteAdd, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.quiz_add_files))
+            }
+            OutlinedButton(onClick = onAddFolder, enabled = !r.busy) {
+                Icon(Icons.Rounded.CreateNewFolder, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.quiz_add_folder))
+            }
+        }
+        if (r.sources.isNotEmpty() && (r.sources.size > 1 || r.sources.any { it.folder }))
+            Text(stringResource(R.string.quiz_budget_note), style = MaterialTheme.typography.bodySmall, color = c.muted,
+                modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 12.dp))
     }
 }
 
+/** "PDF", "Note", "DOCX"… */
+@Composable
+private fun kindLabel(f: File): String =
+    if (FileContext.kind(f) == Kind.NOTE) stringResource(R.string.quiz_kind_note) else f.extension.uppercase()
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun FileSource(f: File, onPick: () -> Unit) {
+private fun FileSourceRow(index: Int, s: QuizSource, onRemove: () -> Unit) {
     val c = D.c
     val r = QuizRequests
+    val f = s.file
     val count by produceState<Int?>(null, f) {
         value = runCatching { withContext(Dispatchers.IO) { FileContext.pageCount(f) } }.getOrDefault(0)
     }
     // keep the range inside the file once the count is known
     LaunchedEffect(count) {
         val n = count ?: return@LaunchedEffect
-        if (n > 0) { r.from = r.from.coerceIn(0, n - 1); r.to = r.to.coerceIn(r.from, n - 1) }
+        val cur = r.sources.getOrNull(index) ?: return@LaunchedEffect
+        if (n > 0) { val a = cur.from.coerceIn(0, n - 1); r.update(index, cur.copy(from = a, to = cur.to.coerceIn(a, n - 1))) }
     }
     Column(Modifier.fillMaxWidth().padding(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            IconBadge(Icons.Rounded.Description, kindColor(Storage.kindOf(f)))
+            FileBadge(FileContext.kind(f), 40.dp, f.extension)
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(f.name, style = MaterialTheme.typography.bodyLarge, color = c.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(when (val n = count) { null -> stringResource(R.string.quiz_counting); 0 -> stringResource(R.string.quiz_err_read); else -> stringResource(R.string.quiz_n_pages, n) },
+                Text(kindLabel(f) + " · " + when (val n = count) { null -> stringResource(R.string.quiz_counting); 0 -> stringResource(R.string.quiz_err_read); else -> pluralStringResource(R.plurals.quiz_n_pages, n, n) },
                     style = MaterialTheme.typography.bodySmall, color = if (count == 0) c.danger else c.muted)
             }
-            TextButton(onClick = onPick, enabled = !r.busy) { Text(stringResource(R.string.quiz_change)) }
-            IconButton(onClick = { r.file = null }, enabled = !r.busy) { Icon(Icons.Rounded.Close, stringResource(R.string.quiz_remove), tint = c.muted) }
+            IconButton(onClick = onRemove, enabled = !r.busy) { Icon(Icons.Rounded.Close, stringResource(R.string.quiz_remove), tint = c.muted) }
         }
         val n = count ?: 0
         if (n > 1) {
             Spacer(Modifier.height(10.dp))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp), itemVerticalAlignment = Alignment.CenterVertically) {
-                Chip(stringResource(R.string.quiz_whole_file), r.wholeFile, { if (!r.busy) r.wholeFile = true })
-                Chip(stringResource(R.string.quiz_some_pages), !r.wholeFile, { if (!r.busy) r.wholeFile = false })
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Chip(stringResource(R.string.quiz_whole_file), s.whole, { if (!r.busy) r.update(index, s.copy(whole = true)) })
+                Chip(stringResource(R.string.quiz_some_pages), !s.whole, { if (!r.busy) r.update(index, s.copy(whole = false)) })
             }
-            if (!r.wholeFile) {
+            if (!s.whole) {
                 Spacer(Modifier.height(10.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    PageField(stringResource(R.string.quiz_from), r.from + 1, n) { v -> r.from = v - 1; if (r.to < r.from) r.to = r.from }
+                    PageField(stringResource(R.string.quiz_from), s.from + 1, n) { v -> r.update(index, s.copy(from = v - 1, to = maxOf(s.to, v - 1))) }
                     Spacer(Modifier.width(12.dp))
-                    PageField(stringResource(R.string.quiz_to), r.to + 1, n) { v -> r.to = v - 1; if (r.from > r.to) r.from = r.to }
+                    PageField(stringResource(R.string.quiz_to), s.to + 1, n) { v -> r.update(index, s.copy(to = v - 1, from = minOf(s.from, v - 1))) }
                     Spacer(Modifier.width(12.dp))
                     Text(stringResource(R.string.quiz_of_n, n), style = MaterialTheme.typography.bodyMedium, color = c.muted)
                 }
-                if (r.to - r.from + 1 > 20 && FileContext.isVisual(f))
+                if (s.to - s.from + 1 > 20 && FileContext.isVisual(f))
                     Text(stringResource(R.string.quiz_many_pages), style = MaterialTheme.typography.bodySmall, color = c.muted, modifier = Modifier.padding(top = 6.dp))
             }
         }
+    }
+}
+
+@Composable
+private fun FolderSourceRow(s: QuizSource, onRemove: () -> Unit) {
+    val c = D.c
+    val files by produceState<List<File>?>(null, s.file) {
+        value = runCatching { withContext(Dispatchers.IO) { QuizContext.expandFolder(s.file) } }.getOrDefault(emptyList())
+    }
+    val meta = remember(s.file) { Storage.meta(s.file) }
+    Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+        FolderGlyph(meta.color, meta.icon, 40.dp)
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(if (Storage.isRoot(s.file)) stringResource(R.string.files) else s.file.name, style = MaterialTheme.typography.bodyLarge, color = c.ink,
+                maxLines = 1, overflow = TextOverflow.Ellipsis)
+            val n = files?.size
+            Text(stringResource(R.string.quiz_kind_folder) + " · " + when {
+                n == null -> stringResource(R.string.quiz_counting)
+                n == 0 -> stringResource(R.string.quiz_folder_empty)
+                n > QuizContext.MAX_FILES -> stringResource(R.string.quiz_folder_capped, n, QuizContext.MAX_FILES)
+                else -> pluralStringResource(R.plurals.quiz_n_files, n, n)
+            }, style = MaterialTheme.typography.bodySmall, color = if (n == 0) c.danger else c.muted)
+        }
+        IconButton(onClick = onRemove, enabled = !QuizRequests.busy) { Icon(Icons.Rounded.Close, stringResource(R.string.quiz_remove), tint = c.muted) }
     }
 }
 
@@ -307,16 +362,25 @@ private fun Progress(stage: QuizRequests.Stage, onCancel: () -> Unit) {
             CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.5.dp, color = c.accent)
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
-                Text(stringResource(when (stage) {
-                    QuizRequests.Stage.READING -> R.string.quiz_stage_reading
-                    QuizRequests.Stage.SAVING -> R.string.quiz_stage_saving
-                    else -> R.string.quiz_stage_writing
-                }), style = MaterialTheme.typography.bodyLarge, color = c.ink)
+                val r = QuizRequests
+                Text(when {
+                    stage == QuizRequests.Stage.READING && r.readTotal > 0 -> stringResource(R.string.quiz_stage_reading_n, r.readIndex, r.readTotal)
+                    else -> stringResource(when (stage) {
+                        QuizRequests.Stage.READING -> R.string.quiz_stage_reading
+                        QuizRequests.Stage.SAVING -> R.string.quiz_stage_saving
+                        else -> R.string.quiz_stage_writing
+                    })
+                }, style = MaterialTheme.typography.bodyLarge, color = c.ink)
+                if (stage == QuizRequests.Stage.READING && r.readName.isNotEmpty())
+                    Text(r.readName, style = MaterialTheme.typography.bodySmall, color = c.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(stringResource(R.string.quiz_stage_hint), style = MaterialTheme.typography.bodySmall, color = c.muted)
             }
             OutlinedButton(onClick = onCancel) { Text(stringResource(R.string.cancel)) }
         }
         Spacer(Modifier.height(12.dp))
-        LinearProgressIndicator(Modifier.fillMaxWidth().clip(RoundedCornerShape(4.dp)), color = c.accent, trackColor = c.surfaceAlt)
+        val r = QuizRequests
+        if (stage == QuizRequests.Stage.READING && r.readTotal > 0)
+            LinearProgressIndicator({ r.readIndex.toFloat() / r.readTotal }, Modifier.fillMaxWidth().clip(RoundedCornerShape(4.dp)), color = c.accent, trackColor = c.surfaceAlt)
+        else LinearProgressIndicator(Modifier.fillMaxWidth().clip(RoundedCornerShape(4.dp)), color = c.accent, trackColor = c.surfaceAlt)
     }
 }
