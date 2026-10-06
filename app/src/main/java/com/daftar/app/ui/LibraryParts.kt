@@ -392,6 +392,8 @@ private fun ActionsHost(a: Actions) {
         when (act) {
             "note" -> nav.open(ctx, newNote(ctx, dir))
             "whiteboard" -> nav.open(ctx, newWhiteboard(ctx, dir))
+            "word" -> runCatching { com.daftar.app.word.newWordDocument(ctx, dir) }
+                .onSuccess { nav.open(ctx, it) }.onFailure { toast(ctx, ctx.getString(R.string.error_generic)) }
             "import" -> a.importIn = dir
             "import_files" -> runCatching { importer.launch(arrayOf("*/*")) }.onFailure { toast(ctx, ctx.getString(R.string.no_app_found)) }
             "import_folder" -> runCatching { folderImporter.launch(null) }.onFailure { toast(ctx, ctx.getString(R.string.no_app_found)) }
@@ -407,6 +409,7 @@ private fun ActionsHost(a: Actions) {
                 Text(stringResource(R.string.new_item), style = MaterialTheme.typography.titleLarge, color = c.ink, modifier = Modifier.padding(8.dp))
                 SheetItem(Icons.Rounded.Draw, stringResource(R.string.new_note)) { a.createIn = null; a.quick("note", dir) }
                 SheetItem(Icons.Rounded.Dashboard, stringResource(R.string.new_whiteboard)) { a.createIn = null; a.quick("whiteboard", dir) }
+                SheetItem(Icons.Rounded.Description, stringResource(R.string.new_word_doc)) { a.createIn = null; a.quick("word", dir) }
                 SheetItem(Icons.Rounded.CreateNewFolder, stringResource(R.string.new_folder)) { a.createIn = null; a.editFolder = dir to null }
                 SheetItem(Icons.Rounded.FileUpload, stringResource(R.string.import_files)) { a.createIn = null; a.quick("import_files", dir) }
                 SheetItem(Icons.Rounded.DriveFolderUpload, stringResource(R.string.ws_import_folder_action)) { a.createIn = null; a.quick("import_folder", dir) }
