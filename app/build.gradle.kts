@@ -13,10 +13,8 @@ android {
         applicationId = "com.daftar.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 3
-        versionName = "2.0"
-        // Galaxy Tab S11 Ultra is arm64; x86_64 keeps the emulator working. Dropping 32-bit ABIs keeps the APK small.
-        ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
+        versionCode = 4
+        versionName = "3.0"
     }
 
     androidResources {
@@ -37,6 +35,15 @@ android {
     }
     kotlinOptions { jvmTarget = "17" }
     buildFeatures { compose = true }
+    // One APK per CPU type: the tablet gets only arm64 natives (translation + OCR), the emulator only x86_64.
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a", "x86_64")
+            isUniversalApk = false
+        }
+    }
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"

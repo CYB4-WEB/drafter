@@ -120,6 +120,7 @@ fun HomeScreen() {
                 Row(Modifier.fillMaxWidth().padding(top = 16.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     QuickAction(Icons.Rounded.Draw, stringResource(R.string.new_note), Color(0xFF3B82F6)) { actions.quick("note", null) }
                     QuickAction(Icons.Rounded.Dashboard, stringResource(R.string.new_whiteboard), Color(0xFF6366F1)) { actions.quick("whiteboard", null) }
+                    QuickAction(Icons.Rounded.Description, stringResource(R.string.new_word_doc), Color(0xFF3B82F6)) { actions.quick("word", null) }
                     QuickAction(Icons.Rounded.CreateNewFolder, stringResource(R.string.new_folder), Color(0xFF10B981)) { actions.newFolder(Storage.root) }
                     QuickAction(Icons.Rounded.FileUpload, stringResource(R.string.import_file), Color(0xFFF59E0B)) { actions.quick("import", null) }
                     QuickAction(Icons.Rounded.DocumentScanner, stringResource(R.string.files_scan), Color(0xFF0EA5E9)) { actions.quick("scan", null) }  // files-agent hook
@@ -533,6 +534,7 @@ fun SettingsScreen() {
             }
             com.daftar.app.planner.PlannerSettingsSection()
             com.daftar.app.study.StudySettingsSection()
+            com.daftar.app.ml.MlSettingsSection()
             SettingsGroup(stringResource(R.string.set_storage)) {
                 Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Rounded.Storage, null, tint = c.muted)
@@ -561,7 +563,7 @@ fun SettingsScreen() {
             }
             Column(Modifier.padding(vertical = 24.dp)) {
                 DaftarBrand(28.dp, 20.sp)
-                Text(stringResource(R.string.app_tagline) + " · 2.0", color = c.muted, style = MaterialTheme.typography.bodySmall,
+                Text(stringResource(R.string.app_tagline) + " · 3.0", color = c.muted, style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.padding(top = 4.dp))
             }
         }
