@@ -44,4 +44,34 @@
     <string name="slides_counter">%1$d / %2$d</string>
     <string name="slides_end_of_show">End of slide show. Tap to exit.</string>
     <string name="slides_laser_hint">Laser pointer: draw with the S Pen, or touch and hold, then drag</string>
+    <!-- Slide management (slides4) -->
+    <string name="slides4_menu">Slides, share and export</string>
+    <string name="slides4_insert_after_current">Insert slide after current</string>
+    <string name="slides4_insert_before">Insert slide before</string>
+    <string name="slides4_insert_after">Insert slide after</string>
+    <string name="slides4_insert_here">Insert a slide here</string>
+    <string name="slides4_insert_title">New slide at position %1$d</string>
+    <string name="slides4_kind_blank">Blank slide</string>
+    <string name="slides4_kind_blank_desc">Uses one of this presentation\'s layouts</string>
+    <string name="slides4_kind_note">Note page</string>
+    <string name="slides4_kind_note_desc">Plain white slide for handwriting</string>
+    <string name="slides4_kind_duplicate">Duplicate slide %1$d</string>
+    <string name="slides4_kind_duplicate_desc">Copy of the slide with its speaker notes and your drawings</string>
+    <string name="slides4_layout">Layout</string>
+    <string name="slides4_layout_unnamed">Layout %1$d</string>
+    <string name="slides4_title_hint">Title (optional)</string>
+    <string name="slides4_title_added">This layout has no title box; one will be added at the top.</string>
+    <string name="slides4_insert">Insert</string>
+    <string name="slides4_duplicate">Duplicate slide</string>
+    <string name="slides4_move_up">Move slide up</string>
+    <string name="slides4_move_down">Move slide down</string>
+    <string name="slides4_hide">Hide slide</string>
+    <string name="slides4_unhide">Show slide</string>
+    <string name="slides4_delete">Delete slide</string>
+    <string name="slides4_delete_title">Delete slide %1$d?</string>
+    <string name="slides4_delete_text">The slide and its speaker notes will be removed from the file, together with your drawings and notes on it.</string>
+    <string name="slides4_delete_confirm">Delete</string>
+    <string name="slides4_updating">Updating slides…</string>
+    <string name="slides4_failed">Couldn\'t change the slides. The file was not modified.</string>
+    <string name="slides4_slide_menu">Options for slide %1$d</string>
 </resources>

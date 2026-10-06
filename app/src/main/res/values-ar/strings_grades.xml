@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="grades_title">الدرجات والمعدل</string>
+    <string name="grades_cumulative">المعدل التراكمي</string>
+    <string name="grades_of_max">من %1$s</string>
+    <string name="grades_credits_n">%1$s ساعات معتمدة</string>
+    <plurals name="grades_n_courses">
+        <item quantity="zero">لا مقررات</item>
+        <item quantity="one">مقرر واحد</item>
+        <item quantity="two">مقرران</item>
+        <item quantity="few">%d مقررات</item>
+        <item quantity="many">%d مقررًا</item>
+        <item quantity="other">%d مقرر</item>
+    </plurals>
+    <string name="grades_term_gpa_line">المعدل الفصلي %1$s · %2$s ساعات</string>
+    <string name="grades_trend">المعدل حسب الفصل</string>
+    <string name="grades_trend_need_two">أدخل درجات فصلين لترى تطور معدلك</string>
+    <string name="grades_more">المزيد</string>
+    <string name="grades_deleted">تم الحذف</string>
+    <string name="grades_undo">تراجع</string>
+
+    <string name="grades_scale">سلّم التقديرات</string>
+    <string name="grades_scale_us40">الأمريكي 4.0</string>
+    <string name="grades_scale_us433">الأمريكي 4.0 (A+ = 4.33)</string>
+    <string name="grades_scale_sa50">السعودي / الخليجي 5.0</string>
+    <string name="grades_scale_sa40">السعودي 4.0</string>
+    <string name="grades_scale_custom">مخصص</string>
+    <string name="grades_aplus_433">احتساب A+ بـ 4.33</string>
+    <string name="grades_col_letter">التقدير</string>
+    <string name="grades_col_min" formatted="false">الحد الأدنى %</string>
+    <string name="grades_col_points">النقاط</string>
+    <string name="grades_add_band">إضافة صف</string>
+    <string name="grades_scale_customize">تخصيص هذا السلّم</string>
+    <string name="grades_scale_hint">يحصل المقرر على أول تقدير يبلغ حدّه الأدنى.</string>
+    <string name="grades_scale_invalid">يحتاج كل صف إلى تقدير غير مكرر وحد أدنى من 0 إلى 100 ونقاط.</string>
+
+    <string name="grades_add_term">إضافة فصل</string>
+    <string name="grades_new_term">فصل جديد</string>
+    <string name="grades_rename_term">إعادة تسمية الفصل</string>
+    <string name="grades_term">الفصل</string>
+    <string name="grades_term_name">اسم الفصل</string>
+    <string name="grades_term_hint">مثال: الفصل الأول 2026</string>
+    <string name="grades_default_term">الفصل الحالي</string>
+    <string name="grades_move_up">نقل للأعلى</string>
+    <string name="grades_move_down">نقل للأسفل</string>
+    <string name="grades_delete_term">حذف الفصل؟</string>
+    <string name="grades_delete_term_msg">سيُحذف «%1$s» وجميع مقرراته.</string>
+    <string name="grades_empty">لا توجد فصول بعد. أضف فصلك الأول لتبدأ بمتابعة معدلك.</string>
+    <string name="grades_empty_term">لا توجد مقررات في هذا الفصل بعد</string>
+
+    <string name="grades_add_course">إضافة مقرر</string>
+    <string name="grades_new_course">مقرر جديد</string>
+    <string name="grades_edit_course">تعديل المقرر</string>
+    <string name="grades_course_name">اسم المقرر</string>
+    <string name="grades_course_code">الرمز (اختياري)</string>
+    <string name="grades_credits">الساعات المعتمدة</string>
+    <string name="grades_subject">مجلد المادة</string>
+    <string name="grades_no_subject">بدون</string>
+    <string name="grades_pass_fail">ناجح / راسب (لا يُحتسب في المعدل)</string>
+    <string name="grades_pf">ناجح/راسب</string>
+    <string name="grades_pf_note">مقررات ناجح/راسب لا تُحتسب في معدلك.</string>
+    <string name="grades_passed">ناجح</string>
+    <string name="grades_failed">راسب</string>
+    <string name="grades_p">P</string>
+    <string name="grades_f_short">F</string>
+    <string name="grades_how">كيف يُحدد التقدير؟</string>
+    <string name="grades_mode_assess">من التقييمات</string>
+    <string name="grades_mode_letter">تقدير نهائي</string>
+    <string name="grades_letter">التقدير</string>
+    <string name="grades_letter_missing">التقدير %1$s غير موجود في السلّم الحالي، لذلك لا يُحتسب.</string>
+    <string name="grades_not_on_scale">خارج السلّم</string>
+    <string name="grades_points_n">%1$s نقاط</string>
+    <string name="grades_delete_course">حذف المقرر؟</string>
+    <string name="grades_delete_course_msg">سيُحذف «%1$s» وتقييماته.</string>
+    <string name="grades_select_course">اختر مقررًا لعرض تفاصيله</string>
+
+    <string name="grades_assessments">التقييمات</string>
+    <string name="grades_add_assessment">إضافة</string>
+    <string name="grades_new_assessment">تقييم جديد</string>
+    <string name="grades_edit_assessment">تعديل التقييم</string>
+    <string name="grades_assess_name">الاسم</string>
+    <string name="grades_weight" formatted="false">الوزن %</string>
+    <string name="grades_weight_n">الوزن %1$s</string>
+    <string name="grades_score">الدرجة</string>
+    <string name="grades_out_of">من</string>
+    <string name="grades_score_of">%1$s / %2$s</string>
+    <string name="grades_score_hint">اترك الدرجة فارغة إن لم تُرصد بعد.</string>
+    <string name="grades_not_graded">لم تُرصد</string>
+    <string name="grades_no_assessments">أضف أجزاء هذا المقرر مع أوزانها.</string>
+    <string name="grades_template">نصفي 30 · نهائي 40 · معامل 20 · اختبار قصير 10</string>
+    <string name="grades_tpl_midterm">الاختبار النصفي</string>
+    <string name="grades_tpl_final">الاختبار النهائي</string>
+    <string name="grades_tpl_labs">المعامل</string>
+    <string name="grades_tpl_quiz">اختبار قصير</string>
+    <string name="grades_weight_total">مجموع الأوزان %1$s</string>
+    <string name="grades_weight_warn">مجموع الأوزان %1$s وليس 100%%، لذا تُعاير إلى 100%%.</string>
+
+    <string name="grades_standing">الوضع الحالي</string>
+    <string name="grades_final_result">النتيجة النهائية</string>
+    <string name="grades_nothing_graded">لم يُرصد شيء بعد</string>
+    <string name="grades_pct_so_far">%1$s حتى الآن</string>
+    <string name="grades_graded_share">رُصد %1$s من المقرر</string>
+    <string name="grades_worst_case">مضمون: %1$s (%2$s) حتى لو حصلت على صفر في الباقي</string>
+    <string name="grades_calc">ماذا أحتاج؟</string>
+    <string name="grades_calc_on_one">الدرجة المطلوبة في %1$s (%2$s من المقرر):</string>
+    <string name="grades_calc_on_rest">المتوسط المطلوب في الـ %1$s المتبقية من المقرر:</string>
+    <string name="grades_calc_need_assess">أضف تقييمات بأوزانها لاستخدام الحاسبة.</string>
+    <string name="grades_final_done">رُصد كل شيء. هذه النتيجة نهائية.</string>
+    <string name="grades_target_min">من %1$s</string>
+    <string name="grades_need_pct">%1$s</string>
+    <string name="grades_secured">مضمون</string>
+    <string name="grades_unreachable">غير ممكن</string>
+
+    <string name="grades_grade_it">رصد الدرجة</string>
+    <string name="grades_grade_exam">رصد درجة الاختبار</string>
+    <string name="grades_exam_course">المقرر</string>
+    <string name="grades_exam_component">يُحتسب كـ</string>
+    <string name="grades_new_component">جزء جديد</string>
+    <string name="grades_saved">حُفظت الدرجة</string>
+
+    <string name="grades_entry_empty">تابع فصولك ومقرراتك ومعدلك</string>
+    <string name="grades_entry_line">المعدل التراكمي %1$s من %2$s · %3$s ساعات</string>
+
+    <string name="grades_widget_name">العد التنازلي للاختبارات</string>
+    <string name="grades_widget_desc">اختباراتك القادمة مع عدّ تنازلي</string>
+    <string name="grades_widget_header">الاختبارات</string>
+    <string name="grades_widget_empty">لا توجد اختبارات قادمة</string>
+    <string name="grades_cd_days_hours">%1$d ي %2$d س</string>
+    <string name="grades_cd_days">%1$d ي</string>
+    <string name="grades_cd_hours">%1$d س</string>
+    <string name="grades_cd_lt_hour">أقل من ساعة</string>
+    <string name="grades_cd_now">الآن</string>
+</resources>

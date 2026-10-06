@@ -6,3 +6,10 @@
 -keepattributes *Annotation*, InnerClasses
 -keepclassmembers class com.daftar.app.** { *** Companion; }
 -keepclasseswithmembers class com.daftar.app.** { kotlinx.serialization.KSerializer serializer(...); }
+
+# JavaCPP / Tesseract (Arabic OCR) use JNI + reflection
+-keep class org.bytedeco.javacpp.** { *; }
+-keep class org.bytedeco.tesseract.** { *; }
+-keep class org.bytedeco.leptonica.** { *; }
+-dontwarn org.bytedeco.**
+-dontwarn java.awt.**

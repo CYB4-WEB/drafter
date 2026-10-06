@@ -2,6 +2,7 @@ package com.daftar.app.ui
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
+import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.OpenInBrowser
 import androidx.compose.material.icons.rounded.Print
 import androidx.compose.material.icons.rounded.Share
@@ -69,6 +70,10 @@ fun ViewerMenuItems(a: ViewerActions, close: () -> Unit, onShare: (() -> Unit)? 
     val c = D.c
     DropdownMenuItem({ Text(stringResource(R.string.share)) }, { close(); if (onShare != null) onShare() else shareFiles(ctx, listOf(a.file)) },
         leadingIcon = { Icon(Icons.Rounded.Share, null, tint = c.muted) })
+    if (com.daftar.app.data.Storage.kindOf(a.file) == com.daftar.app.data.Kind.NOTE) DropdownMenuItem(
+        { Text(stringResource(R.string.tags_share_web)) },
+        { close(); printScope.launch { com.daftar.app.convert.NoteHtml.share(ctx, a.file) } },
+        leadingIcon = { Icon(Icons.Rounded.Language, null, tint = c.muted) })
     if (showConvert) DropdownMenuItem({ Text(stringResource(R.string.convert)) }, { close(); a.convert() },
         leadingIcon = { Icon(Icons.Rounded.Transform, null, tint = c.muted) })
     if (showPrint && canPrint(a.file)) DropdownMenuItem({ Text(stringResource(R.string.print)) }, { close(); printScope.launch { printFile(ctx, a.file) } },

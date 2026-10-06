@@ -44,4 +44,34 @@
     <string name="slides_counter">%1$d / %2$d</string>
     <string name="slides_end_of_show">انتهى عرض الشرائح. انقر للخروج.</string>
     <string name="slides_laser_hint">مؤشر الليزر: ارسم بالقلم، أو المس مطوّلًا ثم اسحب بإصبعك</string>
+    <!-- Slide management (slides4) -->
+    <string name="slides4_menu">الشرائح والمشاركة والتصدير</string>
+    <string name="slides4_insert_after_current">إدراج شريحة بعد الحالية</string>
+    <string name="slides4_insert_before">إدراج شريحة قبلها</string>
+    <string name="slides4_insert_after">إدراج شريحة بعدها</string>
+    <string name="slides4_insert_here">إدراج شريحة هنا</string>
+    <string name="slides4_insert_title">شريحة جديدة في الموضع %1$d</string>
+    <string name="slides4_kind_blank">شريحة فارغة</string>
+    <string name="slides4_kind_blank_desc">تستخدم أحد تخطيطات هذا العرض</string>
+    <string name="slides4_kind_note">صفحة ملاحظات</string>
+    <string name="slides4_kind_note_desc">شريحة بيضاء للكتابة بخط اليد</string>
+    <string name="slides4_kind_duplicate">تكرار الشريحة %1$d</string>
+    <string name="slides4_kind_duplicate_desc">نسخة من الشريحة مع ملاحظات المتحدث ورسوماتك</string>
+    <string name="slides4_layout">التخطيط</string>
+    <string name="slides4_layout_unnamed">تخطيط %1$d</string>
+    <string name="slides4_title_hint">العنوان (اختياري)</string>
+    <string name="slides4_title_added">لا يحتوي هذا التخطيط على مربع عنوان؛ ستتم إضافة واحد في الأعلى.</string>
+    <string name="slides4_insert">إدراج</string>
+    <string name="slides4_duplicate">تكرار الشريحة</string>
+    <string name="slides4_move_up">نقل الشريحة لأعلى</string>
+    <string name="slides4_move_down">نقل الشريحة لأسفل</string>
+    <string name="slides4_hide">إخفاء الشريحة</string>
+    <string name="slides4_unhide">إظهار الشريحة</string>
+    <string name="slides4_delete">حذف الشريحة</string>
+    <string name="slides4_delete_title">حذف الشريحة %1$d؟</string>
+    <string name="slides4_delete_text">ستُحذف الشريحة وملاحظات المتحدث الخاصة بها من الملف، مع رسوماتك وملاحظاتك عليها.</string>
+    <string name="slides4_delete_confirm">حذف</string>
+    <string name="slides4_updating">جارٍ تحديث الشرائح…</string>
+    <string name="slides4_failed">تعذّر تغيير الشرائح. لم يتم تعديل الملف.</string>
+    <string name="slides4_slide_menu">خيارات الشريحة %1$d</string>
 </resources>

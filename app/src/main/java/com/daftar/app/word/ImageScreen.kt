@@ -23,6 +23,8 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Draw
+import androidx.compose.material.icons.rounded.TextSnippet
+import androidx.compose.material.icons.rounded.Translate
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.PictureAsPdf
@@ -68,6 +70,7 @@ import com.daftar.app.data.Storage
 import com.daftar.app.ink.ImageItem
 import com.daftar.app.ink.InkDoc
 import com.daftar.app.ink.InkPage
+import com.daftar.app.ml.OcrTextSheet
 import com.daftar.app.pdf.PdfTools
 import com.daftar.app.ui.ConvertButton
 import com.daftar.app.ui.EmptyState
@@ -117,6 +120,8 @@ fun ImageScreen(path: String) {
     var menu by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val zoom = remember(path, version) { ImageZoom() }
+    // ml-agent: OCR / translate sheet (null = closed, false = copy text, true = translate)
+    var ocrSheet by remember { mutableStateOf<Boolean?>(null) }
 
     val savedFmt = stringResource(R.string.saved_to)
     val pdfFailed = stringResource(R.string.word_img_pdf_failed)
@@ -194,12 +199,32 @@ fun ImageScreen(path: String) {
                         enabled = !busy, onClick = { menu = false; annotate() },
                     )
                     DropdownMenuItem(
+                        text = { Text(stringResource(R.string.ml_copy_text)) },
+                        leadingIcon = { Icon(Icons.Rounded.TextSnippet, null, tint = D.c.muted) },
+                        onClick = { menu = false; ocrSheet = false },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.ml_translate)) },
+                        leadingIcon = { Icon(Icons.Rounded.Translate, null, tint = D.c.muted) },
+                        onClick = { menu = false; ocrSheet = true },
+                    )
+                    DropdownMenuItem(
                         text = { Text(stringResource(R.string.word_img_to_pdf)) },
                         leadingIcon = { Icon(Icons.Rounded.PictureAsPdf, null, tint = D.c.muted) },
                         enabled = !busy, onClick = { menu = false; toPdf() },
                     )
                 }
             }
+        }
+        ocrSheet?.let { tr ->
+            OcrTextSheet(
+                source = { ImageIo.loadOriented(file, 4096) },
+                translate = tr,
+                noteDir = file.parentFile ?: Storage.root,
+                noteName = file.nameWithoutExtension,
+                onNote = { f -> pane.push(Screen.Note(f.absolutePath)) },
+                onDismiss = { ocrSheet = null },
+            )
         }
         Box(Modifier.fillMaxWidth().height(3.dp)) {
             if (busy) LinearProgressIndicator(Modifier.fillMaxSize(), color = D.c.accent, trackColor = D.c.surfaceAlt)

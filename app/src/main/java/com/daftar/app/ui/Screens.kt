@@ -49,9 +49,6 @@ import com.daftar.app.data.Prefs
 import com.daftar.app.data.Storage
 import com.daftar.app.ink.InkEditorScaffold
 import com.daftar.app.ink.InkDoc
-import com.daftar.app.planner.EventType
-import com.daftar.app.planner.Occurrence
-import com.daftar.app.planner.Planner
 import com.daftar.app.ui.theme.D
 import com.daftar.app.ui.workspace.fileItemGestures
 import com.daftar.app.ui.theme.folderColor
@@ -64,10 +61,6 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
-
-private fun eventColor(type: Int) = folderColor(
-    when (type) { EventType.EXAM -> 0; EventType.ASSIGNMENT -> 2; EventType.MEETING -> 7; EventType.CLASS -> 6; else -> 11 }
-)
 
 @Composable
 private fun gutter() = if (LocalWidthClass.current == WidthClass.Compact) D.gutter else D.gutterWide
@@ -102,7 +95,6 @@ fun HomeScreen() {
     val subjects = remember(v) { Storage.list(Storage.root).filter { it.kind == Kind.FOLDER } }
     val recents = remember(v, Storage.recents.size) { Storage.recents.map { File(it) }.filter { it.exists() }.take(8).map { Storage.entry(it) } }
     val pins = remember(v, Storage.pins.size) { Storage.pins.map { File(it) }.filter { it.exists() }.map { Storage.entry(it) } }
-    val upcoming = remember(Planner.version) { Planner.upcoming(5) }
 
     val pending by MainActivity.pendingAction
     LaunchedEffect(pending) {
@@ -128,12 +120,14 @@ fun HomeScreen() {
                 Row(Modifier.fillMaxWidth().padding(top = 16.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     QuickAction(Icons.Rounded.Draw, stringResource(R.string.new_note), Color(0xFF3B82F6)) { actions.quick("note", null) }
                     QuickAction(Icons.Rounded.Dashboard, stringResource(R.string.new_whiteboard), Color(0xFF6366F1)) { actions.quick("whiteboard", null) }
+                    QuickAction(Icons.Rounded.Description, stringResource(R.string.new_word_doc), Color(0xFF3B82F6)) { actions.quick("word", null) }
                     QuickAction(Icons.Rounded.CreateNewFolder, stringResource(R.string.new_folder), Color(0xFF10B981)) { actions.newFolder(Storage.root) }
                     QuickAction(Icons.Rounded.FileUpload, stringResource(R.string.import_file), Color(0xFFF59E0B)) { actions.quick("import", null) }
                     QuickAction(Icons.Rounded.DocumentScanner, stringResource(R.string.files_scan), Color(0xFF0EA5E9)) { actions.quick("scan", null) }  // files-agent hook
                     QuickAction(Icons.Rounded.Transform, stringResource(R.string.convert), Color(0xFFEF4444)) { Nav.tab(Screen.Convert()) }
                     QuickAction(Icons.Rounded.EventAvailable, stringResource(R.string.add_event), Color(0xFF8B5CF6)) { pane.push(Screen.EditEvent(null)) }
                 }
+                com.daftar.app.ui.tags.SmartFiltersSection()  // tags-agent hook: "Smart filters" row
 
                 if (expanded) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
@@ -142,14 +136,16 @@ fun HomeScreen() {
                             RecentSection(recents, actions)
                         }
                         Column(Modifier.weight(1f)) {
-                            UpcomingSection(upcoming)
+                            com.daftar.app.planner.countdown.HomeUpcomingSection()  // countdown-agent: countdown cards
                             com.daftar.app.study.StudyHomeCard()
+                            com.daftar.app.grades.GpaHomeStat()
                             if (pins.isNotEmpty()) PinnedSection(pins, actions)
                         }
                     }
                 } else {
-                    UpcomingSection(upcoming)
+                    com.daftar.app.planner.countdown.HomeUpcomingSection()  // countdown-agent: countdown cards
                     com.daftar.app.study.StudyHomeCard()
+                    com.daftar.app.grades.GpaHomeStat()
                     SubjectsSection(subjects, actions, columns = if (compact) 0 else 3)
                     if (pins.isNotEmpty()) PinnedSection(pins, actions)
                     RecentSection(recents, actions)
@@ -237,79 +233,6 @@ private fun PinnedSection(pins: List<Entry>, actions: Actions) {
     }
 }
 
-@Composable
-private fun UpcomingSection(items: List<Occurrence>) {
-    val c = D.c
-    SectionTitle(stringResource(R.string.upcoming)) {
-        TextButton(onClick = { Nav.tab(Screen.Planner) }) { Text(stringResource(R.string.see_all)) }
-    }
-    // Ticks every 20 s so the countdowns stay live (minutes resolution).
-    val now = rememberTickingNow(60_000)
-    Column(Modifier.fillMaxWidth().card(c).padding(4.dp)) {
-        if (items.isEmpty()) EmptyState(Icons.Rounded.EventAvailable, stringResource(R.string.nothing_upcoming)) {
-            OutlinedButton(onClick = { pane.push(Screen.EditEvent(null)) }) { Text(stringResource(R.string.add_event)) }
-        }
-        items.forEach { o ->
-            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { pane.push(Screen.EditEvent(o.event.id)) }.padding(10.dp),
-                verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.width(4.dp).height(38.dp).clip(RoundedCornerShape(2.dp)).background(eventColor(o.event.type)))
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(o.event.title, style = MaterialTheme.typography.bodyLarge, color = c.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(whenLabel(o), style = MaterialTheme.typography.bodySmall, color = c.muted, maxLines = 1)
-                }
-                Spacer(Modifier.width(8.dp))
-                Countdown(o.start, o.end, now, eventColor(o.event.type))
-            }
-        }
-    }
-}
-
-/** "2d 4h", "3h 12m", "12m" until [start]; "Now" while it runs. Shown at the row's end (left side in Arabic). */
-@Composable
-private fun Countdown(start: Long, end: Long, now: Long, tint: Color) {
-    val c = D.c
-    val left = start - now
-    val text = when {
-        left <= 0 && now <= maxOf(end, start) -> stringResource(R.string.countdown_now)
-        left <= 0 -> stringResource(R.string.countdown_now)
-        else -> {
-            val mins = (left + 59_999) / 60_000
-            val d = mins / (24 * 60); val h = (mins / 60) % 24; val m = mins % 60
-            when {
-                d > 0 -> stringResource(R.string.countdown_dh, d, h)
-                h > 0 -> stringResource(R.string.countdown_hm, h, m)
-                else -> stringResource(R.string.countdown_m, m)
-            }
-        }
-    }
-    val urgent = left in 0..(24 * 3600_000L)
-    Column(horizontalAlignment = Alignment.End) {
-        Text(text, style = MaterialTheme.typography.labelLarge, color = if (urgent) tint else c.ink, maxLines = 1,
-            modifier = Modifier.background(if (urgent) tint.copy(alpha = 0.12f) else c.surfaceAlt, RoundedCornerShape(8.dp))
-                .padding(horizontal = 8.dp, vertical = 4.dp))
-        if (left > 0) Text(stringResource(R.string.countdown_left), style = MaterialTheme.typography.bodySmall, color = c.muted,
-            modifier = Modifier.padding(top = 2.dp))
-    }
-}
-
-@Composable
-private fun whenLabel(o: Occurrence): String {
-    val day = DateUtilsCompat.dayLabel(o.start, stringResource(R.string.today), stringResource(R.string.tomorrow))
-    return if (o.event.allDay) day else day + " · " + DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(o.start))
-}
-
-private object DateUtilsCompat {
-    fun dayLabel(t: Long, today: String, tomorrow: String): String {
-        val a = Calendar.getInstance(); val b = Calendar.getInstance().apply { timeInMillis = t }
-        fun same(x: Calendar, y: Calendar) = x.get(Calendar.YEAR) == y.get(Calendar.YEAR) && x.get(Calendar.DAY_OF_YEAR) == y.get(Calendar.DAY_OF_YEAR)
-        if (same(a, b)) return today
-        a.add(Calendar.DAY_OF_YEAR, 1)
-        if (same(a, b)) return tomorrow
-        return SimpleDateFormat("EEE d MMM", Locale.getDefault()).format(Date(t))
-    }
-}
-
 // =====================================================================================
 // Files (library browser)
 // =====================================================================================
@@ -322,9 +245,14 @@ fun LibraryScreen(dir: String) {
     val actions = rememberActions()
     val v = Storage.version
     val sort = Prefs.sortMode
-    val entries = remember(dir, v, sort) { if (folder.exists()) Storage.list(folder) else emptyList() }
+    val listed = remember(dir, v, sort) { if (folder.exists()) Storage.list(folder) else emptyList() }
     val compact = LocalWidthClass.current == WidthClass.Compact
     val isRoot = Storage.isRoot(folder)
+    // tags-agent hook: smart filter chips at the library root (results replace the listing) + multi-select tagging
+    var smart by androidx.compose.runtime.saveable.rememberSaveable(dir) { mutableStateOf<String?>(null) }
+    val smartResults = com.daftar.app.ui.tags.rememberSmartResults(if (isRoot) smart else null)
+    val entries = smartResults ?: listed
+    var bulkTags by remember { mutableStateOf(false) }
     val meta = remember(dir, v) { if (isRoot) null else Storage.meta(folder) }
     var sortMenu by remember { mutableStateOf(false) }
     val grid = Prefs.gridView && !compact
@@ -346,6 +274,7 @@ fun LibraryScreen(dir: String) {
                     if (!meta?.desc.isNullOrBlank()) Text(meta!!.desc, style = MaterialTheme.typography.bodyMedium, color = c.muted, maxLines = 1)
                 }
                 IconButton(onClick = { actions.quick("scan", folder) }) { Icon(Icons.Rounded.DocumentScanner, stringResource(R.string.files_scan), tint = c.ink) }  // files-agent hook
+                if (entries.isNotEmpty()) IconButton(onClick = { bulkTags = true }) { Icon(Icons.Rounded.Sell, stringResource(R.string.tags_select_items), tint = c.ink) }  // tags-agent hook
                 if (!isRoot) IconButton(onClick = { actions.menu(Storage.entry(folder)) }) { Icon(Icons.Rounded.MoreVert, stringResource(R.string.more), tint = c.ink) }
                 Box {
                     IconButton(onClick = { sortMenu = true }) { Icon(Icons.AutoMirrored.Rounded.Sort, stringResource(R.string.sort), tint = c.ink) }
@@ -377,7 +306,13 @@ fun LibraryScreen(dir: String) {
                 }
             }
 
-            if (entries.isEmpty()) {
+            if (isRoot) com.daftar.app.ui.tags.SmartFilterChips(smart, { smart = it },
+                Modifier.padding(horizontal = gutter()).padding(bottom = 8.dp))  // tags-agent hook
+            if (bulkTags) com.daftar.app.ui.tags.BulkTagDialog(entries) { bulkTags = false }  // tags-agent hook
+
+            if (entries.isEmpty() && smartResults != null) {
+                EmptyState(Icons.Rounded.FilterAltOff, stringResource(R.string.tags_filter_no_matches), Modifier.padding(top = 48.dp))
+            } else if (entries.isEmpty()) {
                 EmptyState(Icons.Rounded.FolderOpen, stringResource(R.string.empty_folder), Modifier.padding(top = 48.dp)) {
                     Button(onClick = { actions.create(folder) }) { Text(stringResource(R.string.new_item)) }
                 }
@@ -392,7 +327,7 @@ fun LibraryScreen(dir: String) {
                 }
             } else {
                 LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = gutter(), end = gutter(), top = 4.dp, bottom = 120.dp)) {
-                    items(entries, key = { it.file.absolutePath }) { e -> EntryRow(e, { pane.open(ctx, e.file) }, { actions.menu(e) }, showParent = false) }
+                    items(entries, key = { it.file.absolutePath }) { e -> EntryRow(e, { pane.open(ctx, e.file) }, { actions.menu(e) }, showParent = smartResults != null) }
                 }
             }
         }
@@ -428,6 +363,7 @@ fun NotesScreen() {
     val actions = rememberActions()
     val v = Storage.version
     var filter by remember { mutableStateOf<String?>(null) }
+    var tagFilter by remember { mutableStateOf<String?>(null) }  // tags-agent hook
     var notes by remember { mutableStateOf<List<NoteInfo>>(emptyList()) }
     LaunchedEffect(v) {
         notes = withContext(Dispatchers.IO) {
@@ -438,7 +374,9 @@ fun NotesScreen() {
         }
     }
     val subjects = notes.mapNotNull { it.subject }.distinctBy { it.absolutePath }
-    val shown = notes.filter { filter == null || it.subject?.absolutePath == filter }
+    val tv = com.daftar.app.data.Tags.version
+    val shown = notes.filter { (filter == null || it.subject?.absolutePath == filter) &&
+        (tagFilter == null || tv >= 0 && tagFilter in com.daftar.app.data.Tags.idsOf(it.e.file)) }
 
     Box(Modifier.fillMaxSize().background(c.bg)) {
         Column(Modifier.fillMaxSize()) {
@@ -449,6 +387,7 @@ fun NotesScreen() {
                     val m = Storage.meta(s)
                     Chip(s.name, filter == s.absolutePath, { filter = s.absolutePath }, tint = folderColor(m.color))
                 }
+                com.daftar.app.ui.tags.NotesTagChips(notes.map { it.e.file }, tagFilter) { tagFilter = it }  // tags-agent hook
             }
             if (shown.isEmpty()) EmptyState(Icons.AutoMirrored.Rounded.StickyNote2, stringResource(R.string.no_notes), Modifier.padding(top = 40.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -468,6 +407,7 @@ fun NotesScreen() {
                         Column(Modifier.weight(1f)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(n.e.name, style = MaterialTheme.typography.titleMedium, color = c.ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                                com.daftar.app.ui.tags.TagDots(n.e.file, modifier = Modifier.padding(horizontal = 6.dp))  // tags-agent hook
                                 Text(DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(n.e.file.lastModified())), style = MaterialTheme.typography.bodySmall, color = c.muted)
                             }
                             Text(n.preview.ifBlank { if (n.whiteboard) stringResource(R.string.whiteboard) else stringResource(R.string.pages_n, n.pages) },
@@ -505,16 +445,20 @@ fun SearchScreen(query: String) {
     val ctx = LocalContext.current
     val c = D.c
     val actions = rememberActions()
-    var q by remember { mutableStateOf(query) }
+    // tags-agent hook: "#tag" in the query, tag chips, smart filter chips ("smart:<id>" query from Home)
+    var q by remember(query) { mutableStateOf(com.daftar.app.ui.tags.TagSearch.initialText(query)) }
+    var tagSel by remember(query) { mutableStateOf(setOf<String>()) }
+    var smart by remember(query) { mutableStateOf(com.daftar.app.ui.tags.TagSearch.initialSmart(query)) }
     var type by remember { mutableIntStateOf(0) }   // 0 all, 1 folders, 2 files, 3 notes
     var results by remember { mutableStateOf<List<Entry>>(emptyList()) }
     val v = Storage.version
-    LaunchedEffect(q, v) { results = withContext(Dispatchers.IO) { Storage.search(q.trim()) } }
+    val tv = com.daftar.app.data.Tags.version
+    LaunchedEffect(q, v, tv, tagSel, smart) { results = withContext(Dispatchers.IO) { com.daftar.app.ui.tags.TagSearch.run(ctx, q, tagSel, smart) } }
     val shown = results.filter {
         when (type) { 1 -> it.kind == Kind.FOLDER; 2 -> it.kind != Kind.FOLDER && it.kind != Kind.NOTE; 3 -> it.kind == Kind.NOTE; else -> true }
     }
     val fr = remember { FocusRequester() }
-    LaunchedEffect(Unit) { runCatching { fr.requestFocus() } }
+    LaunchedEffect(Unit) { if (smart == null) runCatching { fr.requestFocus() } }
 
     Column(Modifier.fillMaxSize().background(c.bg)) {
         Header(stringResource(R.string.search))
@@ -532,7 +476,9 @@ fun SearchScreen(query: String) {
         FlowRow(Modifier.padding(horizontal = gutter(), vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf(R.string.all, R.string.folders, R.string.files, R.string.notes).forEachIndexed { i, l -> Chip(stringResource(l), type == i, { type = i }) }
         }
-        if (q.isNotBlank() && shown.isEmpty()) EmptyState(Icons.Rounded.SearchOff, stringResource(R.string.no_results))
+        com.daftar.app.ui.tags.SearchTagFilters(tagSel, { tagSel = it }, smart, { smart = it },
+            Modifier.padding(horizontal = gutter()).padding(bottom = 12.dp))  // tags-agent hook
+        if (com.daftar.app.ui.tags.TagSearch.active(q, tagSel, smart) && shown.isEmpty()) EmptyState(Icons.Rounded.SearchOff, stringResource(R.string.no_results))
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = gutter(), end = gutter(), bottom = 48.dp)) {
             items(shown, key = { it.file.absolutePath }) { e -> EntryRow(e, { pane.open(ctx, e.file) }, { actions.menu(e) }) }
         }
@@ -588,6 +534,7 @@ fun SettingsScreen() {
             }
             com.daftar.app.planner.PlannerSettingsSection()
             com.daftar.app.study.StudySettingsSection()
+            com.daftar.app.ml.MlSettingsSection()
             SettingsGroup(stringResource(R.string.set_storage)) {
                 Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Rounded.Storage, null, tint = c.muted)
@@ -616,7 +563,7 @@ fun SettingsScreen() {
             }
             Column(Modifier.padding(vertical = 24.dp)) {
                 DaftarBrand(28.dp, 20.sp)
-                Text(stringResource(R.string.app_tagline) + " · 2.0", color = c.muted, style = MaterialTheme.typography.bodySmall,
+                Text(stringResource(R.string.app_tagline) + " · 3.0", color = c.muted, style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.padding(top = 4.dp))
             }
         }

@@ -89,6 +89,13 @@ class InkView(context: Context) : View(context) {
     var hlColor = 0x66F2C94C
     var hlWidth = 14f
     var shapeColor = 0xFF1F2937.toInt()
+    /** Shape tool: the library shape drawn by dragging ([InkShapes] kind), or "" = Auto (freehand → recognized). */
+    var shapeKind = ""
+    /** Shape being dragged out: start (page coords of [drawPage]) and its live preview. */
+    private var shapeDrag = false
+    private var shX0 = 0f
+    private var shY0 = 0f
+    private var shapePreview: Stroke? = null
     var eraserRadiusDp = 12f
     var tapeColor = InkRender.tapeColors[0]
     var tapeWidth = 26f
@@ -96,6 +103,51 @@ class InkView(context: Context) : View(context) {
     var stylusButtonTool = Tool.ERASER
     var bgColor = 0xFFF7F6F2.toInt()
     var darkPaper = false
+
+    /**
+     * Night paper (on screen only): notes get the dark paper colour and dimmed lines, PDF / slide page bitmaps are drawn
+     * through a hue-preserving inversion, and ink colours are mapped for readability ([InkNight]). Saved colours never change.
+     */
+    var night = false
+        set(v) {
+            if (field == v) return
+            field = v
+            tiles2.night = v; tiles2.clear()
+            editItem?.let { textOverlay.apply(it, force = true) }
+            invalidate()
+        }
+    /** Colour [c] as displayed right now (night mapping), for views drawn outside [onDraw] (the text editor). */
+    internal fun displayInk(c: Int) = if (night) InkNight.ink(c) else c
+    private val nightBmpPaint = Paint(Paint.FILTER_BITMAP_FLAG).apply { colorFilter = InkNight.pageFilter }
+
+    // ---- ruler (screen-space straightedge, never saved) ----
+    internal val ruler = InkRuler(resources.displayMetrics.density)
+    /** Shows / hides the ruler (placed in the middle of the view the first time). */
+    var rulerOn: Boolean
+        get() = ruler.on
+        set(v) {
+            if (ruler.on == v) return
+            ruler.on = v
+            if (v && !ruler.placed && width > 0) ruler.place(width, height)
+            invalidate()
+        }
+    /** Stroke being drawn along a ruler edge: side (−1 top, +1 bottom, 0 = none) and its extent along the ruler. */
+    private var ruled = 0
+    private var rT0 = 0f
+    private var rT1 = 0f
+    private var rP = 0.6f
+    private val rulA = FloatArray(4)
+    private val rTmp = FloatArray(2)
+    private val ruledPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
+
+    // ---- two-page (book spread) view ----
+    /** Requested two-page view; spreads are used only in landscape on windows ≥ 600 dp, never on whiteboards. */
+    var twoPages = false; private set
+    var coverAlone = true; private set
+    private var spread = false
+    private var pageLefts = FloatArray(0)
+    /** Second page of the current spread (-1 = single page view / lone page). */
+    var spreadLast = -1; private set
     // defaults for new text boxes (set from the editor; last used values)
     var textFont = "sans"
     var textSize = 16f
@@ -144,7 +196,7 @@ class InkView(context: Context) : View(context) {
     val isWhiteboard get() = doc.infinite
 
     // ---- input ----
-    private enum class Mode { NONE, DRAW, NAV, SEL_MOVE, SEL_SCALE, PEN_ZOOM, TEXT_DRAG, TEXT_PINCH }
+    private enum class Mode { NONE, DRAW, NAV, SEL_MOVE, SEL_SCALE, SEL_ROTATE, SEL_SHAPE, PEN_ZOOM, TEXT_DRAG, TEXT_PINCH, RULER }
     private var mode = Mode.NONE
     private var activeTool = Tool.PEN
     private var drawPage = -1
@@ -212,18 +264,42 @@ class InkView(context: Context) : View(context) {
 
     // ---- selection ----
     private class Sel(
-        val page: Int, val strokes: List<Stroke>, val texts: List<TextItem>, val images: List<ImageItem>,
-        val links: List<LinkItem>, val box: RectF,
+        val page: Int, var strokes: List<Stroke>, val texts: List<TextItem>, val images: List<ImageItem>,
+        val links: List<LinkItem>, val box: RectF, val stickers: List<StickerItem> = emptyList(),
     ) {
         var dx = 0f; var dy = 0f; var s = 1f
+        /** Rotation in degrees around the (moved, scaled) box centre; only offered when [canRotate]. */
+        var rot = 0f
         var changed = false
-        fun map(x: Float, y: Float) = Pair(box.left + (x - box.left) * s + dx, box.top + (y - box.top) * s + dy)
+        /** Text boxes, pictures and link chips have no rotation in the model. */
+        val canRotate get() = texts.isEmpty() && images.isEmpty() && links.isEmpty()
         fun mapX(x: Float) = box.left + (x - box.left) * s + dx
         fun mapY(y: Float) = box.top + (y - box.top) * s + dy
+        fun cx() = mapX(box.centerX())
+        fun cy() = mapY(box.centerY())
+        fun map(x: Float, y: Float): Pair<Float, Float> {
+            val mx = mapX(x); val my = mapY(y)
+            if (rot == 0f) return mx to my
+            val r = Math.toRadians(rot.toDouble()); val c = cos(r).toFloat(); val sn = sin(r).toFloat()
+            val ox = mx - cx(); val oy = my - cy()
+            return (cx() + ox * c - oy * sn) to (cy() + ox * sn + oy * c)
+        }
+        /** A single library shape (no rotation pending): edited with its own handles. */
+        val shape: Stroke? get() = if (strokes.size == 1 && texts.isEmpty() && images.isEmpty() && links.isEmpty() && stickers.isEmpty() &&
+            rot == 0f && (InkShapes.isLine(strokes[0].shape) || InkShapes.isBox(strokes[0].shape))) strokes[0] else null
     }
     private var sel: Sel? = null
     private var selGrabX = 0f
     private var selGrabY = 0f
+    private var selRot0 = 0f
+    private var selRotGrab = 0f
+    private var selRotSnap = Float.NaN
+    private var shapeHandle = -1
+    private var shapeFixX = 0f
+    private var shapeFixY = 0f
+    private val shapePts = FloatArray(8)
+    private val shapeBox = RectF()
+    private val unrot = FloatArray(2)
     val hasSelection get() = sel != null
     /** Page of the current lasso selection (-1 = none). */
     val selectionPage: Int get() = sel?.page ?: -1
@@ -318,14 +394,72 @@ class InkView(context: Context) : View(context) {
     private fun relayout() {
         val n = doc.pages.size
         pageTops = FloatArray(n)
+        pageLefts = FloatArray(n)
+        spread = twoPages && !doc.infinite && n > 1 && width > height && width >= 600f * density
         var y = 0f
         maxW = 1f
-        for (i in 0 until n) {
-            pageTops[i] = y
-            y += doc.pages[i].h + gap
-            maxW = max(maxW, doc.pages[i].w)
+        if (!spread) {
+            for (i in 0 until n) {
+                pageTops[i] = y
+                y += doc.pages[i].h + gap
+                maxW = max(maxW, doc.pages[i].w)
+            }
+            for (i in 0 until n) pageLefts[i] = (maxW - doc.pages[i].w) / 2f
+        } else {
+            // book spreads: left page right-aligned to the spine, right page left-aligned (cover alone on the right)
+            var half = 1f
+            for (p in doc.pages) half = max(half, p.w)
+            maxW = half * 2f + gap
+            var i = 0
+            while (i < n) {
+                val single = (i == 0 && coverAlone) || i + 1 >= n
+                val a = doc.pages[i]
+                if (single) {
+                    pageTops[i] = y
+                    pageLefts[i] = if (i == 0) half + gap else half - a.w
+                    y += a.h + gap; i++
+                } else {
+                    val b = doc.pages[i + 1]
+                    pageTops[i] = y; pageTops[i + 1] = y
+                    pageLefts[i] = half - a.w; pageLefts[i + 1] = half + gap
+                    y += max(a.h, b.h) + gap; i += 2
+                }
+            }
+            // right-to-left UI (Arabic): books open the other way
+            if (layoutDirection == LAYOUT_DIRECTION_RTL) for (k in 0 until n) pageLefts[k] = maxW - pageLefts[k] - doc.pages[k].w
         }
         totalH = max(1f, y - gap)
+    }
+
+    /** Two-page view on / off (and cover alone); keeps the current page and zoom. */
+    fun setTwoPages(on: Boolean, cover: Boolean) {
+        if (twoPages == on && coverAlone == cover) return
+        twoPages = on; coverAlone = cover
+        if (doc.pages.isEmpty() || doc.infinite) return
+        if (width == 0 || !laidOut) { relayout(); return }
+        finishEditing()
+        relayoutKeep()
+    }
+
+    /** Re-lays the pages out (spread change, resize) keeping the zoom and the page at the top of the view. */
+    private fun relayoutKeep() {
+        val zoom = if (fitScale > 0) scale / fitScale else 1f
+        val idx = currentPage.coerceIn(0, max(0, pageTops.size - 1))
+        val off = if (pageTops.isNotEmpty()) toDocY(0f) - pageTops[idx] else 0f
+        relayout()
+        computeFit()
+        scale = fitScale * zoom; zoomTime = SystemClock.uptimeMillis()
+        sy = if (idx < pageTops.size) max(0f, (pageTops[idx] + off) * scale) else 0f
+        clamp(); updateCurrentPage(true)
+        tiles.values.forEach { it.bmp.recycle() }; tiles.clear()
+        settleSoon(); notifyZoom(); invalidate()
+    }
+
+    /** The page under the middle of the view (insertions), else the current page. */
+    private fun targetPage(): Int {
+        if (doc.infinite) return 0
+        hit(width / 2f, height / 2f, strict = false)?.let { return it.first }
+        return currentPage.coerceIn(0, doc.pages.size - 1)
     }
 
     private fun computeFit() {
@@ -338,6 +472,8 @@ class InkView(context: Context) : View(context) {
     private fun maxScale() = fitScale * 8f
 
     private fun initialView() {
+        if (!doc.infinite) relayout()
+        if (ruler.on && !ruler.placed) ruler.place(width, height)
         computeFit()
         scale = fitScale; zoomTime = SystemClock.uptimeMillis()
         if (doc.infinite && doc.pages.isNotEmpty()) {
@@ -376,7 +512,7 @@ class InkView(context: Context) : View(context) {
         doc.pages = listOf(shifted.copy(w = nw, h = nh))
     }
 
-    private fun pageLeft(i: Int) = (maxW - doc.pages[i].w) / 2f
+    private fun pageLeft(i: Int) = if (i < pageLefts.size) pageLefts[i] else (maxW - doc.pages[i].w) / 2f
     private fun offX(): Float { val cw = maxW * scale + 2 * margin; return if (cw < width) (width - cw) / 2f else 0f }
     private fun toScreenX(docX: Float) = margin + docX * scale - sx + offX()
     private fun toScreenY(docY: Float) = margin + docY * scale - sy
@@ -391,14 +527,18 @@ class InkView(context: Context) : View(context) {
 
     /** Page index under a doc-Y coordinate (or -1 if between/outside pages). */
     private fun pageAtDoc(docX: Float, docY: Float, strict: Boolean = true): Int {
+        var best = -1; var bestD = Float.MAX_VALUE
         for (i in pageTops.indices) {
             val top = pageTops[i]; val p = doc.pages[i]
             val l = pageLeft(i)
             if (docY >= top - (if (strict) 0f else gap / 2) && docY <= top + p.h + (if (strict) 0f else gap / 2)) {
-                if (!strict || (docX >= l && docX <= l + p.w)) return i
+                val d = if (docX < l) l - docX else if (docX > l + p.w) docX - l - p.w else 0f
+                if (strict && d > 0f) continue
+                if (d < bestD) { bestD = d; best = i }     // spreads: the nearer page of the row
+                if (d == 0f) return i
             }
         }
-        return -1
+        return best
     }
 
     /** Screen point -> (page, pageX, pageY). On a whiteboard every point is on the (single) page. */
@@ -417,13 +557,17 @@ class InkView(context: Context) : View(context) {
         sy = sy.coerceIn(0f, max(0f, ch - height))
     }
 
-    private fun updateCurrentPage() {
+    private fun updateCurrentPage(force: Boolean = false) {
         if (pageTops.isEmpty() || doc.infinite) return
         val cy = toDocY(height * 0.4f)
         var cur = 0
-        for (i in pageTops.indices) if (pageTops[i] <= cy) cur = i
-        if (cur != currentPage) { currentPage = cur; listener?.onPageChanged(cur, doc.pages.size) }
+        for (i in pageTops.indices) if (pageTops[i] <= cy && (i == 0 || pageTops[i] != pageTops[i - 1])) cur = i
+        val last = spreadOf(cur)
+        if (cur != currentPage || last != spreadLast || force) { currentPage = cur; spreadLast = last; listener?.onPageChanged(cur, doc.pages.size) }
     }
+
+    /** Second page of the spread starting at [i], or -1. */
+    private fun spreadOf(i: Int): Int = if (spread && i + 1 < pageTops.size && pageTops[i + 1] == pageTops[i]) i + 1 else -1
 
     /** Scroll so point [yPt] (page points) of page [i] sits in the upper third of the view (search matches). */
     fun goToPage(i: Int, yPt: Float) {
@@ -451,7 +595,8 @@ class InkView(context: Context) : View(context) {
         scroller.forceFinished(true)
         sy = pageTops[i] * scale
         clamp(); updateCurrentPage()
-        currentPage = i; listener?.onPageChanged(i, doc.pages.size)
+        val first = if (spread && i > 0 && pageTops[i - 1] == pageTops[i]) i - 1 else i
+        currentPage = first; spreadLast = spreadOf(first); listener?.onPageChanged(first, doc.pages.size)
         settleSoon(); invalidate()
     }
 
@@ -508,12 +653,9 @@ class InkView(context: Context) : View(context) {
             sx = cx * scale - w / 2f; sy = cy * scale - h / 2f
             growIfNeeded()
         } else {
-            val zoom = if (fitScale > 0) scale / fitScale else 1f
-            val topDoc = toDocY(0f)
-            computeFit()
-            scale = fitScale * zoom
-            sy = max(0f, topDoc * scale)
+            relayoutKeep()      // also switches spreads on / off with the orientation
         }
+        ruler.fit(w, h)
         clamp(); tiles.values.forEach { it.bmp.recycle() }; tiles.clear(); settleSoon(); notifyZoom(); invalidate()
         if (editItem != null) post { ensureCaretVisible() }     // keyboard opened / window resized while typing
     }
@@ -574,9 +716,13 @@ class InkView(context: Context) : View(context) {
         // Compose hosts views with clipChildren=false: never paint outside our own bounds.
         c.clipRect(0, 0, width, height)
         if (doc.pages.isEmpty()) { c.drawColor(bgColor); return }
-        tiles2.beginFrame()
-        if (doc.infinite) drawBoard(c) else drawPages(c)
-        tiles2.endFrame()
+        InkRender.setNight(night)
+        try {
+            tiles2.beginFrame()
+            if (doc.infinite) drawBoard(c) else drawPages(c)
+            tiles2.endFrame()
+        } finally { InkRender.setNight(false) }
+        ruler.draw(c, scale, night || darkPaper)
         sel?.let { drawSelectionChrome(c, it) }
         if (hasTextBox) drawTextChrome(c)
         if (eraserOn) c.drawCircle(eraserX, eraserY, eraserRadiusDp * density, eraserPaint)
@@ -592,8 +738,8 @@ class InkView(context: Context) : View(context) {
 
     private fun drawPages(c: Canvas) {
         c.drawColor(bgColor)
-        pagePaint.color = doc.paperColor
-        borderPaint.color = if (darkPaper) 0xFF2E333B.toInt() else 0xFFDDDAD3.toInt()
+        pagePaint.color = if (night) InkNight.PAPER else doc.paperColor
+        borderPaint.color = if (night) InkNight.BORDER else if (darkPaper) 0xFF2E333B.toInt() else 0xFFDDDAD3.toInt()
         viewRect.set(0f, 0f, width.toFloat(), height.toFloat())
         for (i in doc.pages.indices) {
             val r = pageScreenRect(i, pageRect)
@@ -604,7 +750,7 @@ class InkView(context: Context) : View(context) {
             c.drawRect(r, pagePaint)
             if (source != null) drawBackground(c, i, r) else {
                 c.save(); c.translate(r.left, r.top); c.scale(scale, scale)
-                InkRender.drawPaper(c, page, darkPaper, visRect, scale)
+                InkRender.drawPaper(c, page, darkPaper || night, visRect, scale)
                 c.restore()
             }
             c.drawRect(r, borderPaint)
@@ -617,13 +763,13 @@ class InkView(context: Context) : View(context) {
     }
 
     private fun drawBoard(c: Canvas) {
-        c.drawColor(doc.paperColor)
+        c.drawColor(if (night) InkNight.PAPER else doc.paperColor)
         val page = doc.pages[0]
         visRect.set(toDocX(0f), toDocY(0f), toDocX(width.toFloat()), toDocY(height.toFloat()))
         c.save()
         val ox = toScreenX(0f); val oy = toScreenY(0f)
         c.translate(ox, oy); c.scale(scale, scale)
-        InkRender.drawPaper(c, page, darkPaper, visRect, scale, bounded = false)
+        InkRender.drawPaper(c, page, darkPaper || night, visRect, scale, bounded = false)
         drawContent(c, 0, page, visRect, ox, oy)
         c.restore()
     }
@@ -640,6 +786,13 @@ class InkView(context: Context) : View(context) {
         }
         val st = page.strokes
         drawStrokes(c, i, page, vis, ox, oy)
+        val sk = page.stickers
+        for (k in sk.indices) {
+            val it = sk[k]
+            // generous cull (rotation): the item's box grown by half its diagonal
+            val m = (it.w + it.h) / 2f
+            if (it.x - m <= vis.right && it.x + it.w + m >= vis.left && it.y - m <= vis.bottom && it.y + it.h + m >= vis.top) InkStickers.draw(c, it)
+        }
         val tx = page.texts
         val editId = if (editPage == i) editItem?.id ?: 0L else 0L
         for (k in tx.indices) {
@@ -792,11 +945,13 @@ class InkView(context: Context) : View(context) {
 
     private fun drawFloating(c: Canvas, s: Sel) {
         c.save()
+        if (s.rot != 0f) c.rotate(s.rot, s.cx(), s.cy())
         c.translate(s.box.left + s.dx, s.box.top + s.dy)
         c.scale(s.s, s.s)
         c.translate(-s.box.left, -s.box.top)
         for (k in s.images.indices) InkRender.drawImage(c, s.images[k])
         for (k in s.strokes.indices) { val st = s.strokes[k]; if (!st.isTape) InkRender.drawStroke(c, st) }
+        for (k in s.stickers.indices) InkStickers.draw(c, s.stickers[k])
         for (k in s.texts.indices) InkRender.drawText(c, s.texts[k])
         for (k in s.links.indices) InkRender.drawLink(c, s.links[k])
         for (k in s.strokes.indices) { val st = s.strokes[k]; if (st.isTape) InkRender.drawTape(c, st, st.revealed) }
@@ -811,10 +966,59 @@ class InkView(context: Context) : View(context) {
 
     private fun drawSelectionChrome(c: Canvas, s: Sel) {
         val b = selScreenBox(s, selRect)
+        val shape = s.shape
+        c.save()
+        if (s.rot != 0f) c.rotate(s.rot, b.centerX(), b.centerY())
         b.inset(-6 * density, -6 * density)
         c.drawRect(b, selPaint)
-        c.drawCircle(b.right, b.bottom, 9 * density, handlePaint)
-        c.drawCircle(b.right, b.bottom, 5 * density, handleInner)
+        if (shape != null) {
+            val n = shapeHandles(s, shape)
+            var k = 0
+            while (k < n) {
+                c.drawCircle(shapePts[k * 2], shapePts[k * 2 + 1], 9 * density, handlePaint)
+                c.drawCircle(shapePts[k * 2], shapePts[k * 2 + 1], 5 * density, handleInner)
+                k++
+            }
+        } else {
+            c.drawCircle(b.right, b.bottom, 9 * density, handlePaint)
+            c.drawCircle(b.right, b.bottom, 5 * density, handleInner)
+        }
+        if (s.canRotate) {
+            // rotation handle above the top edge
+            val hx = b.centerX(); val hy = b.top - ROT_HANDLE * density
+            c.drawLine(hx, b.top, hx, hy, textPaint)
+            c.drawCircle(hx, hy, 9 * density, handlePaint)
+            c.drawCircle(hx, hy, 4 * density, handleInner)
+        }
+        c.restore()
+    }
+
+    /** Screen positions of a library shape's handles into [shapePts]: 2 end points (lines) or 4 box corners. */
+    private fun shapeHandles(s: Sel, st: Stroke): Int {
+        val pl = toScreenX(pageLeft(s.page)); val pt = toScreenY(pageTops[s.page])
+        val p = st.pts
+        if (InkShapes.isLine(st.shape)) {
+            if (p.size < 6) return 0
+            shapePts[0] = pl + s.mapX(p[0]) * scale; shapePts[1] = pt + s.mapY(p[1]) * scale
+            shapePts[2] = pl + s.mapX(p[3]) * scale; shapePts[3] = pt + s.mapY(p[4]) * scale
+            return 2
+        }
+        shapeBox.set(Float.MAX_VALUE, Float.MAX_VALUE, -Float.MAX_VALUE, -Float.MAX_VALUE)
+        var i = 0
+        while (i + 1 < p.size) { shapeBox.union(p[i], p[i + 1]); i += 3 }
+        val l = pl + s.mapX(shapeBox.left) * scale; val t = pt + s.mapY(shapeBox.top) * scale
+        val r = pl + s.mapX(shapeBox.right) * scale; val b = pt + s.mapY(shapeBox.bottom) * scale
+        shapePts[0] = l; shapePts[1] = t; shapePts[2] = r; shapePts[3] = t
+        shapePts[4] = l; shapePts[5] = b; shapePts[6] = r; shapePts[7] = b
+        return 4
+    }
+
+    /** ([x], [y]) rotated back into the selection's unrotated frame → [unrot]. */
+    private fun unrotate(s: Sel, b: RectF, x: Float, y: Float) {
+        if (s.rot == 0f) { unrot[0] = x; unrot[1] = y; return }
+        val r = Math.toRadians(-s.rot.toDouble()); val c = cos(r).toFloat(); val sn = sin(r).toFloat()
+        val ox = x - b.centerX(); val oy = y - b.centerY()
+        unrot[0] = b.centerX() + ox * c - oy * sn; unrot[1] = b.centerY() + ox * sn + oy * c
     }
 
     private fun liveColor() = when (activeTool) {
@@ -825,6 +1029,19 @@ class InkView(context: Context) : View(context) {
     }
 
     private fun drawLive(c: Canvas) {
+        if (shapeDrag) { shapePreview?.let { InkRender.drawStroke(c, it) }; return }
+        if (ruled != 0) {
+            // stroke along the ruler: a straight line, drawn in the tool's look
+            val hl = activeTool == Tool.HIGHLIGHTER
+            val col = InkRender.inkColor(liveColor())
+            val marker = !hl && penStyle == PenStyle.MARKER
+            ruledPaint.color = if (marker) col or 0xFF000000.toInt() else col
+            if (!hl && penStyle == PenStyle.PENCIL) ruledPaint.alpha = (ruledPaint.alpha * 0.85f).toInt()
+            ruledPaint.strokeWidth = if (hl) hlWidth else penWidth
+            ruledPaint.strokeCap = if (hl) Paint.Cap.SQUARE else if (marker) Paint.Cap.BUTT else Paint.Cap.ROUND
+            c.drawLine(rulA[0], rulA[1], rulA[2], rulA[3], ruledPaint)
+            return
+        }
         if (activeTool == Tool.LASSO) {
             if (lassoEffectScale != scale) {
                 lassoEffectScale = scale
@@ -888,7 +1105,8 @@ class InkView(context: Context) : View(context) {
     private fun drawBackground(c: Canvas, i: Int, r: RectF) {
         val want = min((doc.pages[i].w * scale).toInt(), maxCacheWidth(i)).coerceAtLeast(64)
         val bmp = bgCache[i]
-        if (bmp != null && !bmp.isRecycled) c.drawBitmap(bmp, null, r, bmpPaint)
+        val bp = if (night) nightBmpPaint else bmpPaint
+        if (bmp != null && !bmp.isRecycled) c.drawBitmap(bmp, null, r, bp)
         if (bmp == null || (!scaling && abs(bmp.width - want) > want * 0.2f) || (i in staleBg && !scaling)) {
             if (i in staleBg) { staleBg.remove(i); pending.removeAll { it.startsWith("$i:") } }
             requestPage(i, want)
@@ -897,7 +1115,7 @@ class InkView(context: Context) : View(context) {
         if (t != null && t.scale == scale && !scaling) {
             val pl = r.left; val pt = r.top
             tileRect.set(pl + t.doc.left * scale, pt + t.doc.top * scale, pl + t.doc.right * scale, pt + t.doc.bottom * scale)
-            c.drawBitmap(t.bmp, null, tileRect, bmpPaint)
+            c.drawBitmap(t.bmp, null, tileRect, bp)
         }
     }
 
@@ -997,6 +1215,11 @@ class InkView(context: Context) : View(context) {
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN -> onDown(e)
             MotionEvent.ACTION_POINTER_DOWN -> {
+                if (mode == Mode.RULER) {
+                    // the gesture started on the ruler: two fingers move + rotate it
+                    if (e.pointerCount >= 2) ruler.beginTwo(e.getX(0), e.getY(0), e.getX(1), e.getY(1))
+                    return true
+                }
                 if (mode == Mode.TEXT_DRAG && e.pointerCount >= 2) {
                     // second finger on a selected text box: pinch scales the box
                     currentText()?.let { (_, t) ->
@@ -1007,15 +1230,24 @@ class InkView(context: Context) : View(context) {
                     return true
                 }
                 if (mode == Mode.TEXT_PINCH) return true
+                if (mode == Mode.DRAW && shapeDrag) { invalidate(); return true }   // second finger: constrain the shape
                 if (mode == Mode.DRAW && !isPen(e, 0)) {
                     // second finger: user wants to zoom, not draw
-                    npts = 0; live = null; mode = Mode.NAV
+                    npts = 0; live = null; mode = Mode.NAV; ruled = 0
                     eraserOn = false
                     main.removeCallbacks(longPress)
                 }
                 if (mode == Mode.NAV) { scaleDetector.onTouchEvent(e); focus(e, -1) }
             }
             MotionEvent.ACTION_POINTER_UP -> {
+                if (mode == Mode.RULER) {
+                    val up = e.actionIndex
+                    var a = -1; var b = -1
+                    for (k in 0 until e.pointerCount) if (k != up) { if (a < 0) a = k else if (b < 0) b = k }
+                    if (a >= 0 && b >= 0) ruler.beginTwo(e.getX(a), e.getY(a), e.getX(b), e.getY(b))
+                    else if (a >= 0) ruler.beginDrag(e.getX(a), e.getY(a))
+                    return true
+                }
                 if (mode == Mode.NAV) focus(e, e.actionIndex)
                 if (mode == Mode.TEXT_PINCH) { finishTextGesture(); mode = Mode.NONE }
             }
@@ -1024,7 +1256,7 @@ class InkView(context: Context) : View(context) {
             MotionEvent.ACTION_CANCEL -> {
                 main.removeCallbacks(longPress)
                 if (mode == Mode.TEXT_DRAG || mode == Mode.TEXT_PINCH) finishTextGesture()
-                npts = 0; live = null; mode = Mode.NONE; eraserOn = false; velocity?.recycle(); velocity = null; invalidate()
+                npts = 0; live = null; ruled = 0; shapeDrag = false; shapePreview = null; mode = Mode.NONE; eraserOn = false; velocity?.recycle(); velocity = null; invalidate()
             }
         }
         return true
@@ -1051,6 +1283,12 @@ class InkView(context: Context) : View(context) {
         dismissedText = false
         pressLink = null; pressText = null
 
+        // a finger on the ruler moves / rotates it (hit-tested first: two fingers elsewhere still zoom the page)
+        if (!pen && ruler.hitBody(e.x, e.y)) {
+            mode = Mode.RULER; ruler.beginDrag(e.x, e.y)
+            return
+        }
+
         // a selected / edited text box: its frame and handles take priority for any pointer; a touch elsewhere ends it
         if (hasTextBox) {
             val h = textHandleAt(e.x, e.y)
@@ -1066,9 +1304,23 @@ class InkView(context: Context) : View(context) {
 
         // selection handles take priority for any pointer
         sel?.let { s ->
-            val b = selScreenBox(s, selRect); b.inset(-6 * density, -6 * density)
-            if (hypot(e.x - b.right, e.y - b.bottom) < 26 * density) { mode = Mode.SEL_SCALE; return }
-            if (b.contains(e.x, e.y) && (pen || penOnly || tool == Tool.LASSO || tool == Tool.HAND)) {
+            val b = selScreenBox(s, selRect)
+            unrotate(s, b, e.x, e.y)
+            val ux = unrot[0]; val uy = unrot[1]
+            b.inset(-6 * density, -6 * density)
+            val shape = s.shape
+            if (shape != null) {
+                val n = shapeHandles(s, shape)
+                for (k in 0 until n) if (hypot(ux - shapePts[k * 2], uy - shapePts[k * 2 + 1]) < 26 * density) {
+                    beginShapeHandle(s, shape, k); mode = Mode.SEL_SHAPE; return
+                }
+            } else if (hypot(ux - b.right, uy - b.bottom) < 26 * density) { mode = Mode.SEL_SCALE; return }
+            if (s.canRotate && hypot(ux - b.centerX(), uy - (b.top - ROT_HANDLE * density)) < 24 * density) {
+                selRot0 = s.rot; selRotSnap = Float.NaN
+                selRotGrab = InkShapes.angle(e.x - b.centerX(), e.y - b.centerY())
+                mode = Mode.SEL_ROTATE; return
+            }
+            if (b.contains(ux, uy) && (pen || penOnly || tool == Tool.LASSO || tool == Tool.HAND)) {
                 mode = Mode.SEL_MOVE; selGrabX = e.x; selGrabY = e.y; return
             }
             commitSelection()
@@ -1109,16 +1361,80 @@ class InkView(context: Context) : View(context) {
         when (activeTool) {
             Tool.PEN -> live = InkRender.liveGeom(Tool.PEN, penStyle, penWidth)
             Tool.HIGHLIGHTER -> live = InkRender.liveGeom(Tool.HIGHLIGHTER, PenStyle.BALL, hlWidth)
-            Tool.SHAPE -> live = InkRender.liveGeom(Tool.SHAPE, PenStyle.BALL, penWidth)
+            Tool.SHAPE -> if (shapeKind.isEmpty()) live = InkRender.liveGeom(Tool.SHAPE, PenStyle.BALL, penWidth)
             Tool.TAPE -> live = InkRender.liveGeom(Tool.TAPE, PenStyle.BALL, tapeWidth)
             Tool.LASSO -> lassoPath.rewind()
         }
+        ruled = 0
+        shapeDrag = activeTool == Tool.SHAPE && shapeKind.isNotEmpty() && h != null
+        shapePreview = null
+        if (shapeDrag) { shX0 = h!!.second; shY0 = h.third }
         when (activeTool) {
             Tool.PEN, Tool.HIGHLIGHTER, Tool.SHAPE, Tool.LASSO, Tool.TAPE -> if (h != null) addPoint(h.second, h.third, pressureOf(e, -1))
             Tool.ERASER -> { eraserOn = true; eraserX = e.x; eraserY = e.y; eraseAt(e.x, e.y) }
             Tool.LASER -> { laserAdd(e.x, e.y); postInvalidateOnAnimation() }
             Tool.TEXT -> {}
         }
+        // pen / highlighter starting near a ruler edge: a straight line along that edge
+        if ((activeTool == Tool.PEN || activeTool == Tool.HIGHLIGHTER) && h != null && ruler.on) {
+            val side = ruler.edgeNear(e.x, e.y)
+            if (side != 0) {
+                ruled = side; live = null
+                rT0 = ruler.along(e.x, e.y); rT1 = rT0; rP = pressureOf(e, -1)
+                updateRuled()
+            }
+        }
+        invalidate()
+    }
+
+    /** Ruled stroke end points (page coords of [drawPage]) from the extent along the ruler, offset by half the width. */
+    private fun updateRuled() {
+        if (drawPage < 0) return
+        val w = if (activeTool == Tool.HIGHLIGHTER) hlWidth else penWidth
+        val off = w * scale / 2f
+        val pl = pageLeft(drawPage); val pt = pageTops[drawPage]
+        ruler.project(rT0, ruled, off, rTmp)
+        rulA[0] = toDocX(rTmp[0]) - pl; rulA[1] = toDocY(rTmp[1]) - pt
+        ruler.project(rT1, ruled, off, rTmp)
+        rulA[2] = toDocX(rTmp[0]) - pl; rulA[3] = toDocY(rTmp[1]) - pt
+    }
+
+    /** Starts dragging handle [k] of a library shape: the selection's move / scale is baked in first. */
+    private fun beginShapeHandle(s: Sel, st0: Stroke, k: Int) {
+        var st = st0
+        if (s.dx != 0f || s.dy != 0f || s.s != 1f) {
+            st = st0.mapped({ x, y -> s.mapX(x) to s.mapY(y) }, s.s)
+            s.strokes = listOf(st); s.dx = 0f; s.dy = 0f; s.s = 1f
+            s.box.set(st.bounds())
+        }
+        shapeHandle = k
+        val p = st.pts
+        if (InkShapes.isLine(st.shape)) {
+            val o = if (k == 0) 3 else 0
+            shapeFixX = p[o]; shapeFixY = p[o + 1]
+        } else {
+            val b = InkShapes.boxOf(st)
+            // opposite corner: 0 TL ↔ 3 BR, 1 TR ↔ 2 BL
+            shapeFixX = if (k == 0 || k == 2) b.right else b.left
+            shapeFixY = if (k < 2) b.bottom else b.top
+        }
+        if (!s.changed) { s.changed = true }
+    }
+
+    private fun dragShapeHandle(s: Sel, e: MotionEvent) {
+        val st = s.strokes.firstOrNull() ?: return
+        val x = toDocX(e.x) - pageLeft(s.page); val y = toDocY(e.y) - pageTops[s.page]
+        val n = if (InkShapes.isLine(st.shape)) {
+            if (shapeHandle == 0) InkShapes.rebuilt(st, x, y, shapeFixX, shapeFixY) else InkShapes.rebuilt(st, shapeFixX, shapeFixY, x, y)
+        } else {
+            val minS = 4f
+            val nx = if (abs(x - shapeFixX) < minS) shapeFixX + (if (x >= shapeFixX) minS else -minS) else x
+            val ny = if (abs(y - shapeFixY) < minS) shapeFixY + (if (y >= shapeFixY) minS else -minS) else y
+            InkShapes.rebuilt(st, shapeFixX, shapeFixY, nx, ny)
+        }
+        s.strokes = listOf(n)
+        s.box.set(n.bounds())
+        s.changed = true
         invalidate()
     }
 
@@ -1147,6 +1463,23 @@ class InkView(context: Context) : View(context) {
         if (!moved && hypot(e.x - downX, e.y - downY) > slop) { moved = true; main.removeCallbacks(longPress) }
         when (mode) {
             Mode.DRAW -> {
+                if (shapeDrag) {
+                    if (drawPage >= 0) {
+                        val x = toDocX(e.x) - pageLeft(drawPage); val y = toDocY(e.y) - pageTops[drawPage]
+                        val constrain = e.pointerCount >= 2 || (e.buttonState and (MotionEvent.BUTTON_STYLUS_PRIMARY or MotionEvent.BUTTON_SECONDARY)) != 0
+                        shapePreview = dragShape(x, y, constrain)
+                        invalidate()
+                    }
+                    return
+                }
+                if (ruled != 0) {
+                    val t = ruler.along(e.x, e.y)
+                    if (t < rT0) rT0 = t
+                    if (t > rT1) rT1 = t
+                    rP = pressureOf(e, -1)
+                    updateRuled(); invalidate()
+                    return
+                }
                 when (activeTool) {
                     Tool.PEN, Tool.HIGHLIGHTER, Tool.SHAPE, Tool.LASSO, Tool.TAPE -> if (drawPage >= 0) {
                         val pl = pageLeft(drawPage); val pt = pageTops[drawPage]
@@ -1190,10 +1523,30 @@ class InkView(context: Context) : View(context) {
             }
             Mode.SEL_SCALE -> sel?.let { s ->
                 val b = selScreenBox(s, selRect)
+                unrotate(s, b, e.x, e.y)
                 val l = b.left; val t = b.top
                 val origW = s.box.width() * scale; val origH = s.box.height() * scale
-                val ns = max((e.x - l) / max(origW, 1f), (e.y - t) / max(origH, 1f)).coerceIn(0.15f, 8f)
+                val ns = max((unrot[0] - l) / max(origW, 1f), (unrot[1] - t) / max(origH, 1f)).coerceIn(0.15f, 8f)
                 s.s = ns; s.changed = true; invalidate()
+            }
+            Mode.SEL_ROTATE -> sel?.let { s ->
+                val b = selScreenBox(s, selRect)
+                val raw = selRot0 + InkShapes.angle(e.x - b.centerX(), e.y - b.centerY()) - selRotGrab
+                val step = Math.round(raw / 15f) * 15f
+                val snap = abs(raw - step) < 3f
+                if (snap && selRotSnap != step) performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                selRotSnap = if (snap) step else Float.NaN
+                var r = (if (snap) step else raw) % 360f
+                if (r > 180f) r -= 360f
+                if (r < -180f) r += 360f
+                s.rot = if (abs(r) < 1e-3f) 0f else r
+                s.changed = true; invalidate()
+            }
+            Mode.SEL_SHAPE -> sel?.let { s -> dragShapeHandle(s, e) }
+            Mode.RULER -> {
+                if (e.pointerCount >= 2) { if (ruler.two(e.getX(0), e.getY(0), e.getX(1), e.getY(1))) performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK) }
+                else ruler.drag(e.x, e.y)
+                invalidate()
             }
             Mode.NONE -> {}
         }
@@ -1206,16 +1559,23 @@ class InkView(context: Context) : View(context) {
             Mode.DRAW -> {
                 val consumed = wasTap && activeTool != Tool.ERASER && activeTool != Tool.LASER && tapAction(e.x, e.y)
                 if (!consumed) when (activeTool) {
-                    Tool.PEN, Tool.HIGHLIGHTER -> if (drawPage >= 0 && npts > 0) commitStroke(makeStroke())
-                    Tool.SHAPE -> if (drawPage >= 0 && npts > 1) commitStroke(recognizeShape(makeStroke()))
-                    Tool.LASSO -> if (!moved) textAtScreen(e.x, e.y)?.let { (pg, t) -> selectText(pg, t) }
+                    Tool.PEN, Tool.HIGHLIGHTER -> if (drawPage >= 0 && ruled != 0 && hypot(rulA[2] - rulA[0], rulA[3] - rulA[1]) * scale > density) {
+                        commitStroke(makeRuled())
+                    } else if (drawPage >= 0 && npts > 0) commitStroke(makeStroke())
+                    Tool.SHAPE -> if (shapeDrag) {
+                        val st = shapePreview
+                        if (!moved || st == null) lassoTap(e.x, e.y)       // tap: select the shape under it (handles)
+                        else if (drawPage >= 0) commitStroke(st)
+                    } else if (!moved) lassoTap(e.x, e.y)
+                    else if (drawPage >= 0 && npts > 1) commitStroke(recognizeShape(makeStroke()))
+                    Tool.LASSO -> if (!moved) { val tx = textAtScreen(e.x, e.y); if (tx != null) selectText(tx.first, tx.second) else lassoTap(e.x, e.y) }
                         else if (drawPage >= 0 && npts > 2) lassoSelect()
                     Tool.TAPE -> if (drawPage >= 0 && npts > 1) commitTape()
                     Tool.TEXT -> if (!moved) textTap(e.x, e.y) else textDragCreate(downX, downY, e.x, e.y)
                     Tool.ERASER -> { eraserOn = false; if (eraseUndoPushed) changed() }
                 }
                 eraserOn = false
-                npts = 0; live = null
+                npts = 0; live = null; ruled = 0; shapeDrag = false; shapePreview = null
             }
             Mode.NAV -> {
                 if (wasTap) navTap(e.x, e.y)
@@ -1236,7 +1596,8 @@ class InkView(context: Context) : View(context) {
                 else finishTextGesture()
             }
             Mode.TEXT_PINCH -> finishTextGesture()
-            Mode.SEL_MOVE, Mode.SEL_SCALE -> invalidate()
+            Mode.SEL_MOVE, Mode.SEL_SCALE, Mode.SEL_ROTATE, Mode.SEL_SHAPE -> invalidate()
+            Mode.RULER -> invalidate()
             Mode.NONE -> {}
         }
         mode = Mode.NONE
@@ -1264,6 +1625,7 @@ class InkView(context: Context) : View(context) {
         if (tapAction(x, y)) return
         if (tool == Tool.TEXT && h != null) { textTap(x, y); return }
         if (h != null) textAt(h.first, h.second, h.third)?.let { selectText(h.first, it); return }
+        if (h != null) stickerAt(h.first, h.second, h.third)?.let { liftOne(h.first, sticker = it); return }
         if (now - lastTapTime < 300) {
             // double tap (finger, or pen with the Hand tool): toggle fit <-> 2x
             if (scale > fitScale * 1.2f) zoomAt(x, y, fitScale / scale) else zoomAt(x, y, 2f)
@@ -1277,6 +1639,15 @@ class InkView(context: Context) : View(context) {
         val h = hit(x, y) ?: return
         val existing = textAt(h.first, h.second, h.third)
         if (existing != null) { beginEdit(h.first, existing, false); return }
+        // inside a table cell: the box fills the cell's width
+        doc.pages[h.first].strokes.lastOrNull { InkShapes.tableDims(it.shape) != null && InkShapes.boxOf(it).contains(h.second, h.third) }
+            ?.let { InkShapes.cellAt(it, h.second, h.third) }?.let { cell ->
+                val pad = max(2f, min(6f, cell.width() * 0.06f))
+                val size = min(textSize, max(6f, (cell.height() - 2 * pad) * 0.7f))
+                beginEdit(h.first, TextItem(System.nanoTime(), cell.left + pad, cell.top + pad, max(16f, cell.width() - 2 * pad), "", size,
+                    textColor, textFont, textBold), true)
+                return
+            }
         val p = doc.pages[h.first]
         val size = textSize
         var w = if (doc.infinite) 320f else min(320f, max(120f, p.w - 24f))
@@ -1501,6 +1872,41 @@ class InkView(context: Context) : View(context) {
         return s
     }
 
+    /**
+     * Library shape from the drag start to ([x], [y]) (page coords). [constrain] (S Pen button / second finger): square
+     * box (circle, equal-sided star…), lines snapped to 45°.
+     */
+    private fun dragShape(x: Float, y: Float, constrain: Boolean): Stroke {
+        var ex = x; var ey = y
+        if (constrain) {
+            val dx = x - shX0; val dy = y - shY0
+            if (InkShapes.isLine(shapeKind)) {
+                val len = hypot(dx, dy)
+                val a = Math.round(Math.toDegrees(kotlin.math.atan2(dy, dx).toDouble()) / 45.0) * 45.0
+                val r = Math.toRadians(a)
+                ex = shX0 + (cos(r) * len).toFloat(); ey = shY0 + (sin(r) * len).toFloat()
+            } else {
+                val m = max(abs(dx), abs(dy))
+                ex = shX0 + (if (dx < 0) -m else m); ey = shY0 + (if (dy < 0) -m else m)
+            }
+        }
+        if (!InkShapes.isLine(shapeKind)) {
+            // never a zero-sized box
+            if (abs(ex - shX0) < 1f) ex = shX0 + 1f
+            if (abs(ey - shY0) < 1f) ey = shY0 + 1f
+        }
+        return InkShapes.build(shapeKind, shX0, shY0, ex, ey, shapeColor, penWidth)
+    }
+
+    /** The straight stroke drawn along the ruler (two points; geometry built like any saved stroke). */
+    private fun makeRuled(): Stroke {
+        val p = rP.coerceIn(0f, 1f)
+        val q = { v: Float -> (v * 10f).toInt() / 10f }
+        val arr = floatArrayOf(q(rulA[0]), q(rulA[1]), p, q(rulA[2]), q(rulA[3]), p)
+        return if (activeTool == Tool.HIGHLIGHTER) Stroke(Tool.HIGHLIGHTER, hlColor, hlWidth, arr)
+        else Stroke(Tool.PEN, penColor, penWidth, arr, style = penStyle)
+    }
+
     private fun commitStroke(s: Stroke) {
         pushUndo()
         val p = doc.pages[drawPage]
@@ -1632,11 +2038,31 @@ class InkView(context: Context) : View(context) {
         val texts = page.texts.filter { InkRender.layout(it); val b = it.bounds(); inPoly(b.centerX(), b.centerY(), poly, n) }
         val images = page.images.filter { val b = it.bounds(); inPoly(b.centerX(), b.centerY(), poly, n) }
         val links = page.links.filter { inPoly(it.x + it.w / 2f, it.y + it.h / 2f, poly, n) }
-        if (strokes.isEmpty() && texts.isEmpty() && images.isEmpty() && links.isEmpty()) return
-        lift(drawPage, strokes, texts, images, links)
+        val stickers = page.stickers.filter { inPoly(it.x + it.w / 2f, it.y + it.h / 2f, poly, n) }
+        if (strokes.isEmpty() && texts.isEmpty() && images.isEmpty() && links.isEmpty() && stickers.isEmpty()) return
+        lift(drawPage, strokes, texts, images, links, stickers)
     }
 
-    private fun lift(pageIdx: Int, strokes: List<Stroke>, texts: List<TextItem>, images: List<ImageItem>, links: List<LinkItem>) {
+    private fun stickerAt(page: Int, x: Float, y: Float): StickerItem? =
+        doc.pages.getOrNull(page)?.stickers?.lastOrNull { it.bounds().contains(x, y) }
+
+    /** Lasso tap: picks the sticker, or else the library shape, under the tap. True when something was selected. */
+    private fun lassoTap(x: Float, y: Float): Boolean {
+        val h = hit(x, y, strict = false) ?: return false
+        stickerAt(h.first, h.second, h.third)?.let { liftOne(h.first, sticker = it); return true }
+        val r = 12f * density / scale
+        doc.pages[h.first].strokes.lastOrNull { it.shape.isNotEmpty() && strokeNear(it, h.second, h.third, r) }?.let {
+            liftOne(h.first, stroke = it); return true
+        }
+        return false
+    }
+
+    private fun liftOne(page: Int, sticker: StickerItem? = null, stroke: Stroke? = null) {
+        commitSelection()
+        lift(page, listOfNotNull(stroke), emptyList(), emptyList(), emptyList(), listOfNotNull(sticker))
+    }
+
+    private fun lift(pageIdx: Int, strokes: List<Stroke>, texts: List<TextItem>, images: List<ImageItem>, links: List<LinkItem>, stickers: List<StickerItem> = emptyList()) {
         pushUndo()
         val page = doc.pages[pageIdx]
         val box = RectF(Float.MAX_VALUE, Float.MAX_VALUE, -Float.MAX_VALUE, -Float.MAX_VALUE)
@@ -1644,33 +2070,50 @@ class InkView(context: Context) : View(context) {
         texts.forEach { InkRender.layout(it); box.union(it.bounds()) }
         images.forEach { box.union(it.bounds()) }
         links.forEach { box.union(it.bounds()) }
+        stickers.forEach { box.union(it.bounds()) }
         val sIds = strokes.toHashSet()
         val tIds = texts.map { it.id }.toHashSet(); val iIds = images.map { it.id }.toHashSet(); val lIds = links.map { it.id }.toHashSet()
+        val kIds = stickers.map { it.id }.toHashSet()
         setPage(pageIdx, page.copy(
             strokes = page.strokes.filterNot { it in sIds },
             texts = page.texts.filterNot { it.id in tIds },
             images = page.images.filterNot { it.id in iIds },
             links = page.links.filterNot { it.id in lIds },
+            stickers = page.stickers.filterNot { it.id in kIds },
         ))
-        sel = Sel(pageIdx, strokes, texts, images, links, box)
+        sel = Sel(pageIdx, strokes, texts, images, links, box, stickers)
         listener?.onSelectionChanged(true)
         invalidate()
     }
 
-    private class Mapped(val strokes: List<Stroke>, val texts: List<TextItem>, val images: List<ImageItem>, val links: List<LinkItem>)
+    private class Mapped(val strokes: List<Stroke>, val texts: List<TextItem>, val images: List<ImageItem>, val links: List<LinkItem>,
+        val stickers: List<StickerItem> = emptyList())
 
     private fun mappedSelection(s: Sel): Mapped {
-        if (!s.changed) return Mapped(s.strokes, s.texts, s.images, s.links)
-        val st = s.strokes.map { it.mapped({ x, y -> s.map(x, y) }, s.s) }
+        if (!s.changed) return Mapped(s.strokes, s.texts, s.images, s.links, s.stickers)
+        val st = s.strokes.map {
+            val m = it.mapped({ x, y -> s.map(x, y) }, s.s)
+            // a rotated box shape is no longer an upright box: it stays a plain shape (no box handles)
+            if (s.rot != 0f && InkShapes.isBox(m.shape)) Stroke(m.tool, m.color, m.width, m.pts, m.rec, m.t, m.style) else m
+        }
+        val sk = s.stickers.map { k ->
+            val (cx, cy) = s.map(k.x + k.w / 2f, k.y + k.h / 2f)
+            val w = k.w * s.s; val h = k.h * s.s
+            var r = (k.rot + s.rot) % 360f
+            if (r > 180f) r -= 360f
+            if (r < -180f) r += 360f
+            k.copy(x = cx - w / 2f, y = cy - h / 2f, w = w, h = h, rot = r)
+        }
         val tx = s.texts.map { t -> t.copy(x = s.mapX(t.x), y = s.mapY(t.y), w = t.w * s.s, size = t.size * s.s) }
         val im = s.images.map { i -> i.copy(x = s.mapX(i.x), y = s.mapY(i.y), w = i.w * s.s, h = i.h * s.s).also { it.bmp = i.bmp } }
         val ln = s.links.map { l -> l.copy(x = s.mapX(l.x), y = s.mapY(l.y), w = l.w * s.s, h = l.h * s.s) }
-        return Mapped(st, tx, im, ln)
+        return Mapped(st, tx, im, ln, sk)
     }
 
     private fun putBack(pageIdx: Int, m: Mapped) {
         val page = doc.pages[pageIdx]
-        setPage(pageIdx, page.copy(strokes = page.strokes + m.strokes, texts = page.texts + m.texts, images = page.images + m.images, links = page.links + m.links))
+        setPage(pageIdx, page.copy(strokes = page.strokes + m.strokes, texts = page.texts + m.texts, images = page.images + m.images, links = page.links + m.links,
+            stickers = page.stickers + m.stickers))
     }
 
     fun commitSelection() {
@@ -1698,7 +2141,8 @@ class InkView(context: Context) : View(context) {
                 it.tool == Tool.HIGHLIGHTER -> it.withColor((color and 0x00FFFFFF) or 0x66000000)
                 else -> it.withColor(color)
             }
-        }, s.texts.map { it.copy(color = color) }, s.images, s.links, s.box).also { it.dx = s.dx; it.dy = s.dy; it.s = s.s; it.changed = true }
+        }, s.texts.map { it.copy(color = color) }, s.images, s.links, s.box, s.stickers.map { it.copy(color = color) })
+            .also { it.dx = s.dx; it.dy = s.dy; it.s = s.s; it.rot = s.rot; it.changed = true }
         sel = ns; invalidate()
     }
 
@@ -1713,7 +2157,12 @@ class InkView(context: Context) : View(context) {
             m.texts.mapIndexed { k, t -> t.copy(id = now + k, x = t.x + off, y = t.y + off) },
             m.images.mapIndexed { k, i -> i.copy(id = now + 1000 + k, x = i.x + off, y = i.y + off).also { it.bmp = i.bmp } },
             m.links.mapIndexed { k, l -> l.copy(id = now + 2000 + k, x = l.x + off, y = l.y + off) },
-            RectF(s.box).apply { offset(s.dx + off, s.dy + off); right = left + s.box.width() * s.s; bottom = top + s.box.height() * s.s },
+            RectF(Float.MAX_VALUE, Float.MAX_VALUE, -Float.MAX_VALUE, -Float.MAX_VALUE).apply {
+                m.strokes.forEach { union(it.bounds()) }; m.texts.forEach { InkRender.layout(it); union(it.bounds()) }
+                m.images.forEach { union(it.bounds()) }; m.links.forEach { union(it.bounds()) }; m.stickers.forEach { union(it.bounds()) }
+                offset(off, off)
+            },
+            m.stickers.mapIndexed { k, t -> t.copy(id = now + 3000 + k, x = t.x + off, y = t.y + off) },
         ).also { it.changed = true }
         invalidate()
     }
@@ -1733,13 +2182,15 @@ class InkView(context: Context) : View(context) {
         val item = TextItem(System.nanoTime(), b.left, b.top, max(b.width(), size * 4), text, size, pens.firstOrNull()?.color ?: penColor)
         val m = mappedSelection(s)
         sel = null
-        putBack(s.page, Mapped(m.strokes.filter { it.tool != Tool.PEN }, m.texts + item, m.images, m.links))
+        putBack(s.page, Mapped(m.strokes.filter { it.tool != Tool.PEN }, m.texts + item, m.images, m.links, m.stickers))
         notifyUndo(); listener?.onSelectionChanged(false); changed()
     }
 
     // ---- text, images, links ----
 
     /** Centre of the visible part of page [i], in page coordinates. */
+    private fun visibleCenterOf(i: Int) = visibleCenter(i)
+
     private fun visibleCenter(i: Int): Pair<Float, Float> {
         val p = doc.pages[i]
         val x = toDocX(width / 2f) - pageLeft(i)
@@ -1975,6 +2426,50 @@ class InkView(context: Context) : View(context) {
         upsertText(page, TextItem(System.nanoTime(), left, y, w, text, 16f, penColor))
     }
 
+    /** Sticker / shape size factor: the same on-screen size whatever the zoom (whiteboards zoomed out, pages zoomed in). */
+    private fun insertScale() = if (fitScale > 0f) (fitScale / scale).coerceIn(0.4f, 4f) else 1f
+
+    /**
+     * Inserts a sticker at the middle of the view (page under it); it floats selected so it can be moved, resized and
+     * rotated right away. One undo step.
+     */
+    fun addSticker(kind: String, text: String, color: Int = InkStickers.defaultColor(kind)) {
+        if (doc.pages.isEmpty()) return
+        finishEditing()
+        val i = targetPage()
+        val p = doc.pages[i]
+        val (nw, nh) = InkStickers.naturalSize(kind, text)
+        val k = insertScale()
+        val w = nw * k; val h = nh * k
+        val (cx, cy) = visibleCenterOf(i)
+        var x = cx - w / 2f; var y = cy - h / 2f
+        if (!doc.infinite) { x = x.coerceIn(0f, max(0f, p.w - w)); y = y.coerceIn(0f, max(0f, p.h - h)) }
+        val item = StickerItem(System.nanoTime(), x, y, w, h, kind, color, 0f, text)
+        pushUndo()
+        sel = Sel(i, emptyList(), emptyList(), emptyList(), emptyList(), item.bounds(), listOf(item)).also { it.changed = true }
+        listener?.onSelectionChanged(true)
+        changed()
+    }
+
+    /** Inserts a library shape (pen colour / width) at the middle of the view, floating selected with its handles. */
+    fun addShape(shape: String, color: Int = penColor, width: Float = penWidth) {
+        if (doc.pages.isEmpty()) return
+        finishEditing()
+        val i = targetPage()
+        val p = doc.pages[i]
+        val (dw, dh) = InkShapes.defaultSize(shape)
+        var k = insertScale()
+        if (!doc.infinite) k = min(k, p.w * 0.9f / dw)
+        val w = dw * k; val h = dh * k
+        val (cx, cy) = visibleCenterOf(i)
+        val st = if (InkShapes.isLine(shape)) InkShapes.build(shape, cx - w / 2f, cy, cx + w / 2f, cy, color, width)
+        else InkShapes.build(shape, cx - w / 2f, cy - h / 2f, cx + w / 2f, cy + h / 2f, color, width)
+        pushUndo()
+        sel = Sel(i, listOf(st), emptyList(), emptyList(), emptyList(), RectF(st.bounds())).also { it.changed = true }
+        listener?.onSelectionChanged(true)
+        changed()
+    }
+
     /** Insert a picture at the visible centre; it floats selected so the user can move/resize it. */
     fun addImage(b: Bitmap, widthPt: Float = 0f) {
         commitSelection()
@@ -2143,7 +2638,8 @@ class InkView(context: Context) : View(context) {
         m.texts.forEach { InkRender.layout(it); box.union(it.bounds()) }
         m.images.forEach { box.union(it.bounds()) }
         m.links.forEach { box.union(it.bounds()) }
-        sel = Sel(s.page, tidied, m.texts, m.images, m.links, box).also { it.changed = true }
+        m.stickers.forEach { box.union(it.bounds()) }
+        sel = Sel(s.page, tidied, m.texts, m.images, m.links, box, m.stickers).also { it.changed = true }
         invalidate()
         return true
     }
@@ -2168,7 +2664,7 @@ class InkView(context: Context) : View(context) {
         val paper = if (source != null) Color.WHITE else doc.paperColor or 0xFF000000.toInt()
         c.drawColor(paper)
         c.scale(k, k); c.translate(-b.left, -b.top)
-        InkRender.drawPageContent(c, InkPage(strokes = m.strokes, texts = m.texts, images = m.images, links = m.links))
+        InkRender.drawPageContent(c, InkPage(strokes = m.strokes, texts = m.texts, images = m.images, links = m.links, stickers = m.stickers))
         return bmp
     }
 
@@ -2228,7 +2724,7 @@ class InkView(context: Context) : View(context) {
         finishEditing()
         if (doc.pages[i].isEmpty()) return
         pushUndo()
-        setPage(i, doc.pages[i].copy(strokes = emptyList(), texts = emptyList(), images = emptyList(), links = emptyList()))
+        setPage(i, doc.pages[i].copy(strokes = emptyList(), texts = emptyList(), images = emptyList(), links = emptyList(), stickers = emptyList()))
         changed()
     }
 
@@ -2258,6 +2754,8 @@ class InkView(context: Context) : View(context) {
         private const val H_L = 6
         private const val H_R = 7
         private const val LASER_LIFE = 650L
+        /** Distance (dp) of the selection's rotation handle above its frame. */
+        private const val ROT_HANDLE = 30f
         private const val ZOOM_SETTLE = 140L
         private const val LASER_COLOR = 0xFFFF3B30.toInt()
     }

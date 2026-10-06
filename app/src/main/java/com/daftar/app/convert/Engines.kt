@@ -108,6 +108,7 @@ object Engines {
                     Conv.NOTE_PDF -> noteToPdf(fileOf(first), outDir, progress)
                     Conv.NOTE_IMAGES -> noteToImages(ctx, fileOf(first), opt, outDir, progress)
                     Conv.NOTE_DOCX -> noteToDocx(fileOf(first), outDir, progress)
+                    Conv.NOTE_HTML -> noteToHtml(ctx, fileOf(first), outDir, progress)
                     Conv.TEXT_PDF -> textToPdf(ctx, fileOf(first), outDir, progress)
                     Conv.TEXT_DOCX -> textToDocx(fileOf(first), outDir, progress)
                     Conv.ONE_PDF, Conv.ONE_TXT, Conv.ONE_NOTE -> oneNote(ctx, conv, fileOf(first), outDir, progress)
@@ -718,6 +719,20 @@ object Engines {
             }
         }
         return many(written, dir)
+    }
+
+    /** Note → one self-contained .html (tags-agent, see [NoteHtml]). */
+    private suspend fun noteToHtml(ctx: Context, f: File, outDir: File, progress: Progress): ConvOutput {
+        loadNote(f)
+        val out = Storage.uniqueFile(outDir, f.nameWithoutExtension, "html")
+        val tmp = tmpFor(out)
+        val active = cancelledFlag()
+        cleanupOnFail(tmp, out) {
+            NoteHtml.write(ctx, f, tmp, isActive = { !active() }, progress = progress)
+            checkActive()
+            moveInto(tmp, out)
+        }
+        return single(out)
     }
 
     private suspend fun noteToDocx(f: File, outDir: File, progress: Progress): ConvOutput {

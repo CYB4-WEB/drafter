@@ -120,7 +120,7 @@ internal class TextOverlay(ctx: Context, private val host: InkView) {
         appliedKey = key; appliedScale = s
         edit.typeface = InkRender.typeface(t.font, t.bold)
         edit.setTextSize(TypedValue.COMPLEX_UNIT_PX, t.size * s)
-        edit.setTextColor(if (AColor.alpha(t.color) == 0) t.color or 0xFF000000.toInt() else t.color)
+        edit.setTextColor(host.displayInk(if (AColor.alpha(t.color) == 0) t.color or 0xFF000000.toInt() else t.color))
         edit.gravity = Gravity.TOP or when (t.align) {
             TextItem.ALIGN_CENTER -> Gravity.CENTER_HORIZONTAL
             TextItem.ALIGN_END -> Gravity.END

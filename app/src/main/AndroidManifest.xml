@@ -3,6 +3,9 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- transcript-agent: lecture recording keeps going with the screen off (microphone foreground service) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
@@ -104,6 +107,12 @@
                 android:value="true" />
         </service>
 
+        <!-- transcript-agent: ongoing "Recording lecture" notification (Pause / Stop) while a lecture is recorded -->
+        <service
+            android:name=".ink.RecordingService"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
+
         <!-- study-agent: focus timer phase ends / notification actions / daily cards-due reminder / re-arm after reboot -->
         <receiver android:name=".study.StudyReceiver" android:exported="false" />
         <receiver android:name=".study.StudyBootReceiver" android:exported="true">
@@ -136,5 +145,29 @@
             </intent-filter>
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_quick" />
         </receiver>
+        <receiver android:name=".widget.ExamWidget" android:exported="true" android:label="@string/grades_widget_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_exams" />
+        </receiver>
+        <!-- countdown-agent: single-event countdown widget + its configure activity -->
+        <receiver android:name=".widget.CountdownWidget" android:exported="true" android:label="@string/cd_widget_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_countdown" />
+        </receiver>
+        <activity
+            android:name=".widget.CountdownWidgetConfigActivity"
+            android:exported="true"
+            android:label="@string/cd_widget_pick_title"
+            android:theme="@style/Theme.Daftar"
+            android:resizeableActivity="true"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|keyboard|navigation|density|uiMode">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
     </application>
 </manifest>

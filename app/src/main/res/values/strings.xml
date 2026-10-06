@@ -166,4 +166,5 @@
     <string name="print_preparing">Preparing to print…</string>
     <string name="study">Study</string>
     <string name="trash">Recycle bin</string>
+    <string name="new_word_doc">New Word document</string>
 </resources>

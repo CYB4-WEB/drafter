@@ -209,6 +209,7 @@ fun FolderTile(e: Entry, onClick: () -> Unit, onLong: () -> Unit) {
             Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 14.dp, top = 24.dp)) {
                 Text(e.name, style = MaterialTheme.typography.titleMedium, color = c.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(stringResource(R.string.items_count, count), style = MaterialTheme.typography.bodySmall, color = c.muted)
+                com.daftar.app.ui.tags.TileTags(e.file)  // tags-agent hook
             }
         }
         return
@@ -225,6 +226,7 @@ fun FolderTile(e: Entry, onClick: () -> Unit, onLong: () -> Unit) {
         Spacer(Modifier.height(14.dp))
         Text(e.name, style = MaterialTheme.typography.titleMedium, color = c.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Text(stringResource(R.string.items_count, count), style = MaterialTheme.typography.bodySmall, color = c.muted)
+        com.daftar.app.ui.tags.TileTags(e.file)  // tags-agent hook
     }
 }
 
@@ -255,6 +257,7 @@ fun EntryRow(e: Entry, onClick: () -> Unit, onLong: () -> Unit, showParent: Bool
             else listOfNotNull(kindLabel(e.kind), if (showParent) parentLabel(e.file) else null, relTime(e.file.lastModified())).joinToString(" · ")
             Text(sub, style = MaterialTheme.typography.bodySmall, color = c.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
+        com.daftar.app.ui.tags.RowTags(e.file, LocalWidthClass.current == WidthClass.Compact)  // tags-agent hook
         if (e.file.absolutePath in Storage.pins) Icon(Icons.Rounded.PushPin, null, tint = c.muted, modifier = Modifier.size(16.dp).padding(end = 4.dp))
         Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, null, tint = c.muted)
     }
@@ -279,6 +282,7 @@ fun FileTile(e: Entry, onClick: () -> Unit, onLong: () -> Unit) {
             modifier = Modifier.heightIn(min = 44.dp))
         Text(kindLabel(e.kind) + " · " + size + " · " + relTime(e.file.lastModified()), style = MaterialTheme.typography.bodySmall, color = c.muted,
             maxLines = 1, overflow = TextOverflow.Ellipsis)
+        com.daftar.app.ui.tags.TileTags(e.file)  // tags-agent hook
     }
 }
 
@@ -307,6 +311,7 @@ class Actions internal constructor() {
     internal var busy by mutableStateOf(false)
     internal var historyFor by mutableStateOf<Entry?>(null)               // note version history dialog
     internal var undo by mutableStateOf<com.daftar.app.data.TrashItem?>(null)  // "moved to bin" snackbar
+    internal var tagsFor by mutableStateOf<List<File>?>(null)             // tags-agent: tag picker
 
     fun menu(e: Entry) { menuFor = e }
     fun create(dir: File) { createIn = dir }
@@ -387,6 +392,8 @@ private fun ActionsHost(a: Actions) {
         when (act) {
             "note" -> nav.open(ctx, newNote(ctx, dir))
             "whiteboard" -> nav.open(ctx, newWhiteboard(ctx, dir))
+            "word" -> runCatching { com.daftar.app.word.newWordDocument(ctx, dir) }
+                .onSuccess { nav.open(ctx, it) }.onFailure { toast(ctx, ctx.getString(R.string.error_generic)) }
             "import" -> a.importIn = dir
             "import_files" -> runCatching { importer.launch(arrayOf("*/*")) }.onFailure { toast(ctx, ctx.getString(R.string.no_app_found)) }
             "import_folder" -> runCatching { folderImporter.launch(null) }.onFailure { toast(ctx, ctx.getString(R.string.no_app_found)) }
@@ -402,6 +409,7 @@ private fun ActionsHost(a: Actions) {
                 Text(stringResource(R.string.new_item), style = MaterialTheme.typography.titleLarge, color = c.ink, modifier = Modifier.padding(8.dp))
                 SheetItem(Icons.Rounded.Draw, stringResource(R.string.new_note)) { a.createIn = null; a.quick("note", dir) }
                 SheetItem(Icons.Rounded.Dashboard, stringResource(R.string.new_whiteboard)) { a.createIn = null; a.quick("whiteboard", dir) }
+                SheetItem(Icons.Rounded.Description, stringResource(R.string.new_word_doc)) { a.createIn = null; a.quick("word", dir) }
                 SheetItem(Icons.Rounded.CreateNewFolder, stringResource(R.string.new_folder)) { a.createIn = null; a.editFolder = dir to null }
                 SheetItem(Icons.Rounded.FileUpload, stringResource(R.string.import_files)) { a.createIn = null; a.quick("import_files", dir) }
                 SheetItem(Icons.Rounded.DriveFolderUpload, stringResource(R.string.ws_import_folder_action)) { a.createIn = null; a.quick("import_folder", dir) }
@@ -458,6 +466,13 @@ private fun ActionsHost(a: Actions) {
                     if (e.kind != Kind.NOTE) SheetItem(Icons.AutoMirrored.Rounded.OpenInNew, stringResource(R.string.open_externally)) { a.menuFor = null; openExternally(ctx, e.file) }
                 }
                 if (e.kind == Kind.NOTE) SheetItem(Icons.Rounded.History, stringResource(R.string.files_version_history)) { a.menuFor = null; a.historyFor = e }
+                // tags-agent hooks: tags / colour labels, and a note as a self-contained web page
+                SheetItem(Icons.Rounded.Sell, stringResource(R.string.tags_menu), com.daftar.app.data.Tags.tagsOf(e.file).takeIf { it.isNotEmpty() }
+                    ?.let { t -> t.map { com.daftar.app.data.Tags.nameOf(ctx, it) }.joinToString(", ") }) { a.menuFor = null; a.tagsFor = listOf(e.file) }
+                if (e.kind == Kind.NOTE) SheetItem(Icons.Rounded.Language, stringResource(R.string.tags_share_web), stringResource(R.string.tags_share_web_desc)) {
+                    a.menuFor = null
+                    scope.launch { a.busy = true; try { com.daftar.app.convert.NoteHtml.share(ctx, e.file) } finally { a.busy = false } }
+                }
                 SheetItem(Icons.Rounded.PushPin, stringResource(if (pinned) R.string.unpin else R.string.pin)) { a.menuFor = null; Storage.togglePin(e.file) }
                 SheetItem(Icons.Rounded.DeleteOutline, stringResource(R.string.delete), danger = true) { a.menuFor = null; a.deleteFor = e }
             }
@@ -479,6 +494,8 @@ private fun ActionsHost(a: Actions) {
             if (item == null) toast(ctx, ctx.getString(R.string.files_trash_failed)) else a.undo = item
         }
     }
+
+    a.tagsFor?.let { files -> com.daftar.app.ui.tags.TagPickerDialog(files) { a.tagsFor = null } }  // tags-agent hook
 
     a.historyFor?.let { e ->
         com.daftar.app.ui.files.VersionHistoryDialog(e.file, onDismiss = { a.historyFor = null }) { f -> nav.open(ctx, f) }

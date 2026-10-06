@@ -3,7 +3,9 @@ package com.daftar.app.slides
 import android.util.LruCache
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.border
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -42,6 +44,7 @@ import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.EditNote
 import androidx.compose.material.icons.rounded.ViewCarousel
 import androidx.compose.material.icons.rounded.VisibilityOff
+import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -71,6 +74,9 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
@@ -134,12 +140,16 @@ internal class MyNotes(private val file: File) {
         runCatching { json.decodeFromString<Map<Int, String>>(file.readText()) }.getOrNull()?.let { map.putAll(it) }
     }
 
+    /** Set while a slide edit rewrites the sidecar: later autosaves (old slide indices) must not overwrite it. */
+    @Volatile var frozen = false
+
     fun set(i: Int, text: String) { map[i] = text; version++ }
 
     fun snapshot(): Map<Int, String> = map.filterValues { it.isNotBlank() }.toSortedMap()
 
     /** Writes atomically; called off the main thread. */
     @Synchronized fun save(data: Map<Int, String>) {
+        if (frozen) return
         runCatching {
             if (data.isEmpty()) { file.delete(); return }
             val tmp = File(file.parentFile, file.name + ".tmp")
@@ -153,13 +163,15 @@ internal enum class PaneTab { SLIDES, SPEAKER, COMMENTS, MINE }
 
 // ------------------------------------------------------------------ thumbnails
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun SlideThumb(
     slide: SlidePart, thumbs: Thumbs, ratio: Float, selected: Boolean, onClick: () -> Unit,
-    modifier: Modifier = Modifier, numberBadge: Boolean = false,
+    modifier: Modifier = Modifier, numberBadge: Boolean = false, edits: SlideEditState? = null,
 ) {
     val c = D.c
     val i = slide.index
+    var menu by remember { mutableStateOf(false) }
     val bmp by produceState(thumbs.cached(i), i, thumbs) { if (value == null) value = thumbs.load(i) }
     val shape = RoundedCornerShape(8.dp)
     val label = stringResource(R.string.slides_slide_n, i + 1)
@@ -167,8 +179,18 @@ private fun SlideThumb(
         modifier.aspectRatio(ratio).clip(shape)
             .background(c.surfaceAlt)
             .border(if (selected) 2.dp else 1.dp, if (selected) c.accent else c.line, shape)
-            .selectable(selected = selected, role = Role.Tab, onClick = onClick),
+            .semantics { this.selected = selected; role = Role.Tab }
+            .combinedClickable(
+                onClick = onClick,
+                onLongClickLabel = edits?.let { stringResource(R.string.slides4_slide_menu, i + 1) },
+                onLongClick = edits?.let { { menu = true } },
+            ),
     ) {
+        if (edits != null) {
+            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                SlideMenuItems(edits, i, close = { menu = false })
+            }
+        }
         bmp?.let {
             Image(
                 it, contentDescription = label, contentScale = ContentScale.Fit,
@@ -208,7 +230,7 @@ private fun FollowCurrent(list: LazyListState, cur: Int, last: Int) {
 
 /** PowerPoint-style slide rail (start side, wide screens): numbered thumbnails, current one outlined. */
 @Composable
-internal fun SlideRail(deck: Pptx, thumbs: Thumbs, controller: EditorController) {
+internal fun SlideRail(deck: Pptx, thumbs: Thumbs, controller: EditorController, edits: SlideEditState? = null) {
     val c = D.c
     val last = deck.slides.lastIndex
     val cur = controller.currentPage
@@ -218,25 +240,29 @@ internal fun SlideRail(deck: Pptx, thumbs: Thumbs, controller: EditorController)
     LazyColumn(
         state = list, modifier = Modifier.fillMaxSize().background(c.surface),
         contentPadding = PaddingValues(start = 6.dp, end = 12.dp, top = 12.dp, bottom = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(if (edits != null) 0.dp else 12.dp),
     ) {
         items(deck.slides, key = { it.index }) { slide ->
             val selected = slide.index == cur
+            Column {
+            if (edits != null) InsertGap(edits, slide.index, Modifier.fillMaxWidth().padding(start = 30.dp).height(if (slide.index == 0) 22.dp else 26.dp))
             Row(verticalAlignment = Alignment.Top) {
                 Text(
                     "${slide.index + 1}", style = MaterialTheme.typography.labelMedium,
                     color = if (selected) c.accent else c.muted, textAlign = TextAlign.End,
                     modifier = Modifier.width(30.dp).padding(end = 8.dp, top = 2.dp),
                 )
-                SlideThumb(slide, thumbs, ratio, selected, { controller.goToPage(slide.index) }, Modifier.weight(1f))
+                SlideThumb(slide, thumbs, ratio, selected, { controller.goToPage(slide.index) }, Modifier.weight(1f), edits = edits)
+            }
             }
         }
+        if (edits != null) item(key = "end") { InsertGap(edits, deck.slides.size, Modifier.fillMaxWidth().padding(start = 30.dp).height(30.dp)) }
     }
 }
 
 /** Horizontal filmstrip for narrow screens and split panes (first tab of the notes pane). */
 @Composable
-private fun SlideStrip(deck: Pptx, thumbs: Thumbs, controller: EditorController) {
+private fun SlideStrip(deck: Pptx, thumbs: Thumbs, controller: EditorController, edits: SlideEditState?) {
     val last = deck.slides.lastIndex
     val cur = controller.currentPage
     val list = rememberLazyListState(initialFirstVisibleItemIndex = cur.coerceIn(0, last))
@@ -248,15 +274,19 @@ private fun SlideStrip(deck: Pptx, thumbs: Thumbs, controller: EditorController)
         LazyRow(
             state = list, modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalArrangement = Arrangement.spacedBy(if (edits != null) 0.dp else 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             items(deck.slides, key = { it.index }) { slide ->
-                SlideThumb(
-                    slide, thumbs, ratio, slide.index == cur, { controller.goToPage(slide.index) },
-                    Modifier.height(thumbH).width(thumbH * ratio), numberBadge = true,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (edits != null) InsertGap(edits, slide.index, Modifier.width(40.dp).height(thumbH))
+                    SlideThumb(
+                        slide, thumbs, ratio, slide.index == cur, { controller.goToPage(slide.index) },
+                        Modifier.height(thumbH).width(thumbH * ratio), numberBadge = true, edits = edits,
+                    )
+                }
             }
+            if (edits != null) item(key = "end") { InsertGap(edits, deck.slides.size, Modifier.width(48.dp).height(thumbH)) }
         }
     }
 }
@@ -270,7 +300,7 @@ private fun SlideStrip(deck: Pptx, thumbs: Thumbs, controller: EditorController)
 @Composable
 internal fun NotesPane(
     deck: Pptx, thumbs: Thumbs, notes: MyNotes, controller: EditorController,
-    tab: PaneTab, onTab: (PaneTab) -> Unit, withSlides: Boolean,
+    tab: PaneTab, onTab: (PaneTab) -> Unit, withSlides: Boolean, edits: SlideEditState? = null,
 ) {
     val c = D.c
     val page = controller.currentPage
@@ -315,7 +345,7 @@ internal fun NotesPane(
             Box(Modifier.fillMaxWidth().height(1.dp).background(c.line))
             Box(Modifier.fillMaxWidth().weight(1f)) {
                 when (shown) {
-                    PaneTab.SLIDES -> SlideStrip(deck, thumbs, controller)
+                    PaneTab.SLIDES -> SlideStrip(deck, thumbs, controller, edits)
                     PaneTab.SPEAKER -> SpeakerNotes(deck, page)
                     PaneTab.COMMENTS -> CommentList(deck, page)
                     PaneTab.MINE -> MyNotesEditor(notes, page) { editing = it }
