@@ -37,10 +37,12 @@ sealed class Screen {
     data class Split(val first: Screen, val second: Screen, val vertical: Boolean = false) : Screen()
     /** Planner editor; id null = new event, preset type optional. */
     data class EditEvent(val id: Long?, val presetType: Int = -1) : Screen()
-    /** Study hub: flashcard decks + focus timer (study-agent). */
+    /** Study hub: AI practice quizzes + focus timer (quiz-agent). */
     data object Study : Screen()
-    /** Spaced-repetition review; deck = subject folder path or null for all due cards. */
-    data class Review(val deck: String? = null) : Screen()
+    /** Create an AI practice quiz; the source (file / pages / selection image) comes from `study.QuizRequests`. */
+    data object NewQuiz : Screen()
+    /** Take / review a saved quiz. */
+    data class Quiz(val id: String) : Screen()
     /** Recycle bin (files-agent). */
     data object Trash : Screen()
     /** GPA / grades tracker (grades-agent). */

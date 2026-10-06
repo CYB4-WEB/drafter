@@ -1,82 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Study: flashcards, spaced repetition, focus timer (study-agent). -->
+<!-- Study: AI practice quizzes, focus timer, focus stats (quiz-agent / study-agent). -->
 <resources>
     <string name="study_title">Study</string>
     <string name="study_open">Open</string>
     <string name="study_general">General</string>
-    <string name="study_decks">Decks</string>
-    <string name="study_deck">Deck</string>
-    <string name="study_front">Front</string>
-    <string name="study_back">Back</string>
-    <string name="study_make_card">Make flashcard</string>
-    <string name="study_new_card">New card</string>
-    <string name="study_edit_card">Edit card</string>
     <string name="study_save">Save</string>
-    <string name="study_save_another">Save &amp; make another</string>
-    <string name="study_saved">Flashcard saved</string>
-    <string name="study_front_empty">Add something to the front first</string>
-    <string name="study_back_empty">Add an answer, draw it, or choose \"Lasso later\"</string>
-    <string name="study_mode_type">Type</string>
-    <string name="study_mode_draw">Draw</string>
-    <string name="study_mode_later">Lasso later</string>
-    <string name="study_include_image">Image</string>
-    <string name="study_later_hint">Save now and lasso the answer in your note later: select it with the lasso, tap \"Make flashcard\" and choose this card.</string>
-    <string name="study_remove_image">Remove image</string>
-    <string name="study_drawing_replaces">Your drawing replaces the image on this side.</string>
-    <string name="study_text">Text</string>
-    <string name="study_text_optional">Text (optional)</string>
-    <string name="study_draw_hint">Write the answer here</string>
-    <string name="study_undo">Undo</string>
-    <string name="study_clear">Clear</string>
-    <string name="study_use_as_answer">Use this selection as the answer for</string>
-    <string name="study_use">Use</string>
-    <string name="study_answer_added">Answer added to the card</string>
-    <string name="study_untitled_card">Card without text</string>
-    <string name="study_image_card">Image card</string>
-    <string name="study_drawn_answer">Drawn answer</string>
-    <string name="study_answer_needed">Answer needed</string>
-    <string name="study_new">New</string>
-    <string name="study_due_now">Due now</string>
-    <string name="study_due_in">Due in %1$s</string>
-    <string name="study_n_due">%1$d due</string>
-    <string name="study_iv_min">%1$dm</string>
-    <string name="study_iv_hour">%1$dh</string>
-    <string name="study_iv_day">%1$dd</string>
-    <string name="study_iv_month">%1$smo</string>
-    <string name="study_iv_year">%1$sy</string>
-    <string name="study_review">Review</string>
-    <string name="study_review_all">Review all due</string>
-    <string name="study_review_n">Review (%1$d)</string>
-    <string name="study_all_due">All due cards</string>
-    <string name="study_search_hint">Search flashcards</string>
-    <string name="study_no_results">No cards match</string>
-    <string name="study_no_cards">No flashcards yet. Lasso part of a note and tap \"Make flashcard\", or add one here.</string>
-    <string name="study_no_cards_deck">No cards in this deck yet</string>
-    <string name="study_reset">Reset progress</string>
-    <string name="study_delete">Delete</string>
-    <string name="study_delete_title">Delete this card?</string>
-    <string name="study_delete_text">The card and its review history will be removed.</string>
-    <string name="study_open_in_note">Open in note</string>
-    <string name="study_source_missing">The original file was moved or deleted</string>
-    <string name="study_streak">%1$d-day streak</string>
     <string name="study_focus_today">%1$d min focus today</string>
-    <!-- review -->
-    <string name="study_show_answer">Show answer</string>
-    <string name="study_again">Again</string>
-    <string name="study_hard">Hard</string>
-    <string name="study_good">Good</string>
-    <string name="study_easy">Easy</string>
-    <string name="study_left">%1$d left</string>
-    <string name="study_review_hint">Tap or Space to flip · 1–4 to grade · swipe right = Good, left = Again</string>
-    <string name="study_no_answer_yet">No answer yet. Open the note and lasso it.</string>
-    <string name="study_caught_up">All caught up — nothing is due right now</string>
-    <string name="study_practice_all">Practise all cards</string>
-    <string name="study_done">Done</string>
-    <string name="study_session_done">Session complete</string>
     <string name="study_minutes_short">%1$d min</string>
-    <string name="study_next_due">Next card due in %1$s</string>
-    <string name="study_more_due">More cards are due — come back after a short break</string>
-    <!-- focus timer -->
     <string name="study_focus">Focus</string>
     <string name="study_focus_timer">Focus timer</string>
     <string name="study_timer_settings">Timer settings</string>
@@ -105,42 +35,147 @@
     <string name="study_open_settings">Open settings</string>
     <string name="study_ch_timer">Focus timer</string>
     <string name="study_ch_alert">Focus timer alerts</string>
-    <string name="study_ch_daily">Flashcard reminders</string>
     <string name="study_notif_until">Until %1$s</string>
     <string name="study_notif_paused">Paused · %1$s left</string>
     <string name="study_notif_focus_done">Focus block done — well done!</string>
     <string name="study_notif_break_done">Break is over</string>
     <string name="study_notif_next_running">%1$s started (%2$s)</string>
     <string name="study_notif_next_ready">Tap to start: %1$s</string>
-    <string name="study_notif_due_text">A few minutes of review keeps them fresh</string>
-    <!-- stats -->
     <string name="study_stats">Study stats</string>
     <string name="study_today">Today</string>
     <string name="study_this_week">This week</string>
     <string name="study_focused">Focused</string>
-    <string name="study_reviewed">Cards reviewed</string>
     <string name="study_streak_label">Streak</string>
     <string name="study_last_7_days">Last 7 days</string>
     <string name="study_no_focus_yet">No focus time yet — start a timer and pick a subject</string>
-    <!-- settings -->
-    <string name="study_daily_reminder">Daily review reminder</string>
-    <string name="study_daily_reminder_desc">At %1$s, when flashcards are due</string>
-    <string name="study_reminder_time">Reminder time</string>
-
-    <plurals name="study_n_cards">
-        <item quantity="one">%d card</item>
-        <item quantity="other">%d cards</item>
-    </plurals>
-    <plurals name="study_n_cards_due">
-        <item quantity="one">%d card due</item>
-        <item quantity="other">%d cards due</item>
-    </plurals>
     <plurals name="study_n_days">
         <item quantity="one">%d day</item>
         <item quantity="other">%d days</item>
     </plurals>
-    <plurals name="study_n_reviewed">
-        <item quantity="one">%d card reviewed</item>
-        <item quantity="other">%d cards reviewed</item>
+
+    <string name="study_blocks">Focus blocks</string>
+    <!-- AI practice quizzes (quiz-agent, v3.5) -->
+    <string name="quiz_title">Quiz</string>
+    <string name="quiz_practice">AI practice quiz</string>
+    <string name="quiz_practice_desc">Questions from your notes, slides, PDFs or a lasso selection — checked with explanations</string>
+    <string name="quiz_new">New quiz</string>
+    <string name="quiz_saved">Saved quizzes</string>
+    <string name="quiz_none">No quizzes yet. Tap \"New quiz\", or lasso part of a note, tap AI and choose \"Make questions\".</string>
+    <string name="quiz_default_title">Practice quiz</string>
+    <string name="quiz_open">Open</string>
+    <string name="quiz_retake">Retake</string>
+    <string name="quiz_rename">Rename</string>
+    <string name="quiz_save">Save</string>
+    <string name="quiz_delete">Delete</string>
+    <string name="quiz_delete_title">Delete this quiz?</string>
+    <string name="quiz_delete_text">The questions and your results will be removed.</string>
+    <string name="quiz_open_source">Open source file</string>
+    <string name="quiz_in_progress">In progress</string>
+    <string name="quiz_not_found">This quiz was deleted</string>
+    <!-- no key / errors -->
+    <string name="quiz_no_key_title">Add your Gemini API key</string>
+    <string name="quiz_no_key_text">Practice quizzes are written by Google Gemini using your own free API key. Paste it once in Settings → AI; it stays only on this device.</string>
+    <string name="quiz_open_ai_settings">Open Settings → AI</string>
+    <string name="quiz_retry">Try again</string>
+    <string name="quiz_dismiss">Dismiss</string>
+    <string name="quiz_err_no_key">No Gemini API key yet. Add it in Settings → AI.</string>
+    <string name="quiz_err_bad_key">Gemini rejected the API key. Check it in Settings → AI.</string>
+    <string name="quiz_err_quota">Gemini\'s free limit is reached for now. Wait a minute (or until tomorrow for the daily limit) and try again.</string>
+    <string name="quiz_err_network">No connection to Gemini. Check the internet and try again.</string>
+    <string name="quiz_err_blocked">Gemini declined to answer this request. Try another part of the material or change the instructions.</string>
+    <string name="quiz_err_server">Gemini had a problem. Please try again in a moment.</string>
+    <string name="quiz_err_format">Gemini\'s answer could not be read. Please try again.</string>
+    <string name="quiz_err_empty">Gemini did not return usable questions. Try more material or clearer instructions.</string>
+    <string name="quiz_err_read">This file could not be read</string>
+    <string name="quiz_err_no_source">Choose a file, keep the selection, or describe a topic in the instructions.</string>
+    <string name="quiz_err_memory">Not enough memory for this many pages. Choose fewer pages.</string>
+    <string name="quiz_err_generic">Something went wrong. Please try again.</string>
+    <string name="quiz_privacy_title">Before you use AI</string>
+    <string name="quiz_privacy_text">Only what you choose is sent to Google Gemini: the selection, the pages you pick and your instructions. With a free API key Google may use these to improve its products, so avoid private or sensitive material.</string>
+    <string name="quiz_privacy_ok">I understand</string>
+    <!-- new quiz -->
+    <string name="quiz_source">Source</string>
+    <string name="quiz_selection">Selection</string>
+    <string name="quiz_selection_desc">The part you lassoed in the editor</string>
+    <string name="quiz_remove">Remove</string>
+    <string name="quiz_no_file">No file chosen</string>
+    <string name="quiz_add_file_too">Add a file for more context (optional)</string>
+    <string name="quiz_choose_file">Choose file</string>
+    <string name="quiz_pick_file">Choose a file for the quiz</string>
+    <string name="quiz_change">Change</string>
+    <string name="quiz_counting">Counting pages…</string>
+    <string name="quiz_n_pages">%1$d pages</string>
+    <string name="quiz_whole_file">Whole file</string>
+    <string name="quiz_some_pages">Some pages</string>
+    <string name="quiz_from">From</string>
+    <string name="quiz_to">To</string>
+    <string name="quiz_of_n">of %1$d</string>
+    <string name="quiz_many_pages">Only the first 20 page images are sent; the text of every page is used.</string>
+    <string name="quiz_questions">Questions</string>
+    <string name="quiz_count">Number of questions</string>
+    <string name="quiz_fewer">Fewer</string>
+    <string name="quiz_more">More</string>
+    <string name="quiz_types">Question types</string>
+    <string name="quiz_pick_type">Pick at least one type</string>
+    <string name="quiz_type_mcq">Multiple choice</string>
+    <string name="quiz_type_tf">True / false</string>
+    <string name="quiz_type_short">Short answer</string>
+    <string name="quiz_type_essay">Essay</string>
+    <string name="quiz_difficulty">Difficulty</string>
+    <string name="quiz_easy">Easy</string>
+    <string name="quiz_medium">Medium</string>
+    <string name="quiz_hard">Hard</string>
+    <string name="quiz_mixed">Mixed</string>
+    <string name="quiz_language">Language</string>
+    <string name="quiz_lang_auto">Automatic</string>
+    <string name="quiz_lang_ar">العربية</string>
+    <string name="quiz_lang_en">English</string>
+    <string name="quiz_instructions">Instructions (optional)</string>
+    <string name="quiz_instructions_hint">e.g. \"Focus on chapter 2 definitions\" or \"10 hard questions in Arabic about the formulas\"</string>
+    <string name="quiz_generate">Generate quiz</string>
+    <string name="quiz_need_source">Choose a source, or describe a topic in the instructions</string>
+    <string name="quiz_stage_reading">Reading the pages…</string>
+    <string name="quiz_stage_writing">Writing your questions…</string>
+    <string name="quiz_stage_saving">Saving…</string>
+    <string name="quiz_stage_hint">This usually takes 10–40 seconds</string>
+    <!-- taking the quiz -->
+    <string name="quiz_q_of">Question %1$d of %2$d</string>
+    <string name="quiz_source_pages">%1$s (p. %2$s)</string>
+    <string name="quiz_select_all">Select all that apply</string>
+    <string name="quiz_true">True</string>
+    <string name="quiz_false">False</string>
+    <string name="quiz_your_answer">Your answer</string>
+    <string name="quiz_check">Check</string>
+    <string name="quiz_prev">Previous</string>
+    <string name="quiz_next">Next</string>
+    <string name="quiz_finish">Finish</string>
+    <string name="quiz_unanswered">%1$d questions are not answered yet. Finish anyway? Unanswered questions score 0.</string>
+    <string name="quiz_answered">%1$d of %2$d answered</string>
+    <string name="quiz_grading">Grading…</string>
+    <string name="quiz_show_all">Show all questions</string>
+    <string name="quiz_one_by_one">One question at a time</string>
+    <string name="quiz_correct">Correct</string>
+    <string name="quiz_partly">Partly correct · %1$d%%</string>
+    <string name="quiz_wrong">Incorrect</string>
+    <string name="quiz_feedback">Feedback</string>
+    <string name="quiz_correct_answer">Correct answer</string>
+    <string name="quiz_model_answer">Model answer</string>
+    <string name="quiz_explanation">Explanation</string>
+    <!-- results -->
+    <string name="quiz_score_line">%1$d of %2$d fully correct</string>
+    <string name="quiz_cheer_great">Excellent — you know this material well!</string>
+    <string name="quiz_cheer_good">Good work. Review the explanations below to close the gaps.</string>
+    <string name="quiz_cheer_keep">Keep going — read the explanations, then retake the quiz.</string>
+    <string name="quiz_attempts">Attempts: %1$s</string>
+    <string name="quiz_review_answers">Your answers</string>
+    <string name="quiz_mistakes_only">Mistakes only</string>
+
+    <plurals name="quiz_n_questions">
+        <item quantity="one">%d question</item>
+        <item quantity="other">%d questions</item>
+    </plurals>
+    <plurals name="quiz_n_quizzes">
+        <item quantity="one">%d quiz</item>
+        <item quantity="other">%d quizzes</item>
     </plurals>
 </resources>

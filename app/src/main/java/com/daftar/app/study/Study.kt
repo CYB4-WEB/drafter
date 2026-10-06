@@ -1,26 +1,19 @@
 package com.daftar.app.study
 
-import android.graphics.Bitmap
 import androidx.compose.runtime.Composable
 import java.io.File
 
-/** Study hub: flashcard decks per subject + focus (Pomodoro) timer + study stats. */
+/** Study hub: AI practice quizzes + focus (Pomodoro) timer + focus stats. */
 @Composable
 fun StudyScreen() = StudyScreenImpl()
 
-/** Spaced-repetition review of due cards ([deck] = subject folder path, null = all). */
+/** Create an AI practice quiz (prefilled by [QuizRequests.prepare]). */
 @Composable
-fun ReviewScreen(deck: String?) = ReviewScreenImpl(deck)
+fun NewQuizScreen() = NewQuizScreenImpl()
 
-/**
- * Called by the note editor's lasso menu ("Make flashcard").
- * [front] = image of the lassoed content (the caller keeps ownership; it is not recycled here),
- * [recognizedText] = handwriting/typed text if available, [source] = the note/PDF file.
- * Shows a dialog to confirm the front, type/draw the back, pick the deck (defaults to the source's subject folder) and save.
- */
+/** Take / review the saved quiz [id]. */
 @Composable
-fun MakeFlashcardDialog(source: File, front: Bitmap, recognizedText: String?, onDismiss: () -> Unit) =
-    MakeFlashcardDialog(source, front, recognizedText, page = -1, onDismiss = onDismiss)
+fun QuizScreen(id: String) = QuizScreenImpl(id)
 
 /**
  * "Open in note" at a page: [requestPage] is set right before the source opens; the note/PDF viewer calls
@@ -38,3 +31,4 @@ object StudyLinks {
         return p.second
     }
 }
+

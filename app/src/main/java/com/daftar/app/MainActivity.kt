@@ -115,7 +115,6 @@ class MainActivity : AppCompatActivity() {
             when (a) {
                 ACTION_PLANNER -> Nav.tab(Screen.Planner)
                 "study" -> Nav.tab(Screen.Study)
-                "study_review" -> { Nav.tab(Screen.Study); Nav.push(Screen.Review(null)) }
                 ACTION_ADD_EVENT -> { Nav.tab(Screen.Planner); Nav.push(Screen.EditEvent(null)) }
                 else -> { Nav.tab(Screen.Home); pendingAction.value = a }
             }
@@ -302,7 +301,8 @@ fun Route(s: Screen) {
         is Screen.Convert -> com.daftar.app.convert.ConvertScreen(s.path)
         is Screen.Split -> SplitScreen(s)
         Screen.Study -> com.daftar.app.study.StudyScreen()
-        is Screen.Review -> com.daftar.app.study.ReviewScreen(s.deck)
+        Screen.NewQuiz -> com.daftar.app.study.NewQuizScreen()
+        is Screen.Quiz -> com.daftar.app.study.QuizScreen(s.id)
         Screen.Trash -> com.daftar.app.ui.TrashScreen()
         Screen.Grades -> com.daftar.app.grades.GradesScreen()
         Screen.Countdowns -> com.daftar.app.planner.countdown.CountdownsScreen()
