@@ -13,8 +13,8 @@ android {
         applicationId = "com.daftar.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 5
-        versionName = "3.0.1"
+        versionCode = 6
+        versionName = "3.5"
     }
 
     androidResources {

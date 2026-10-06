@@ -23,14 +23,9 @@ import com.daftar.app.data.Storage
 import com.daftar.app.planner.localized
 import com.daftar.app.ui.EXTRA_ACTION
 import java.io.File
-import java.time.LocalDate
-import java.time.LocalTime
-import java.time.ZoneId
-import java.time.ZonedDateTime
 
 /** Deep-link actions handled by the study screens (sent as [EXTRA_ACTION]). */
 const val ACTION_STUDY = "study"
-const val ACTION_STUDY_REVIEW = "study_review"
 
 object Phase { const val IDLE = 0; const val FOCUS = 1; const val SHORT = 2; const val LONG = 3 }
 
@@ -68,9 +63,6 @@ object StudyPrefs {
     var autoStart by mutableStateOf(sp.getBoolean("autoStart", true)); private set
     var dnd by mutableStateOf(sp.getBoolean("dnd", false)); private set
     var lastSubject by mutableStateOf(sp.getString("lastSubject", "") ?: ""); private set
-    var dailyReminder by mutableStateOf(sp.getBoolean("daily", false)); private set
-    /** Minutes after midnight. */
-    var dailyAt by mutableStateOf(sp.getInt("dailyAt", 18 * 60)); private set
 
     fun putDurations(focus: Int, short: Int, long: Int, every: Int) {
         focusMin = focus.coerceIn(1, 180); shortMin = short.coerceIn(1, 60); longMin = long.coerceIn(1, 90); longEvery = every.coerceIn(2, 10)
@@ -79,8 +71,6 @@ object StudyPrefs {
     fun putAutoStart(v: Boolean) { autoStart = v; sp.edit().putBoolean("autoStart", v).apply() }
     fun putDnd(v: Boolean) { dnd = v; sp.edit().putBoolean("dnd", v).apply() }
     fun putLastSubject(v: String) { lastSubject = v; sp.edit().putString("lastSubject", v).apply() }
-    fun putDaily(v: Boolean) { dailyReminder = v; sp.edit().putBoolean("daily", v).apply() }
-    fun putDailyAt(v: Int) { dailyAt = v; sp.edit().putInt("dailyAt", v).apply() }
 
     internal fun loadState(): FocusState = FocusState(
         phase = sp.getInt("t.phase", 0), running = sp.getBoolean("t.running", false), endsAt = sp.getLong("t.ends", 0),
@@ -231,10 +221,8 @@ internal object StudyAlarms {
     const val ACTION_RESUME = "com.daftar.app.study.RESUME"
     const val ACTION_SKIP = "com.daftar.app.study.SKIP"
     const val ACTION_STOP = "com.daftar.app.study.STOP"
-    const val ACTION_DAILY = "com.daftar.app.study.DAILY"
     const val EXTRA_END = "end"
     private const val RC_TIMER = 7410
-    private const val RC_DAILY = 7411
 
     private fun am(c: Context) = c.getSystemService(AlarmManager::class.java)
 
@@ -258,28 +246,13 @@ internal object StudyAlarms {
         }
     }
 
-    fun scheduleDaily(c: Context) {
-        val i = Intent(c, StudyReceiver::class.java).setAction(ACTION_DAILY).setData(Uri.parse("daftar://study/daily"))
-        if (!StudyPrefs.dailyReminder) {
-            PendingIntent.getBroadcast(c, RC_DAILY, i, PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE)?.let { am(c).cancel(it); it.cancel() }
-            return
-        }
-        val zone = ZoneId.systemDefault()
-        val at = LocalTime.of(StudyPrefs.dailyAt / 60, StudyPrefs.dailyAt % 60)
-        var next = ZonedDateTime.of(LocalDate.now(zone), at, zone)
-        if (!next.toInstant().isAfter(java.time.Instant.now().plusSeconds(5))) next = next.plusDays(1)
-        val pi = PendingIntent.getBroadcast(c, RC_DAILY, i, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        // Inexact is fine for a daily nudge (the system batches it with other wakeups).
-        am(c).setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, next.toInstant().toEpochMilli(), pi)
-    }
-
     fun actionPi(c: Context, action: String): PendingIntent {
         val i = Intent(c, StudyReceiver::class.java).setAction(action).setData(Uri.parse("daftar://study/$action"))
         return PendingIntent.getBroadcast(c, action.hashCode(), i, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
     }
 }
 
-/** Timer phase ends, notification actions and the daily "cards due" reminder (not exported: only our PendingIntents reach it). */
+/** Timer phase ends and notification actions (not exported: only our PendingIntents reach it). */
 class StudyReceiver : BroadcastReceiver() {
     override fun onReceive(c: Context, i: Intent) {
         when (i.action) {
@@ -288,21 +261,19 @@ class StudyReceiver : BroadcastReceiver() {
             StudyAlarms.ACTION_RESUME -> FocusTimer.resume()
             StudyAlarms.ACTION_SKIP -> FocusTimer.skip()
             StudyAlarms.ACTION_STOP -> FocusTimer.stop()
-            StudyAlarms.ACTION_DAILY -> {
-                if (StudyPrefs.dailyReminder) StudyNotify.due(c.applicationContext, Flashcards.dueCount())
-                StudyAlarms.scheduleDaily(c.applicationContext)
-            }
         }
     }
 }
 
-/** System broadcasts only (boot, app update, clock / time-zone change): re-arm the timer alarm and the daily reminder. */
+/** System broadcasts only (boot, app update, clock / time-zone change): re-arm the timer alarm. */
 class StudyBootReceiver : BroadcastReceiver() {
     override fun onReceive(c: Context, i: Intent) {
         when (i.action) {
             Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED, Intent.ACTION_TIME_CHANGED, Intent.ACTION_TIMEZONE_CHANGED -> {
                 FocusTimer.restore()
-                StudyAlarms.scheduleDaily(c.applicationContext)
+                val app = c.applicationContext
+                val pr = goAsync()
+                Thread { try { StudyCleanup.runOnce(app) } finally { pr.finish() } }.start()
             }
         }
     }
@@ -315,10 +286,8 @@ class StudyBootReceiver : BroadcastReceiver() {
 internal object StudyNotify {
     const val CH_TIMER = "study_timer"
     const val CH_ALERT = "study_alert"
-    const val CH_DAILY = "study_daily"
     private const val ID_TIMER = 7401
     private const val ID_ALERT = 7402
-    private const val ID_DAILY = 7403
     private var channelsMade = false
 
     fun permitted(c: Context): Boolean =
@@ -332,7 +301,6 @@ internal object StudyNotify {
         val l = localized(c)
         nm(c).createNotificationChannel(NotificationChannel(CH_TIMER, l.getString(R.string.study_ch_timer), NotificationManager.IMPORTANCE_LOW).apply { setShowBadge(false) })
         nm(c).createNotificationChannel(NotificationChannel(CH_ALERT, l.getString(R.string.study_ch_alert), NotificationManager.IMPORTANCE_HIGH))
-        nm(c).createNotificationChannel(NotificationChannel(CH_DAILY, l.getString(R.string.study_ch_daily), NotificationManager.IMPORTANCE_DEFAULT))
     }
 
     private fun openPi(c: Context, action: String, rc: Int): PendingIntent {
@@ -392,22 +360,6 @@ internal object StudyNotify {
             .setContentIntent(openPi(ctx, ACTION_STUDY, ID_ALERT))
             .build()
         runCatching { nm(ctx).notify(ID_ALERT, n) }
-    }
-
-    fun due(ctx: Context, count: Int) {
-        if (count <= 0 || !permitted(ctx)) return
-        channels(ctx)
-        val c = localized(ctx)
-        val n = NotificationCompat.Builder(ctx, CH_DAILY)
-            .setSmallIcon(R.drawable.ic_notify)
-            .setContentTitle(c.resources.getQuantityString(R.plurals.study_n_cards_due, count, count))
-            .setContentText(c.getString(R.string.study_notif_due_text))
-            .setCategory(NotificationCompat.CATEGORY_REMINDER)
-            .setAutoCancel(true)
-            .setContentIntent(openPi(ctx, ACTION_STUDY_REVIEW, ID_DAILY))
-            .addAction(0, c.getString(R.string.study_review), openPi(ctx, ACTION_STUDY_REVIEW, ID_DAILY + 1))
-            .build()
-        runCatching { nm(ctx).notify(ID_DAILY, n) }
     }
 }
 

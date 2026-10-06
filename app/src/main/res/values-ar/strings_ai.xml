@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Chat panel -->
+    <string name="ai_title">المساعد الذكي</string>
+    <string name="ai_new_chat">محادثة جديدة</string>
+    <string name="ai_new_chat_confirm">بدء محادثة جديدة؟ ستُحذف المحادثة الحالية لهذا الملف.</string>
+    <string name="ai_close">إغلاق لوحة الذكاء الاصطناعي</string>
+    <string name="ai_more">المزيد</string>
+    <string name="ai_empty">حدّد جزءًا من الصفحة بأداة التحديد الحر ثم اضغط «اسأل الذكاء الاصطناعي»، أو اسأل أي سؤال عن هذا الملف.</string>
+    <string name="ai_input_hint">اسأل عن هذا…</string>
+    <string name="ai_send">إرسال</string>
+    <string name="ai_selection_from_page">التحديد · صفحة %1$d</string>
+    <string name="ai_selection_image">المنطقة المحددة</string>
+    <string name="ai_remove_attachment">إزالة التحديد</string>
+    <string name="ai_thinking">جارٍ التفكير…</string>
+    <string name="ai_reading_pages">جارٍ قراءة الصفحات %1$d–%2$d…</string>
+    <string name="ai_reading_page">جارٍ قراءة الصفحة %1$d…</string>
+    <string name="ai_stop">إيقاف</string>
+    <string name="ai_retry">إعادة المحاولة</string>
+    <string name="ai_stopped">تم الإيقاف.</string>
+    <string name="ai_dismiss">إغلاق</string>
+
+    <!-- Quick chips (the prompt is what is sent) -->
+    <string name="ai_chip_explain">اشرح</string>
+    <string name="ai_chip_answer">أجب</string>
+    <string name="ai_chip_solve">حلّ خطوة بخطوة</string>
+    <string name="ai_chip_translate">ترجم</string>
+    <string name="ai_chip_questions">أنشئ أسئلة</string>
+    <string name="ai_prompt_explain">اشرح هذا بوضوح.</string>
+    <string name="ai_prompt_answer">أجب عن هذا السؤال.</string>
+    <string name="ai_prompt_solve">حلّ هذا خطوة بخطوة.</string>
+    <string name="ai_prompt_translate">ترجم هذا. إن كان بالعربية فترجمه إلى الإنجليزية، وإلا فترجمه إلى العربية.</string>
+
+    <!-- Errors -->
+    <string name="ai_err_no_key">أضف مفتاح Gemini API الخاص بك من الإعدادات ← الذكاء الاصطناعي لاستخدام المساعد.</string>
+    <string name="ai_err_bad_key">رُفض مفتاح API. تحقّق منه في الإعدادات ← الذكاء الاصطناعي (ومن قيوده في Google Cloud).</string>
+    <string name="ai_err_quota">بلغ مفتاحك حدّ الاستخدام المجاني. انتظر دقيقة ثم أعد المحاولة، أو حاول لاحقًا اليوم.</string>
+    <string name="ai_err_network">لا يوجد اتصال بـ Gemini. تحقّق من الإنترنت وأعد المحاولة.</string>
+    <string name="ai_err_blocked">لم يُجب Gemini عن هذا الطلب (ربما حجبته فلاتر الأمان). جرّب صياغته بطريقة أخرى.</string>
+    <string name="ai_err_server">واجه Gemini مشكلة في الإجابة. أعد المحاولة بعد قليل.</string>
+    <string name="ai_err_memory">لا توجد ذاكرة كافية لتجهيز الصفحات. جرّب عددًا أقل من الصفحات.</string>
+    <string name="ai_err_generic">حدث خطأ: %1$s</string>
+    <string name="ai_open_settings">فتح الإعدادات ← الذكاء الاصطناعي</string>
+
+    <!-- Permission to read more of the file -->
+    <string name="ai_perm_title">مشاركة المزيد من هذا الملف؟</string>
+    <string name="ai_perm_pages">يريد الذكاء الاصطناعي الصفحات %1$d–%2$d من %3$s.</string>
+    <string name="ai_perm_page">يريد الذكاء الاصطناعي الصفحة %1$d من %2$s.</string>
+    <string name="ai_perm_whole">يريد الذكاء الاصطناعي قراءة %1$s كاملًا.</string>
+    <string name="ai_perm_reason">السبب: %1$s</string>
+    <string name="ai_perm_only_allowed">لا يُرسل إلا ما تسمح به (نص الصفحات وصورها).</string>
+    <string name="ai_perm_allow_pages">السماح بهذه الصفحات</string>
+    <string name="ai_perm_allow_whole">السماح بالملف كاملًا</string>
+    <string name="ai_perm_deny">رفض</string>
+    <string name="ai_perm_always">السماح دائمًا لهذا الملف</string>
+    <string name="ai_always_on">مسموح دائمًا لهذا الملف</string>
+    <string name="ai_always_revoke">اسألني قبل مشاركة الصفحات</string>
+    <string name="ai_note_shared">تمت مشاركة الصفحات %1$d–%2$d</string>
+    <string name="ai_note_shared_one">تمت مشاركة الصفحة %1$d</string>
+    <string name="ai_note_denied">رفضت مشاركة المزيد من الملف</string>
+
+    <!-- One-time privacy notice -->
+    <string name="ai_privacy_title">قبل استخدام الذكاء الاصطناعي</string>
+    <string name="ai_privacy_text">تُرسل الطلبات مباشرة من هذا الجهاز إلى Google Gemini باستخدام مفتاح API الخاص بك.\n\n• لا يُرسل إلا ما تحدده أو تسمح به: المنطقة المحددة وسؤالك وأي صفحات توافق عليها.\n• في الفئة المجانية قد تستخدم Google الطلبات والصور لتحسين منتجاتها، وقد يراجعها أشخاص. لا ترسل معلومات شخصية أو سرية.\n• قد تكون الإجابات خاطئة. تحقّق من النتائج المهمة.</string>
+    <string name="ai_privacy_accept">فهمت</string>
+
+    <!-- Settings → AI -->
+    <string name="ai_set_title">الذكاء الاصطناعي (Gemini)</string>
+    <string name="ai_set_key">مفتاح Gemini API</string>
+    <string name="ai_set_key_hint">الصق مفتاحك</string>
+    <string name="ai_set_key_saved">المفتاح محفوظ على هذا الجهاز فقط.</string>
+    <string name="ai_set_no_key">لا يوجد مفتاح بعد. ميزات الذكاء الاصطناعي متوقفة حتى تضيف مفتاحًا.</string>
+    <string name="ai_set_paste">لصق</string>
+    <string name="ai_set_show">إظهار المفتاح</string>
+    <string name="ai_set_hide">إخفاء المفتاح</string>
+    <string name="ai_set_clear">إزالة المفتاح</string>
+    <string name="ai_set_clear_confirm">إزالة مفتاح API من هذا الجهاز؟</string>
+    <string name="ai_set_remove">إزالة</string>
+    <string name="ai_set_save">حفظ</string>
+    <string name="ai_set_test">اختبار المفتاح</string>
+    <string name="ai_set_testing">جارٍ الاختبار…</string>
+    <string name="ai_set_test_ok">المفتاح يعمل. عدد النماذج المتاحة: %1$d.</string>
+    <string name="ai_set_model">النموذج</string>
+    <string name="ai_set_model_hint">اختبر المفتاح لتختار من النماذج المتاحة له.</string>
+    <string name="ai_set_model_default">%1$s (الافتراضي)</string>
+    <string name="ai_set_get_key">احصل على مفتاح مجاني من Google AI Studio</string>
+    <string name="ai_set_privacy">يُحفظ مفتاحك في التخزين الخاص بالتطبيق على هذا الجهاز فقط، ولا تتم مشاركته أو تصديره أو نسخه احتياطيًا. في الفئة المجانية قد تستخدم Google ما ترسله لتحسين منتجاتها؛ ولا يُرسل إلا ما تحدده أو تسمح به.</string>
+    <string name="ai_set_restrict_title">احمِ مفتاحك (موصى به)</string>
+    <string name="ai_set_restrict_text">في Google Cloud Console ← APIs &amp; Services ← Credentials افتح مفتاحك:\n1. Application restrictions ← Android apps ← أضف اسم الحزمة وبصمة SHA-1 الظاهرين أدناه.\n2. API restrictions ← Restrict key ← Generative Language API.\nبعدها لن يعمل المفتاح إن نُسخ إلى تطبيقات أخرى.</string>
+    <string name="ai_set_package">اسم الحزمة</string>
+    <string name="ai_set_sha1">بصمة شهادة SHA-1</string>
+    <string name="ai_set_sha1_unknown">غير متاحة</string>
+    <string name="ai_set_privacy_reset">إظهار إشعار الخصوصية مرة أخرى</string>
+</resources>

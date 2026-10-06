@@ -165,7 +165,7 @@
     <string name="pages_tpl_notes">ملاحظات</string>
     <string name="ink4_tidy">ترتيب</string>
     <string name="ink4_solve">حلّ</string>
-    <string name="ink4_flashcard">بطاقة مراجعة</string>
+    <string name="ink_ai">اسأل الذكاء الاصطناعي</string>
     <string name="ink4_math_helper">مساعد الرياضيات</string>
     <string name="ink4_no_math">لم يُعثر على عملية حسابية في التحديد</string>
     <string name="ink4_nothing_to_tidy">حدّد خط اليد لترتيبه</string>
