@@ -21,12 +21,22 @@ android {
         localeFilters += listOf("en", "ar")
     }
 
+    // Stable release key so every build (local or GitHub Actions) installs as an update over the previous one.
+    // CI can override it with secrets: DAFTAR_KEYSTORE_FILE / DAFTAR_KEYSTORE_PASSWORD / DAFTAR_KEY_ALIAS / DAFTAR_KEY_PASSWORD.
+    signingConfigs {
+        create("release") {
+            storeFile = file(System.getenv("DAFTAR_KEYSTORE_FILE") ?: "${rootDir}/keystore/daftar-release.jks")
+            storePassword = System.getenv("DAFTAR_KEYSTORE_PASSWORD") ?: "daftar-release"
+            keyAlias = System.getenv("DAFTAR_KEY_ALIAS") ?: "daftar"
+            keyPassword = System.getenv("DAFTAR_KEY_PASSWORD") ?: "daftar-release"
+        }
+    }
     buildTypes {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
         }
     }
     compileOptions {
