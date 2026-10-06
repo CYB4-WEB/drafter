@@ -40,4 +40,6 @@ object AiPrefs {
     fun saveKey(k: String) { init(); apiKey = k.trim(); sp.edit().putString("key", apiKey).apply() }
     fun saveModel(m: String) { init(); model = m.trim().ifBlank { DEFAULT_MODEL }; sp.edit().putString("model", model).apply() }
     fun acceptPrivacy() { init(); privacyAccepted = true; sp.edit().putBoolean("privacy", true).apply() }
+    /** Shows the one-time privacy notice again before the next request. */
+    fun resetPrivacy() { init(); privacyAccepted = false; sp.edit().putBoolean("privacy", false).apply() }
 }

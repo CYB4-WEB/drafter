@@ -113,7 +113,7 @@
             android:exported="false"
             android:foregroundServiceType="microphone" />
 
-        <!-- study-agent: focus timer phase ends / notification actions / daily cards-due reminder / re-arm after reboot -->
+        <!-- focus timer phase ends / notification actions / re-arm after reboot -->
         <receiver android:name=".study.StudyReceiver" android:exported="false" />
         <receiver android:name=".study.StudyBootReceiver" android:exported="true">
             <intent-filter>

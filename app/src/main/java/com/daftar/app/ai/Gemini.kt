@@ -33,7 +33,8 @@ object Gemini {
         data class Text(val text: String) : Part()
         /** Inline image/PDF bytes (base64 in the request). */
         data class Blob(val mime: String, val bytes: ByteArray) : Part()
-        data class Call(val name: String, val args: JsonObject) : Part()
+        /** [signature] = the model's thought signature, sent back unchanged (required by newer models for tool calls). */
+        data class Call(val name: String, val args: JsonObject, val signature: String? = null) : Part()
         data class Result(val name: String, val response: JsonObject) : Part()
 
         companion object {
@@ -131,7 +132,10 @@ object Gemini {
                 when (p) {
                     is Part.Text -> addJsonObject { put("text", p.text) }
                     is Part.Blob -> addJsonObject { putJsonObject("inlineData") { put("mimeType", p.mime); put("data", Base64.encodeToString(p.bytes, Base64.NO_WRAP)) } }
-                    is Part.Call -> addJsonObject { putJsonObject("functionCall") { put("name", p.name); put("args", p.args) } }
+                    is Part.Call -> addJsonObject {
+                        putJsonObject("functionCall") { put("name", p.name); put("args", p.args) }
+                        if (p.signature != null) put("thoughtSignature", p.signature)
+                    }
                     is Part.Result -> addJsonObject { putJsonObject("functionResponse") { put("name", p.name); put("response", p.response) } }
                 }
             }
@@ -159,7 +163,9 @@ object Gemini {
             when {
                 p["thought"]?.jsonPrimitive?.booleanOrNull == true -> null
                 p["text"] != null -> Part.Text(p["text"]!!.jsonPrimitive.content)
-                p["functionCall"] != null -> p["functionCall"]!!.jsonObject.let { Part.Call(it["name"]!!.jsonPrimitive.content, it["args"]?.jsonObject ?: JsonObject(emptyMap())) }
+                p["functionCall"] != null -> p["functionCall"]!!.jsonObject.let {
+                    Part.Call(it["name"]!!.jsonPrimitive.content, it["args"]?.jsonObject ?: JsonObject(emptyMap()), p["thoughtSignature"]?.jsonPrimitive?.contentOrNull)
+                }
                 else -> null
             }
         }
@@ -202,7 +208,7 @@ object Gemini {
     }
 
     /** SHA-1 of the app's signing certificate (uppercase hex, no colons) for Android-restricted API keys. */
-    private val certSha1: String? by lazy {
+    internal val certSha1: String? by lazy {
         runCatching {
             val pm = Storage.appCtx.packageManager
             val name = Storage.appCtx.packageName
