@@ -60,11 +60,15 @@ object Storage {
             recents.addAll(s.recents.filter { File(it).exists() })
             pins.addAll(s.pins.filter { File(it).exists() })
         }
+        Tags.init(ctx)  // tags-agent hook: tags.json (tags, colour labels, smart filters)
         // recycle bin: drop entries older than 30 days, once per start, off the main thread (files-agent)
         Thread({ runCatching { Trash.purge() } }, "trash-purge").apply { isDaemon = true; priority = Thread.MIN_PRIORITY }.start()
     }
 
     fun touch() { version++ }
+
+    /** True once [init] ran (engines and background threads may start before the library is set up). */
+    fun isReady() = ::root.isInitialized
 
     private fun saveState() {
         runCatching { stateFile.writeText(json.encodeToString(AppState(recents.toList(), pins.toList()))) }
@@ -153,6 +157,7 @@ object Storage {
         for (c in cars) c.renameTo(File(c.parentFile, ".${target.name}." + c.name.removePrefix(".${f.name}.")))
         runCatching { Versions.moved(f, target) }
         relink(f, target)
+        Tags.moved(f, target)  // tags-agent hook
         touch(); return target
     }
 
@@ -172,6 +177,7 @@ object Storage {
         }
         runCatching { Versions.moved(f, target) }
         relink(f, target)
+        Tags.moved(f, target)  // tags-agent hook
         touch(); return target
     }
 
@@ -181,6 +187,7 @@ object Storage {
         val target = uniqueFile(f.parentFile!!, base, ext)
         f.copyRecursively(target)
         for (c in sidecars(f)) c.copyTo(File(c.parentFile, ".${target.name}." + c.name.removePrefix(".${f.name}.")), true)
+        Tags.copied(f, target)  // tags-agent hook
         touch(); return target
     }
 
@@ -192,6 +199,7 @@ object Storage {
         val a = f.absolutePath
         fun inside(p: String) = p == a || p.startsWith("$a/")
         val item = Trash.put(f, kindOf(f), pins.filter(::inside)) ?: return null
+        Tags.trashed(f, item.id)  // tags-agent hook: tags wait in the bin entry until a restore
         recents.removeAll(::inside)
         pins.removeAll(::inside)
         saveState(); touch()
@@ -204,6 +212,7 @@ object Storage {
         sidecars(f).forEach { it.delete() }
         f.deleteRecursively()
         Versions.dirFor(f)?.deleteRecursively()
+        Tags.removed(f)  // tags-agent hook
         recents.removeAll { it == a || it.startsWith("$a/") }
         pins.removeAll { it == a || it.startsWith("$a/") }
         saveState(); touch()
@@ -214,6 +223,7 @@ object Storage {
         var changed = false
         for (p in paths) if (p !in pins && File(p).exists()) { pins.add(p); changed = true }
         if (changed) saveState()
+        Tags.restoredFromBin()  // tags-agent hook: Trash.restore always ends here — put the item's tags back
     }
 
     /** Path of the folder picture of [dir] (may not exist). */

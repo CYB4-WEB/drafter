@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- tags-agent: tags, colour labels, smart filters, note → web page -->
+<resources>
+    <string name="tags_title">Tags</string>
+    <string name="tags_menu">Tags…</string>
+    <string name="tags_new">New tag</string>
+    <string name="tags_edit">Edit tag</string>
+    <string name="tags_name">Name</string>
+    <string name="tags_color">Colour</string>
+    <string name="tags_create">Create</string>
+    <string name="tags_save">Save</string>
+    <string name="tags_done">Done</string>
+    <string name="tags_delete">Delete tag</string>
+    <string name="tags_delete_title">Delete “%1$s”?</string>
+    <string name="tags_delete_unused">No item uses this tag.</string>
+    <plurals name="tags_delete_used">
+        <item quantity="one">It will be removed from %1$d item. The files stay.</item>
+        <item quantity="other">It will be removed from %1$d items. The files stay.</item>
+    </plurals>
+    <string name="tags_none_yet">No tags yet.</string>
+    <string name="tags_builtin_hint">Leave empty to keep the default name in every language.</string>
+    <string name="tags_marks_desc">Tags: %1$s</string>
+    <string name="tags_select_items">Tag several items</string>
+    <string name="tags_select_all">Select all</string>
+    <string name="tags_tag_selected">Tags…</string>
+    <plurals name="tags_items_selected">
+        <item quantity="one">%1$d item selected</item>
+        <item quantity="other">%1$d items selected</item>
+    </plurals>
+    <plurals name="tags_items">
+        <item quantity="one">%1$d item</item>
+        <item quantity="other">%1$d items</item>
+    </plurals>
+    <plurals name="tags_matches">
+        <item quantity="one">%1$d match</item>
+        <item quantity="other">%1$d matches</item>
+    </plurals>
+
+    <string name="tags_color_red">Red</string>
+    <string name="tags_color_orange">Orange</string>
+    <string name="tags_color_yellow">Yellow</string>
+    <string name="tags_color_green">Green</string>
+    <string name="tags_color_teal">Teal</string>
+    <string name="tags_color_blue">Blue</string>
+    <string name="tags_color_purple">Purple</string>
+    <string name="tags_color_grey">Grey</string>
+
+    <string name="tags_default_review">To review</string>
+    <string name="tags_default_exam">Exam week</string>
+    <string name="tags_default_important">Important</string>
+    <string name="tags_default_done">Done</string>
+    <string name="tags_default_homework">Homework</string>
+
+    <string name="tags_smart_filters">Smart filters</string>
+    <string name="tags_all_files">All files</string>
+    <string name="tags_filter_new">New filter</string>
+    <string name="tags_filter_edit">Edit filter</string>
+    <string name="tags_filter_untitled">Filter</string>
+    <string name="tags_filter_review">To review</string>
+    <string name="tags_filter_exam">Exam week</string>
+    <string name="tags_filter_recent">Recently edited</string>
+    <string name="tags_filter_untagged">Untagged notes</string>
+    <string name="tags_filter_tags">Has tags</string>
+    <string name="tags_filter_any_tag">Any of these</string>
+    <string name="tags_filter_all_tags">All of these</string>
+    <string name="tags_filter_type">Type</string>
+    <string name="tags_filter_folder">In folder</string>
+    <string name="tags_filter_anywhere">Anywhere</string>
+    <string name="tags_filter_choose">Choose…</string>
+    <string name="tags_filter_modified">Modified</string>
+    <string name="tags_date_any">Any time</string>
+    <string name="tags_date_today">Today</string>
+    <string name="tags_date_week">This week</string>
+    <string name="tags_date_older">Older</string>
+    <string name="tags_filter_untagged_only">Only items without tags</string>
+    <string name="tags_filter_combine">Tags and the other rules</string>
+    <string name="tags_filter_and">Both must match (AND)</string>
+    <string name="tags_filter_or">Either is enough (OR)</string>
+    <string name="tags_filter_everything">No rules yet: shows everything.</string>
+    <string name="tags_filter_delete">Delete filter</string>
+    <string name="tags_filter_delete_title">Delete the filter “%1$s”?</string>
+    <string name="tags_filter_restore">Restore built-in filters</string>
+    <string name="tags_filter_no_matches">Nothing matches this filter</string>
+
+    <string name="tags_conv_note_html">Note → Web page</string>
+    <string name="tags_conv_note_html_desc">One .html file that opens in any browser — share it like a link</string>
+    <string name="tags_share_web">Share as web page</string>
+    <string name="tags_share_web_desc">A single .html file anyone can open in a browser</string>
+    <string name="tags_html_prev">Previous page</string>
+    <string name="tags_html_next">Next page</string>
+    <string name="tags_html_page_of">Page %1$d of %2$d</string>
+    <string name="tags_html_footer">Made with Daftar · %1$s</string>
+    <string name="tags_html_failed">Could not make the web page</string>
+</resources>

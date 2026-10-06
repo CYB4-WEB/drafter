@@ -6,6 +6,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.CallSplit
 import androidx.compose.material.icons.automirrored.rounded.MergeType
 import androidx.compose.material.icons.rounded.Compress
+import androidx.compose.material.icons.rounded.Language
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.daftar.app.R
 import com.daftar.app.data.Kind
@@ -46,6 +47,8 @@ enum class Conv(
     val options: Set<Opt> = emptySet(),
     /** Tool icon (merge/split/compress); null = show source → target badges. */
     val tool: ImageVector? = null,
+    /** Target file extension when [to] alone does not name it (badge label, e.g. "html"). */
+    val toExt: String? = null,
 ) {
     PDF_IMAGES(Group.PDF, Kind.PDF, Kind.IMAGE, R.string.convert_pdf_images, R.string.convert_pdf_images_desc,
         options = setOf(Opt.RANGE, Opt.FORMAT2, Opt.QUALITY, Opt.DPI, Opt.ANNOTATIONS)),
@@ -71,6 +74,8 @@ enum class Conv(
     NOTE_IMAGES(Group.NOTES, Kind.NOTE, Kind.IMAGE, R.string.convert_note_images, R.string.convert_note_images_desc,
         options = setOf(Opt.FORMAT2, Opt.QUALITY)),
     NOTE_DOCX(Group.NOTES, Kind.NOTE, Kind.DOCX, R.string.convert_note_docx, R.string.convert_note_docx_desc),
+    /** tags-agent: one self-contained web page to share instead of a link (no server). */
+    NOTE_HTML(Group.NOTES, Kind.NOTE, Kind.OTHER, R.string.tags_conv_note_html, R.string.tags_conv_note_html_desc, toExt = "html"),
     TEXT_PDF(Group.NOTES, Kind.TEXT, Kind.PDF, R.string.convert_text_pdf, R.string.convert_text_pdf_desc),
     TEXT_DOCX(Group.NOTES, Kind.TEXT, Kind.DOCX, R.string.convert_text_docx, R.string.convert_text_docx_desc),
     ONE_PDF(Group.NOTES, Kind.ONENOTE, Kind.PDF, R.string.convert_one_pdf, R.string.convert_one_pdf_desc),
@@ -84,7 +89,7 @@ enum class Conv(
     COMPRESS_PDF(Group.TOOLS, Kind.PDF, Kind.PDF, R.string.convert_compress, R.string.convert_compress_desc,
         options = setOf(Opt.DPI, Opt.QUALITY, Opt.ANNOTATIONS), tool = Icons.Rounded.Compress);
 
-    val icon: ImageVector get() = tool ?: kindIcon(to)
+    val icon: ImageVector get() = tool ?: if (this == NOTE_HTML) Icons.Rounded.Language else kindIcon(to)
 
     fun accepts(f: File): Boolean = f.isFile && Storage.kindOf(f) == from
 

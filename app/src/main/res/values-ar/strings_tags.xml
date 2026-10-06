@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tags_title">الوسوم</string>
+    <string name="tags_menu">الوسوم…</string>
+    <string name="tags_new">وسم جديد</string>
+    <string name="tags_edit">تعديل الوسم</string>
+    <string name="tags_name">الاسم</string>
+    <string name="tags_color">اللون</string>
+    <string name="tags_create">إنشاء</string>
+    <string name="tags_save">حفظ</string>
+    <string name="tags_done">تم</string>
+    <string name="tags_delete">حذف الوسم</string>
+    <string name="tags_delete_title">حذف «%1$s»؟</string>
+    <string name="tags_delete_unused">لا يستخدم أي عنصر هذا الوسم.</string>
+    <plurals name="tags_delete_used">
+        <item quantity="zero">سيُزال من %1$d عنصر. تبقى الملفات كما هي.</item>
+        <item quantity="one">سيُزال من عنصر واحد. يبقى الملف كما هو.</item>
+        <item quantity="two">سيُزال من عنصرين. تبقى الملفات كما هي.</item>
+        <item quantity="few">سيُزال من %1$d عناصر. تبقى الملفات كما هي.</item>
+        <item quantity="many">سيُزال من %1$d عنصرًا. تبقى الملفات كما هي.</item>
+        <item quantity="other">سيُزال من %1$d عنصر. تبقى الملفات كما هي.</item>
+    </plurals>
+    <string name="tags_none_yet">لا توجد وسوم بعد.</string>
+    <string name="tags_builtin_hint">اتركه فارغًا ليبقى الاسم الافتراضي بكل لغة.</string>
+    <string name="tags_marks_desc">الوسوم: %1$s</string>
+    <string name="tags_select_items">وسم عدة عناصر</string>
+    <string name="tags_select_all">تحديد الكل</string>
+    <string name="tags_tag_selected">الوسوم…</string>
+    <plurals name="tags_items_selected">
+        <item quantity="zero">لم يُحدَّد أي عنصر</item>
+        <item quantity="one">تم تحديد عنصر واحد</item>
+        <item quantity="two">تم تحديد عنصرين</item>
+        <item quantity="few">تم تحديد %1$d عناصر</item>
+        <item quantity="many">تم تحديد %1$d عنصرًا</item>
+        <item quantity="other">تم تحديد %1$d عنصر</item>
+    </plurals>
+    <plurals name="tags_items">
+        <item quantity="zero">لا عناصر</item>
+        <item quantity="one">عنصر واحد</item>
+        <item quantity="two">عنصران</item>
+        <item quantity="few">%1$d عناصر</item>
+        <item quantity="many">%1$d عنصرًا</item>
+        <item quantity="other">%1$d عنصر</item>
+    </plurals>
+    <plurals name="tags_matches">
+        <item quantity="zero">لا نتائج مطابقة</item>
+        <item quantity="one">نتيجة واحدة مطابقة</item>
+        <item quantity="two">نتيجتان مطابقتان</item>
+        <item quantity="few">%1$d نتائج مطابقة</item>
+        <item quantity="many">%1$d نتيجة مطابقة</item>
+        <item quantity="other">%1$d نتيجة مطابقة</item>
+    </plurals>
+
+    <string name="tags_color_red">أحمر</string>
+    <string name="tags_color_orange">برتقالي</string>
+    <string name="tags_color_yellow">أصفر</string>
+    <string name="tags_color_green">أخضر</string>
+    <string name="tags_color_teal">فيروزي</string>
+    <string name="tags_color_blue">أزرق</string>
+    <string name="tags_color_purple">بنفسجي</string>
+    <string name="tags_color_grey">رمادي</string>
+
+    <string name="tags_default_review">للمراجعة</string>
+    <string name="tags_default_exam">أسبوع الامتحانات</string>
+    <string name="tags_default_important">مهم</string>
+    <string name="tags_default_done">منجز</string>
+    <string name="tags_default_homework">واجب</string>
+
+    <string name="tags_smart_filters">عوامل التصفية الذكية</string>
+    <string name="tags_all_files">كل الملفات</string>
+    <string name="tags_filter_new">عامل تصفية جديد</string>
+    <string name="tags_filter_edit">تعديل عامل التصفية</string>
+    <string name="tags_filter_untitled">عامل تصفية</string>
+    <string name="tags_filter_review">للمراجعة</string>
+    <string name="tags_filter_exam">أسبوع الامتحانات</string>
+    <string name="tags_filter_recent">عُدِّلت مؤخرًا</string>
+    <string name="tags_filter_untagged">ملاحظات بلا وسوم</string>
+    <string name="tags_filter_tags">يحمل الوسوم</string>
+    <string name="tags_filter_any_tag">أيٌّ منها</string>
+    <string name="tags_filter_all_tags">جميعها</string>
+    <string name="tags_filter_type">النوع</string>
+    <string name="tags_filter_folder">داخل المجلد</string>
+    <string name="tags_filter_anywhere">في أي مكان</string>
+    <string name="tags_filter_choose">اختيار…</string>
+    <string name="tags_filter_modified">آخر تعديل</string>
+    <string name="tags_date_any">أي وقت</string>
+    <string name="tags_date_today">اليوم</string>
+    <string name="tags_date_week">هذا الأسبوع</string>
+    <string name="tags_date_older">أقدم</string>
+    <string name="tags_filter_untagged_only">العناصر التي بلا وسوم فقط</string>
+    <string name="tags_filter_combine">الوسوم مع بقية الشروط</string>
+    <string name="tags_filter_and">يجب تحقق الاثنين (و)</string>
+    <string name="tags_filter_or">يكفي أحدهما (أو)</string>
+    <string name="tags_filter_everything">لا شروط بعد: يظهر كل شيء.</string>
+    <string name="tags_filter_delete">حذف عامل التصفية</string>
+    <string name="tags_filter_delete_title">حذف عامل التصفية «%1$s»؟</string>
+    <string name="tags_filter_restore">استعادة عوامل التصفية المدمجة</string>
+    <string name="tags_filter_no_matches">لا شيء يطابق عامل التصفية هذا</string>
+
+    <string name="tags_conv_note_html">ملاحظة ← صفحة ويب</string>
+    <string name="tags_conv_note_html_desc">ملف ‎.html‎ واحد يفتح في أي متصفح — شاركه كأنه رابط</string>
+    <string name="tags_share_web">مشاركة كصفحة ويب</string>
+    <string name="tags_share_web_desc">ملف ‎.html‎ واحد يستطيع أي شخص فتحه في المتصفح</string>
+    <string name="tags_html_prev">الصفحة السابقة</string>
+    <string name="tags_html_next">الصفحة التالية</string>
+    <string name="tags_html_page_of">الصفحة %1$d من %2$d</string>
+    <string name="tags_html_footer">صُنعت باستخدام دفتر · %1$s</string>
+    <string name="tags_html_failed">تعذّر إنشاء صفحة الويب</string>
+</resources>

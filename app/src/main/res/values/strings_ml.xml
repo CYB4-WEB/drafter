@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ml_copy_text">Copy text (OCR)</string>
+    <string name="ml_translate">Translate</string>
+    <string name="ml_recognized_text">Recognized text</string>
+    <string name="ml_translation">Translation</string>
+    <string name="ml_recognizing">Recognizing text…</string>
+    <string name="ml_translating">Translating…</string>
+    <string name="ml_downloading">Downloading… %1$d%%</string>
+    <string name="ml_no_text">No text found in this image.</string>
+    <string name="ml_failed">Text recognition isn\'t available on this device.</string>
+    <string name="ml_translate_failed">Translation failed. Check the language models in Settings.</string>
+    <string name="ml_need_ocr_models">Text recognition needs a one-time download: Arabic model (%1$s) and the Latin text module from Google Play services. Everything then runs on this device.</string>
+    <string name="ml_need_translate_models">Translating %1$s → %2$s needs language models (about %3$s each). Translation then works offline.</string>
+    <string name="ml_download">Download</string>
+    <string name="ml_cancel">Cancel</string>
+    <string name="ml_retry">Try again</string>
+    <string name="ml_no_network">No allowed connection. Connect to Wi-Fi, or turn off “Download on Wi-Fi only” in Settings.</string>
+    <string name="ml_copy">Copy</string>
+    <string name="ml_share">Share</string>
+    <string name="ml_make_note">Make note from text</string>
+    <string name="ml_copied">Copied</string>
+    <string name="ml_note_failed">Couldn\'t create the note</string>
+    <string name="ml_show_original">Show original</string>
+    <string name="ml_show_translation">Show translation</string>
+    <string name="ml_to_language">Translate to</string>
+    <string name="ml_note_suffix">text</string>
+    <string name="ml_lang_ar">Arabic</string>
+    <string name="ml_lang_en">English</string>
+    <string name="ml_lang_fr">French</string>
+    <string name="ml_lang_es">Spanish</string>
+    <string name="ml_lang_de">German</string>
+    <string name="ml_lang_tr">Turkish</string>
+    <string name="ml_lang_ur">Urdu</string>
+    <string name="ml_lang_fa">Persian</string>
+    <!-- Settings section -->
+    <string name="ml_settings_title">Text recognition &amp; translation</string>
+    <string name="ml_wifi_only">Download on Wi-Fi only</string>
+    <string name="ml_wifi_only_desc">Language models are downloaded once and stay on this device</string>
+    <string name="ml_ocr_models">Text recognition (OCR)</string>
+    <string name="ml_translate_models">Translation languages</string>
+    <string name="ml_latin_module">Latin text (Google Play services)</string>
+    <string name="ml_installed">Installed</string>
+    <string name="ml_not_installed">Not downloaded</string>
+    <string name="ml_ocr_model_name">%1$s text recognition</string>
+    <string name="ml_size_approx">about %1$s</string>
+    <string name="ml_delete">Delete</string>
+    <string name="ml_delete_model">Delete %1$s?</string>
+    <string name="ml_delete_model_msg">You can download it again any time.</string>
+    <string name="ml_unsupported_abi">Arabic text recognition isn\'t available in this build for this processor.</string>
+    <string name="ml_download_failed">Download failed</string>
+</resources>

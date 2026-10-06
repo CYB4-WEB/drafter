@@ -107,11 +107,12 @@ private fun Hub(query: String, onQuery: (String) -> Unit, now: Long, v: Int, onD
             if (expanded) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
                     Column(Modifier.weight(1.6f)) { CardsColumn(all, decks, dueAll, query, onQuery, now, onDeck, onEdit, onNew, columns = 3) }
-                    Column(Modifier.weight(1f)) { FocusSection(); StatsSection() }
+                    Column(Modifier.weight(1f)) { com.daftar.app.grades.GradesEntryCard(); FocusSection(); StatsSection() }
                 }
             } else {
                 val compact = LocalWidthClass.current == WidthClass.Compact
                 CardsColumn(all, decks, dueAll, query, onQuery, now, onDeck, onEdit, onNew, columns = if (compact) 2 else 3)
+                com.daftar.app.grades.GradesEntryCard()
                 FocusSection()
                 StatsSection()
             }

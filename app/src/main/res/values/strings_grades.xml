@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- grades-agent: GPA / grades tracker + exam countdown widget -->
+<resources>
+    <string name="grades_title">Grades &amp; GPA</string>
+    <string name="grades_cumulative">Cumulative GPA</string>
+    <string name="grades_of_max">of %1$s</string>
+    <string name="grades_credits_n">%1$s credits</string>
+    <plurals name="grades_n_courses">
+        <item quantity="one">%d course</item>
+        <item quantity="other">%d courses</item>
+    </plurals>
+    <string name="grades_term_gpa_line">Term GPA %1$s · %2$s credits</string>
+    <string name="grades_trend">GPA by term</string>
+    <string name="grades_trend_need_two">Grade two terms to see your trend</string>
+    <string name="grades_more">More</string>
+    <string name="grades_deleted">Deleted</string>
+    <string name="grades_undo">Undo</string>
+
+    <!-- scale -->
+    <string name="grades_scale">Grading scale</string>
+    <string name="grades_scale_us40">US 4.0</string>
+    <string name="grades_scale_us433">US 4.0 (A+ 4.33)</string>
+    <string name="grades_scale_sa50">Saudi / Gulf 5.0</string>
+    <string name="grades_scale_sa40">Saudi 4.0</string>
+    <string name="grades_scale_custom">Custom</string>
+    <string name="grades_aplus_433">A+ counts as 4.33</string>
+    <string name="grades_col_letter">Letter</string>
+    <string name="grades_col_min" formatted="false">Min %</string>
+    <string name="grades_col_points">Points</string>
+    <string name="grades_add_band">Add row</string>
+    <string name="grades_scale_customize">Customize this scale</string>
+    <string name="grades_scale_hint">A course earns the first letter whose minimum it reaches.</string>
+    <string name="grades_scale_invalid">Each row needs a unique letter, a minimum from 0 to 100 and points.</string>
+
+    <!-- terms -->
+    <string name="grades_add_term">Add term</string>
+    <string name="grades_new_term">New term</string>
+    <string name="grades_rename_term">Rename term</string>
+    <string name="grades_term">Term</string>
+    <string name="grades_term_name">Term name</string>
+    <string name="grades_term_hint">e.g. Fall 2026</string>
+    <string name="grades_default_term">Current term</string>
+    <string name="grades_move_up">Move up</string>
+    <string name="grades_move_down">Move down</string>
+    <string name="grades_delete_term">Delete term?</string>
+    <string name="grades_delete_term_msg">“%1$s” and all its courses will be deleted.</string>
+    <string name="grades_empty">No terms yet. Add your first term to start tracking your GPA.</string>
+    <string name="grades_empty_term">No courses in this term yet</string>
+
+    <!-- courses -->
+    <string name="grades_add_course">Add course</string>
+    <string name="grades_new_course">New course</string>
+    <string name="grades_edit_course">Edit course</string>
+    <string name="grades_course_name">Course name</string>
+    <string name="grades_course_code">Code (optional)</string>
+    <string name="grades_credits">Credit hours</string>
+    <string name="grades_subject">Subject folder</string>
+    <string name="grades_no_subject">None</string>
+    <string name="grades_pass_fail">Pass / fail (not counted in GPA)</string>
+    <string name="grades_pf">Pass/fail</string>
+    <string name="grades_pf_note">Pass/fail courses are not counted in your GPA.</string>
+    <string name="grades_passed">Passed</string>
+    <string name="grades_failed">Failed</string>
+    <string name="grades_p">P</string>
+    <string name="grades_f_short">F</string>
+    <string name="grades_how">How is the grade decided?</string>
+    <string name="grades_mode_assess">From assessments</string>
+    <string name="grades_mode_letter">Final letter</string>
+    <string name="grades_letter">Letter grade</string>
+    <string name="grades_letter_missing">%1$s is not on the current scale, so it is not counted.</string>
+    <string name="grades_not_on_scale">Not on scale</string>
+    <string name="grades_points_n">%1$s points</string>
+    <string name="grades_delete_course">Delete course?</string>
+    <string name="grades_delete_course_msg">“%1$s” and its assessments will be deleted.</string>
+    <string name="grades_select_course">Select a course to see its details</string>
+
+    <!-- assessments -->
+    <string name="grades_assessments">Assessments</string>
+    <string name="grades_add_assessment">Add</string>
+    <string name="grades_new_assessment">New assessment</string>
+    <string name="grades_edit_assessment">Edit assessment</string>
+    <string name="grades_assess_name">Name</string>
+    <string name="grades_weight" formatted="false">Weight %</string>
+    <string name="grades_weight_n">Weight %1$s</string>
+    <string name="grades_score">Score</string>
+    <string name="grades_out_of">Out of</string>
+    <string name="grades_score_of">%1$s / %2$s</string>
+    <string name="grades_score_hint">Leave the score empty if it is not graded yet.</string>
+    <string name="grades_not_graded">Not graded</string>
+    <string name="grades_no_assessments">Add the parts of this course with their weights.</string>
+    <string name="grades_template">Midterm 30 · Final 40 · Labs 20 · Quiz 10</string>
+    <string name="grades_tpl_midterm">Midterm</string>
+    <string name="grades_tpl_final">Final</string>
+    <string name="grades_tpl_labs">Labs</string>
+    <string name="grades_tpl_quiz">Quiz</string>
+    <string name="grades_weight_total">Weights add up to %1$s</string>
+    <string name="grades_weight_warn">Weights add up to %1$s, not 100%%. They are scaled to 100%%.</string>
+
+    <!-- standing & calculator -->
+    <string name="grades_standing">Current standing</string>
+    <string name="grades_final_result">Final result</string>
+    <string name="grades_nothing_graded">Nothing graded yet</string>
+    <string name="grades_pct_so_far">%1$s so far</string>
+    <string name="grades_graded_share">%1$s of the course graded</string>
+    <string name="grades_worst_case">Locked in: %1$s (%2$s) even with 0 on the rest</string>
+    <string name="grades_calc">What do I need?</string>
+    <string name="grades_calc_on_one">Score needed on %1$s (%2$s of the course):</string>
+    <string name="grades_calc_on_rest">Average needed on the remaining %1$s of the course:</string>
+    <string name="grades_calc_need_assess">Add assessments with weights to use the calculator.</string>
+    <string name="grades_final_done">Everything is graded. This result is final.</string>
+    <string name="grades_target_min">from %1$s</string>
+    <string name="grades_need_pct">%1$s</string>
+    <string name="grades_secured">Secured</string>
+    <string name="grades_unreachable">Out of reach</string>
+
+    <!-- planner hand-off -->
+    <string name="grades_grade_it">Grade it</string>
+    <string name="grades_grade_exam">Grade exam</string>
+    <string name="grades_exam_course">Course</string>
+    <string name="grades_exam_component">Counts as</string>
+    <string name="grades_new_component">New component</string>
+    <string name="grades_saved">Grade saved</string>
+
+    <!-- entry points -->
+    <string name="grades_entry_empty">Track terms, courses and your GPA</string>
+    <string name="grades_entry_line">Cumulative GPA %1$s of %2$s · %3$s credits</string>
+
+    <!-- exam countdown widget -->
+    <string name="grades_widget_name">Exam countdown</string>
+    <string name="grades_widget_desc">Your next exams with a countdown</string>
+    <string name="grades_widget_header">Exams</string>
+    <string name="grades_widget_empty">No exams coming up</string>
+    <string name="grades_cd_days_hours">%1$d d %2$d h</string>
+    <string name="grades_cd_days">%1$d d</string>
+    <string name="grades_cd_hours">%1$d h</string>
+    <string name="grades_cd_lt_hour">&lt; 1 h</string>
+    <string name="grades_cd_now">Now</string>
+</resources>

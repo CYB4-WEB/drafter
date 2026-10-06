@@ -109,6 +109,12 @@ private class EditorStateImpl(val view: InkView) : EditorController {
     var saver: (() -> Unit)? = null
     override fun saveNow() { saver?.invoke() }
     override fun doc(): InkDoc = view.doc
+    /** Second page of the visible two-page spread (-1 = none). Observable (page chip). */
+    var spreadEnd by mutableIntStateOf(-1)
+    private var night by mutableStateOf(false)
+    override var nightMode: Boolean
+        get() = night
+        set(v) { night = v; view.night = v }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -165,6 +171,13 @@ internal fun InkEditorImpl(
     var mathOn by remember { mutableStateOf(run { InkPrefs.init(ctx); InkPrefs.mathHelper }) }
     var exported by remember { mutableStateOf<List<File>?>(null) }
     var workJob by remember { mutableStateOf<Job?>(null) }
+    // ink5-agent: stickers / shapes trays, two-page view, night paper
+    var showStickers by remember { mutableStateOf(false) }
+    var showShapes by remember { mutableStateOf(false) }
+    var twoOn by remember { mutableStateOf(run { InkPrefs.init(ctx); InkPrefs.twoPages }) }
+    var coverOn by remember { mutableStateOf(InkPrefs.coverAlone) }
+    var exportShown by remember { mutableStateOf(false) }
+    remember(view) { view.setTwoPages(InkPrefs.twoPages, InkPrefs.coverAlone); if (isNote) ctl.nightMode = InkPrefs.nightPaper; true }
     val wide = LocalWidthClass.current == WidthClass.Expanded
     // Window got narrow (split / pop-up): close the side panel rather than turning it into a sheet nobody asked for.
     LaunchedEffect(wide) { if (!wide) showPanel = false else if (sidePanelOpen) showPanel = true }
@@ -207,6 +220,16 @@ internal fun InkEditorImpl(
     var player by remember { mutableStateOf<MediaPlayer?>(null) }
     var playing by remember { mutableStateOf<Recording?>(null) }
     var isPlaying by remember { mutableStateOf(false) }
+    // transcript-agent: live lecture transcript + karaoke panel
+    val transcript = remember { TranscriptSession(ctx) }
+    val playClock = remember { PlayClock() }
+    var recPaused by remember { mutableStateOf(false) }
+    var curRecId by remember { mutableIntStateOf(0) }
+    var stripOpen by remember { mutableStateOf(TranscriptPrefs.stripOpen(ctx)) }
+    var trPanelOpen by remember { mutableStateOf(true) }
+    var trDialog by remember { mutableStateOf<Recording?>(null) }
+    /** Notification Pause / Resume / Stop (RecordingService) → set below, once the recording functions exist. */
+    var onRecAction: (RecordingService.Action) -> Unit = {}
 
     fun stopPlayback() {
         player?.release(); player = null; playing = null; isPlaying = false
@@ -217,20 +240,64 @@ internal fun InkEditorImpl(
         stopPlayback()
         val id = (view.doc.recordings.maxOfOrNull { it.id } ?: 0) + 1
         val f = Storage.sidecar(inkFile, "rec$id.m4a")
-        runCatching { recorder.start(f) }.onFailure { toast(ctx, ctx.getString(R.string.error_generic)); return }
+        runCatching { recorder.start(f, live = LiveTranscription.isSupported(ctx)) }.onFailure { toast(ctx, ctx.getString(R.string.error_generic)); return }
         view.recId = id; view.recClockStart = SystemClock.elapsedRealtime(); view.recOffset = 0
+        curRecId = id; recPaused = false
+        // transcript times use the stroke clock, so transcript, audio and ink replay share one timeline
+        transcript.begin(recorder, id, Prefs.speechLang) {
+            if (recPaused) view.recOffset else SystemClock.elapsedRealtime() - view.recClockStart + view.recOffset
+        }
         recording = true
+        // microphone foreground service: keeps recording with the screen off / app in the background
+        RecordingService.start(ctx, title) { a -> onRecAction(a) }
+    }
+
+    fun pauseRecording() {
+        if (!recorder.active || recPaused) return
+        transcript.pauseRec()
+        recorder.pause()
+        view.recOffset += SystemClock.elapsedRealtime() - view.recClockStart
+        view.recId = 0          // ink drawn during the pause is not tied to the audio
+        recPaused = true
+        RecordingService.update(true, view.recOffset)
+    }
+
+    fun resumeRecording() {
+        if (!recPaused) return
+        recorder.resume()
+        view.recClockStart = SystemClock.elapsedRealtime()
+        view.recId = curRecId
+        recPaused = false
+        transcript.resumeRec()
+        RecordingService.update(false, view.recOffset)
     }
 
     fun stopRecording() {
+        val id = curRecId
+        // final words arrive asynchronously (≤ 1.5 s): they replace the transcript stored below
+        transcript.finish { segs ->
+            if (view.doc.recordings.any { it.id == id }) {
+                view.doc.recordings = view.doc.recordings.map { if (it.id == id) it.copy(transcript = segs) else it }
+                if (playing?.id == id) playing = view.doc.recordings.firstOrNull { it.id == id }
+                scheduleSave()
+            }
+        }
         recorder.stop()
+        RecordingService.stop()
         val f = recorder.file
-        val id = view.recId
-        view.recId = 0
+        view.recId = 0; curRecId = 0; recPaused = false
         recording = false
         if (f != null && f.exists()) {
-            view.doc.recordings = view.doc.recordings + Recording(id, f.name, audioDuration(f), System.currentTimeMillis())
+            view.doc.recordings = view.doc.recordings + Recording(id, f.name, audioDuration(f), System.currentTimeMillis(), transcript.state.snapshot())
             scheduleSave()
+        }
+    }
+
+    onRecAction = { a ->
+        when (a) {
+            RecordingService.Action.PAUSE -> pauseRecording()
+            RecordingService.Action.RESUME -> resumeRecording()
+            RecordingService.Action.STOP -> if (recorder.active) stopRecording()
         }
     }
 
@@ -304,7 +371,7 @@ internal fun InkEditorImpl(
             override fun onLinkOpen(link: LinkItem) { view.finishEditing(); saveAsync(); openLink(ctx, link) }
             override fun onLinkMenu(page: Int, link: LinkItem, x: Float, y: Float) { linkMenu = Triple(page, link, x to y) }
             override fun onDropFailed() { toast(ctx, ctx.getString(R.string.ink_drop_failed)) }
-            override fun onPageChanged(current: Int, count: Int) { ctl.currentPage = current; ctl.pageCount = count }
+            override fun onPageChanged(current: Int, count: Int) { ctl.currentPage = current; ctl.pageCount = count; ctl.spreadEnd = view.spreadLast }
             override fun onTextRequest(page: Int, x: Float, y: Float, existing: TextItem?) { textReq = Triple(page, x to y, existing) }
             override fun onSelectionChanged(active: Boolean) { hasSel = active }
             override fun onSeek(rec: Int, t: Long) {
@@ -345,7 +412,9 @@ internal fun InkEditorImpl(
         onDispose {
             lifecycle.removeObserver(obs)
             mathJob?.cancel()
+            transcript.finishNow()
             if (recorder.active) stopRecording()
+            transcript.release()
             stopPlayback()
             view.finishEditing()
             saveAsync()
@@ -427,12 +496,23 @@ internal fun InkEditorImpl(
     }
     fun exportPdf() {
         val d = snapshot()
-        runWork({ val out = Storage.uniqueFile(outDir, baseName, "pdf"); exportNoteToPdf(d, out); listOf(out) }, ::finished)
+        val nightOut = exportShown && ctl.nightMode
+        runWork({ val out = Storage.uniqueFile(outDir, baseName, "pdf"); exportNoteToPdf(d, out, night = nightOut); listOf(out) }, ::finished)
+    }
+    /** transcript-agent: "<host name> transcript.txt" next to the note, with the open/share bar. */
+    fun exportTranscript(r: Recording) {
+        val segs = view.doc.recordings.firstOrNull { it.id == r.id }?.transcript ?: r.transcript
+        if (segs.isEmpty()) return
+        val n = view.doc.recordings.indexOfFirst { it.id == r.id } + 1
+        val head = ctx.getString(R.string.tr_recording_title, title, n.coerceAtLeast(1))
+        val name = ctx.getString(R.string.tr_export_name, hostFile.nameWithoutExtension)
+        runWork({ val out = Storage.uniqueFile(outDir, name, "txt"); out.writeText(TranscriptText.export(head, segs)); listOf(out) }, ::finished)
     }
     fun exportImages(png: Boolean, all: Boolean) {
         val d = snapshot()
         val pages = if (all) d.pages.indices.toList() else listOf(ctl.currentPage.coerceIn(0, d.pages.size - 1))
-        runWork({ msg -> NoteExport.exportImages(d, pages, outDir, baseName, png) { k, n -> if (n > 1) msg(ctx.getString(R.string.ink_exporting_page, k, n)) } }, ::finished)
+        val nightOut = exportShown && ctl.nightMode
+        runWork({ msg -> NoteExport.exportImages(d, pages, outDir, baseName, png, nightOut) { k, n -> if (n > 1) msg(ctx.getString(R.string.ink_exporting_page, k, n)) } }, ::finished)
     }
     fun sharePageImage() {
         val d = snapshot()
@@ -440,7 +520,7 @@ internal fun InkEditorImpl(
         runWork({
             val name = if (d.pages.size > 1) "$baseName - ${i + 1}" else baseName
             val f = File(Storage.cacheDir(), Storage.sanitize(name).ifBlank { "page" } + ".png")
-            val b = NoteExport.renderPage(d, i)
+            val b = NoteExport.renderPage(d, i, night = exportShown && ctl.nightMode)
             try { NoteExport.writeBitmap(b, f, true) } finally { b.recycle() }
             listOf(f)
         }) { files -> if (files != null) shareFiles(ctx, files) else toast(ctx, ctx.getString(R.string.error_generic)) }
@@ -527,6 +607,30 @@ internal fun InkEditorImpl(
                         leadingIcon = { Icon(Icons.Rounded.Calculate, null) },
                         trailingIcon = { Checkbox(checked = mathOn, onCheckedChange = null) },
                     )
+                    if (!whiteboard) {
+                        DropdownMenuItem(
+                            { Text(stringResource(R.string.ink5_two_pages)) },
+                            {
+                                twoOn = !twoOn; InkPrefs.twoPages = twoOn; view.setTwoPages(twoOn, coverOn); showMore = false
+                                if (twoOn && (view.width <= view.height || view.width < 600 * view.resources.displayMetrics.density))
+                                    toast(ctx, ctx.getString(R.string.ink5_two_pages_landscape))
+                            },
+                            leadingIcon = { Icon(Icons.Rounded.MenuBook, null) },
+                            trailingIcon = { Checkbox(checked = twoOn, onCheckedChange = null) },
+                        )
+                        if (twoOn) DropdownMenuItem(
+                            { Text(stringResource(R.string.ink5_cover_alone)) },
+                            { coverOn = !coverOn; InkPrefs.coverAlone = coverOn; view.setTwoPages(twoOn, coverOn); showMore = false },
+                            leadingIcon = { Icon(Icons.Rounded.Book, null) },
+                            trailingIcon = { Checkbox(checked = coverOn, onCheckedChange = null) },
+                        )
+                    }
+                    if (isNote) DropdownMenuItem(
+                        { Text(stringResource(R.string.ink5_night_paper)) },
+                        { val v = !ctl.nightMode; ctl.nightMode = v; InkPrefs.nightPaper = v; showMore = false },
+                        leadingIcon = { Icon(Icons.Rounded.DarkMode, null) },
+                        trailingIcon = { Checkbox(checked = ctl.nightMode, onCheckedChange = null) },
+                    )
                     DropdownMenuItem(
                         { Text(stringResource(if (Prefs.penOnly) R.string.ink_finger_draw_off else R.string.ink_finger_draw_on)) },
                         { showMore = false; Prefs.putPenOnly(!Prefs.penOnly) },
@@ -562,6 +666,8 @@ internal fun InkEditorImpl(
                     Item(R.string.ink_share_page_image, Icons.Rounded.Share) { sharePageImage() }
                     Item(R.string.ink_export_docx, Icons.Rounded.Description) { exportText(docx = true) }
                     Item(R.string.ink_export_txt, Icons.AutoMirrored.Rounded.Notes) { exportText(docx = false) }
+                    if (ctl.nightMode) DropdownMenuItem({ Text(stringResource(R.string.ink5_export_as_shown)) }, { exportShown = !exportShown },
+                        leadingIcon = { Icon(Icons.Rounded.DarkMode, null) }, trailingIcon = { Checkbox(checked = exportShown, onCheckedChange = null) })
                 }
             }
         }
@@ -576,13 +682,28 @@ internal fun InkEditorImpl(
             onLink = { linkEdit = ctl.currentPage to null },
             onDictate = { if (hasMic()) showDictation = true else dictPermission.launch(Manifest.permission.RECORD_AUDIO) },
             onAddPage = { view.addPage(ctl.currentPage, view.doc.pages.getOrNull(ctl.currentPage)?.paper?.let { PaperTemplates.nextKey(it) } ?: PaperTemplates.stamp(Prefs.defaultPaper)) },
+            onStickers = { view.finishEditing(); showStickers = true },
+            onShapes = { view.finishEditing(); showShapes = true },
         )
 
-        if (recording) RecordingBar(view) { stopRecording() }
+        if (recording) LectureRecordingBar(view, recPaused, transcript, stripOpen,
+            onStripToggle = { stripOpen = !stripOpen; TranscriptPrefs.setStripOpen(ctx, stripOpen) },
+            onPause = { pauseRecording() }, onResume = { resumeRecording() }, onStop = { stopRecording() },
+            onLang = { code -> Prefs.putSpeechLang(code); transcript.setLang(code) })
         playing?.let { r ->
-            PlaybackBar(r, player, isPlaying, view,
+            val hasTr = r.transcript.isNotEmpty()
+            LecturePlaybackBar(r, player, isPlaying, view, playClock, hasTr, trPanelOpen, onTranscriptToggle = { trPanelOpen = !trPanelOpen },
                 onToggle = { val p = player; if (p != null) { if (isPlaying) { p.pause(); isPlaying = false } else { p.start(); isPlaying = true } } },
                 onClose = { stopPlayback() })
+            if (hasTr && trPanelOpen) {
+                TranscriptPanel(r.transcript, playClock, follow = true,
+                    onSeek = { t -> view.listener?.onSeek(r.id, t) },
+                    onInsert = { text -> view.addTextAtCenter(text, 16f, ts.penColor, "sans") },
+                    onExport = { exportTranscript(r) },
+                    modifier = Modifier.fillMaxWidth().background(c.surface).padding(top = 4.dp),
+                    listMaxHeight = if (wide) 200.dp else 128.dp)
+                Box(Modifier.fillMaxWidth().height(1.dp).background(c.line))
+            }
         }
 
         Row(Modifier.weight(1f).fillMaxWidth()) {
@@ -696,6 +817,16 @@ internal fun InkEditorImpl(
             })
     }
 
+    if (showStickers) StickerTray(onDismiss = { showStickers = false }) { kind, text ->
+        showStickers = false
+        InkPrefs.useSticker(kind)
+        view.addSticker(kind, text); ts.selectTool(Tool.LASSO); view.tool = Tool.LASSO
+    }
+    if (showShapes) ShapeTray(onDismiss = { showShapes = false }) { shape ->
+        showShapes = false
+        view.addShape(shape, ts.penColor, ts.penWidth); ts.selectTool(Tool.LASSO); view.tool = Tool.LASSO
+    }
+
     if (showPaper) PaperTemplates.PaperPickerDialog(view, whiteboard, onDismiss = { showPaper = false })
     if (showPages && isNote && !whiteboard) PageManagerPanel(view, inkFile, title, onDismiss = { showPages = false },
         onOpenFile = { f -> saveAsync(); com.daftar.app.ui.pane.open(ctx, f) })
@@ -734,6 +865,12 @@ internal fun InkEditorImpl(
                             Text(stringResource(R.string.ink_recording_n, i + 1), color = c.ink)
                             Text(fmtTime(r.duration) + " · " + java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT).format(r.created),
                                 color = c.muted, style = MaterialTheme.typography.bodySmall)
+                            if (r.transcript.isNotEmpty()) Text(transcriptPreview(r.transcript), color = c.ink, maxLines = 2,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(top = 2.dp))
+                        }
+                        if (r.transcript.isNotEmpty()) IconButton(onClick = { trDialog = r; showRecordings = false }) {
+                            Icon(Icons.Rounded.Subtitles, stringResource(R.string.tr_transcript), tint = c.accent)
                         }
                         IconButton(onClick = {
                             if (playing?.id == r.id) stopPlayback()
@@ -747,6 +884,16 @@ internal fun InkEditorImpl(
         },
         confirmButton = { TextButton(onClick = { showRecordings = false }) { Text(stringResource(R.string.close)) } },
     )
+
+    trDialog?.let { r0 ->
+        val r = view.doc.recordings.firstOrNull { it.id == r0.id } ?: r0
+        val n = view.doc.recordings.indexOfFirst { it.id == r.id } + 1
+        TranscriptDialog(ctx.getString(R.string.tr_recording_title, title, n.coerceAtLeast(1)), r.transcript, playClock, follow = playing?.id == r.id,
+            onSeek = { t -> trDialog = null; view.listener?.onSeek(r.id, t) },
+            onInsert = { text -> trDialog = null; view.addTextAtCenter(text, 16f, ts.penColor, "sans") },
+            onExport = { trDialog = null; exportTranscript(r) },
+            onDismiss = { trDialog = null })
+    }
 
     card?.let { (front, text, page) ->
         com.daftar.app.study.MakeFlashcardDialog(source = hostFile, front = front, recognizedText = text, page = page, onDismiss = { card = null })
@@ -784,6 +931,8 @@ private fun ToolSync(view: InkView, ts: InkToolState, bg: Int) {
     view.hlColor = ts.hlColor; view.hlWidth = ts.hlWidth; view.eraserRadiusDp = ts.eraserRadius
     view.tapeColor = ts.tapeColor; view.tapeWidth = ts.tapeWidth
     view.shapeColor = ts.penColor
+    view.shapeKind = ts.shapeKind
+    view.rulerOn = ts.ruler
     view.keepScreenOn = Prefs.keepScreenOn
     // "Pen only" is enforced only once this device has shown it has a stylus; otherwise fingers must be able to write.
     view.penOnly = Prefs.penOnly && Prefs.stylusSeen
@@ -791,47 +940,6 @@ private fun ToolSync(view: InkView, ts: InkToolState, bg: Int) {
     view.bgColor = bg
     view.textColor = ts.penColor
     view.textHint = stringResource(R.string.ink_text_hint)
-}
-
-/** "Recording 1:23" bar; its 4 Hz ticker runs only while recording and recomposes only this bar. */
-@Composable
-private fun RecordingBar(view: InkView, onStop: () -> Unit) {
-    val c = D.c
-    var elapsed by remember { mutableLongStateOf(0L) }
-    LaunchedEffect(Unit) {
-        while (isActive) { elapsed = SystemClock.elapsedRealtime() - view.recClockStart; delay(250) }
-    }
-    Row(Modifier.fillMaxWidth().background(c.danger.copy(alpha = 0.10f)).padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(8.dp).clip(CircleShape).background(c.danger))
-        Spacer(Modifier.width(8.dp))
-        Text(stringResource(R.string.ink_recording_now, fmtTime(elapsed)), color = c.ink, style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
-        TextButton(onClick = onStop) { Text(stringResource(R.string.ink_stop)) }
-    }
-}
-
-/** Audio playback bar; its position ticker runs only while playing (paused / stopped = no polling). */
-@Composable
-private fun PlaybackBar(r: Recording, player: MediaPlayer?, isPlaying: Boolean, view: InkView, onToggle: () -> Unit, onClose: () -> Unit) {
-    val c = D.c
-    var pos by remember(r.id) { mutableLongStateOf(player?.currentPosition?.toLong() ?: 0L) }
-    LaunchedEffect(player, isPlaying) {
-        while (isPlaying && isActive) {
-            player?.let { pos = it.currentPosition.toLong(); view.playPos = pos }
-            delay(80)
-        }
-    }
-    Row(Modifier.fillMaxWidth().background(c.accent.copy(alpha = 0.08f)).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        IconButton(onClick = onToggle) { Icon(if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, null, tint = c.accent) }
-        Text(fmtTime(pos), style = MaterialTheme.typography.labelMedium, color = c.ink)
-        Slider(
-            value = pos.toFloat().coerceIn(0f, r.duration.coerceAtLeast(1).toFloat()),
-            onValueChange = { v -> player?.seekTo(v.toInt()); pos = v.toLong(); view.playPos = pos },
-            valueRange = 0f..r.duration.coerceAtLeast(1).toFloat(),
-            modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
-        )
-        Text(fmtTime(r.duration), style = MaterialTheme.typography.labelMedium, color = c.muted)
-        IconButton(onClick = onClose) { Icon(Icons.Rounded.Close, stringResource(R.string.close), tint = c.muted) }
-    }
 }
 
 fun fmtTime(ms: Long): String {
@@ -903,8 +1011,10 @@ private fun ZoomPill(ctl: EditorController, modifier: Modifier) {
 private fun PageChip(ctl: EditorController, onClick: (() -> Unit)?, modifier: Modifier) {
     val c = D.c
     if (ctl.pageCount <= 0) return
+    val end = (ctl as? EditorStateImpl)?.spreadEnd ?: -1
     Text(
-        stringResource(R.string.page_of, ctl.currentPage + 1, ctl.pageCount),
+        if (end > ctl.currentPage) stringResource(R.string.ink5_page_spread, ctl.currentPage + 1, end + 1, ctl.pageCount)
+        else stringResource(R.string.page_of, ctl.currentPage + 1, ctl.pageCount),
         style = MaterialTheme.typography.labelMedium, color = c.muted,
         modifier = modifier
             .clip(RoundedCornerShape(10.dp))

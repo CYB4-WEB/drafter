@@ -163,31 +163,65 @@ class Dictation(private val ctx: Context, private val onText: (final: String, pa
     }
 }
 
-/** Lecture audio recorder (AAC .m4a). */
+/**
+ * Lecture audio recorder (AAC .m4a).
+ * [start] with `live = true` on API 33+ uses one AudioRecord capture ([LiveAudioCapture]) that also streams PCM to a
+ * speech recognizer through [openPcmPipe]; anywhere else, or when that capture can't start, it is today's
+ * MediaRecorder (no live transcript: [live] = false).
+ */
 class Recorder(private val ctx: Context) {
     private var mr: MediaRecorder? = null
+    private var cap: LiveAudioCapture? = null
     var file: File? = null; private set
+    var paused = false; private set
 
-    fun start(out: File) {
-        file = out
+    fun start(out: File, live: Boolean = false) {
+        file = out; paused = false
+        if (live && Build.VERSION.SDK_INT >= 33) {
+            val c = LiveAudioCapture(out)
+            if (runCatching { c.start() }.isSuccess) { cap = c; return }
+        }
         @Suppress("DEPRECATION")
         val r = if (Build.VERSION.SDK_INT >= 31) MediaRecorder(ctx) else MediaRecorder()
-        r.setAudioSource(MediaRecorder.AudioSource.MIC)
-        r.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-        r.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-        r.setAudioEncodingBitRate(64_000)
-        r.setAudioSamplingRate(32_000)
-        r.setOutputFile(out.absolutePath)
-        r.prepare(); r.start()
+        try {
+            r.setAudioSource(MediaRecorder.AudioSource.MIC)
+            r.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+            r.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+            r.setAudioEncodingBitRate(64_000)
+            r.setAudioSamplingRate(32_000)
+            r.setOutputFile(out.absolutePath)
+            r.prepare(); r.start()
+        } catch (e: Throwable) { r.release(); throw e }
         mr = r
     }
 
-    fun stop() {
-        runCatching { mr?.stop() }
-        mr?.release(); mr = null
+    /** True when this recording can feed a live transcript (single AudioRecord capture, API 33+). */
+    val live get() = cap != null
+
+    /** Read end of a fresh 16 kHz mono PCM16 pipe for the recognizer (caller closes it); null without live capture. */
+    fun openPcmPipe(): android.os.ParcelFileDescriptor? = if (Build.VERSION.SDK_INT >= 33) cap?.openPipe() else null
+
+    fun pause() {
+        if (paused) return
+        if (Build.VERSION.SDK_INT >= 33 && cap != null) cap?.pause() else runCatching { mr?.pause() }
+        paused = true
     }
 
-    val active get() = mr != null
+    fun resume() {
+        if (!paused) return
+        if (Build.VERSION.SDK_INT >= 33 && cap != null) cap?.resume() else runCatching { mr?.resume() }
+        paused = false
+    }
+
+    fun stop() {
+        if (Build.VERSION.SDK_INT >= 33) cap?.stop()
+        cap = null
+        runCatching { mr?.stop() }
+        mr?.release(); mr = null
+        paused = false
+    }
+
+    val active get() = mr != null || cap != null
 }
 
 fun audioDuration(f: File): Long = runCatching {
@@ -199,7 +233,13 @@ fun audioDuration(f: File): Long = runCatching {
  * A whiteboard becomes one page cropped to its content plus a margin (scaled down if it exceeds the 14 400 pt PDF limit).
  * Tapes are drawn hidden.
  */
-fun exportNoteToPdf(doc: InkDoc, out: File, withPaper: Boolean = true) {
+fun exportNoteToPdf(doc: InkDoc, out: File, withPaper: Boolean = true, night: Boolean = false) {
+    // "export as shown": night paper colour, dimmed lines and the on-screen ink mapping (saved colours untouched)
+    InkRender.setNight(night)
+    try { exportNoteToPdfImpl(doc, out, withPaper, night) } finally { InkRender.setNight(false) }
+}
+
+private fun exportNoteToPdfImpl(doc: InkDoc, out: File, withPaper: Boolean, night: Boolean) {
     val pdf = PdfDocument()
     try {
         doc.pages.forEachIndexed { i, p ->
@@ -209,11 +249,11 @@ fun exportNoteToPdf(doc: InkDoc, out: File, withPaper: Boolean = true) {
             val ph = (r.height() * k).toInt().coerceAtLeast(1)
             val page = pdf.startPage(PdfDocument.PageInfo.Builder(pw, ph, i + 1).create())
             val c: Canvas = page.canvas
-            c.drawColor(doc.paperColor)
+            c.drawColor(if (night) InkNight.PAPER else doc.paperColor)
             c.save()
             c.scale(k, k)
             c.translate(-r.left, -r.top)
-            if (withPaper) InkRender.drawPaper(c, p, clip = r, bounded = !doc.infinite)
+            if (withPaper) InkRender.drawPaper(c, p, night, clip = r, bounded = !doc.infinite)
             InkRender.drawPageContent(c, p)
             c.restore()
             pdf.finishPage(page)

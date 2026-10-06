@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
+import androidx.compose.material.icons.rounded.AddBox
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.FileDownload
 import androidx.compose.material.icons.rounded.IosShare
@@ -29,6 +30,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -38,6 +40,8 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -71,7 +75,12 @@ import com.daftar.app.ui.rememberViewerActions
 import com.daftar.app.ui.theme.D
 import com.daftar.app.ui.toast
 import com.daftar.app.ui.widthClassOf
+import android.util.Log
+import com.daftar.app.ink.InkSaver
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.drop
@@ -101,6 +110,14 @@ private class Holder {
     @Synchronized fun dispose() { disposed = true; src?.close(); src = null }
 }
 
+/** State that outlives a reload of the same deck (after a slide edit). */
+private class SlidesHost {
+    /** Slide to show once the reloaded editor is ready (-1 = none). */
+    var pendingPage = -1
+    /** Completed when the editor has left composition (its dispose saves the ink). */
+    var editorGone: CompletableDeferred<Unit>? = null
+}
+
 // ------------------------------------------------------------------ screen
 
 @Composable
@@ -114,11 +131,15 @@ fun SlidesScreen(path: String) {
     )
     // Thumbnails are rendered at about the rail's width in pixels (sharp on the tablet, small on phones).
     val thumbPx = with(LocalDensity.current) { 216.dp.roundToPx() }.coerceIn(200, 480)
-    val holder = remember(path) { Holder() }
-    var state by remember(path) { mutableStateOf<LoadState>(LoadState.Loading) }
+    var version by remember(path) { mutableIntStateOf(0) }
+    var working by remember(path) { mutableStateOf(false) }
+    val host = remember(path) { SlidesHost() }
+    val scope = rememberCoroutineScope()
+    val holder = remember(path, version) { Holder() }
+    var state by remember(path, version) { mutableStateOf<LoadState>(LoadState.Loading) }
 
     LaunchedEffect(Unit) { SlidesExport.bind(ctx) }
-    LaunchedEffect(path) {
+    LaunchedEffect(path, version) {
         state = withContext(Dispatchers.IO) {
             if (!file.isFile) return@withContext LoadState.Error(R.string.slides_err_missing)
             try {
@@ -139,9 +160,41 @@ fun SlidesScreen(path: String) {
             }
         }
     }
-    DisposableEffect(path) { onDispose { holder.dispose() } }
+    DisposableEffect(path, version) { onDispose { holder.dispose() } }
+    LaunchedEffect(path) { withContext(Dispatchers.IO) { SlideEdits.cleanStaleTemps(file) } }
 
-    when (val s = state) {
+    /**
+     * Applies a slide edit: the editor leaves composition first (its dispose saves the ink), then the deck, the ink
+     * sidecar and My notes are rewritten from disk, and the deck is reopened on the edited slide.
+     */
+    fun edit(op: SlideOp, notes: MyNotes, current: Int) {
+        if (working) return
+        val mine = notes.snapshot()
+        notes.frozen = true   // the old indices must not be autosaved over the remapped sidecar
+        val gone = CompletableDeferred<Unit>()
+        host.editorGone = gone
+        working = true
+        scope.launch {
+            gone.await()
+            val focus = withContext(NonCancellable + Dispatchers.IO) {
+                InkSaver.flush()
+                delay(120)
+                runCatching { SlideEdits.apply(file, op, mine).also { Storage.touch() } }
+                    .onFailure { Log.e("SlidesScreen", "slide edit failed", it) }.getOrNull()
+            }
+            if (focus == null) {
+                // Nothing on disk changed: put the notes back where they were.
+                withContext(NonCancellable + Dispatchers.IO) { notes.frozen = false; notes.save(mine) }
+                toast(ctx, ctx.getString(R.string.slides4_failed))
+            }
+            host.pendingPage = focus ?: current
+            working = false
+            version++
+        }
+    }
+
+    val st = if (working) LoadState.Loading else state
+    when (val s = st) {
         LoadState.Loading -> Column(Modifier.fillMaxSize().background(D.c.bg)) {
             ViewerTopBar(file.nameWithoutExtension, onBack = { nav.back() })
             Column(
@@ -152,7 +205,7 @@ fun SlidesScreen(path: String) {
                 Spacer(Modifier.height(16.dp))
                 Text(file.name, style = MaterialTheme.typography.titleMedium, color = D.c.ink, textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Spacer(Modifier.height(4.dp))
-                Text(stringResource(R.string.slides_opening), style = MaterialTheme.typography.bodyMedium, color = D.c.muted)
+                Text(stringResource(if (working) R.string.slides4_updating else R.string.slides_opening), style = MaterialTheme.typography.bodyMedium, color = D.c.muted)
             }
         }
         is LoadState.Error -> Column(Modifier.fillMaxSize().background(D.c.bg)) {
@@ -182,7 +235,9 @@ fun SlidesScreen(path: String) {
                 }
             }
         }
-        is LoadState.Ready -> SlidesEditor(file, s, onBack = { nav.back() })
+        is LoadState.Ready -> key(version) {
+            SlidesEditor(file, s, host, onBack = { nav.back() }) { op, cur -> edit(op, s.notes, cur) }
+        }
     }
 }
 
@@ -193,8 +248,12 @@ fun SlidesScreen(path: String) {
  * - Medium / Compact: no rail; the notes pane starts with a Slides filmstrip tab.
  */
 @Composable
-private fun SlidesEditor(file: File, s: LoadState.Ready, onBack: () -> Unit) {
+private fun SlidesEditor(file: File, s: LoadState.Ready, host: SlidesHost, onBack: () -> Unit, onEdit: (SlideOp, Int) -> Unit) {
     val notes = s.notes
+    // Declared before the editor so it is disposed after it (the editor's own dispose saves the ink).
+    DisposableEffect(Unit) { onDispose { host.editorGone?.complete(Unit) } }
+    var ctlRef by remember { mutableStateOf<EditorController?>(null) }
+    val edits = remember(s) { SlideEditState(file, s.src.deck) { op -> onEdit(op, ctlRef?.currentPage ?: 0) } }
     // Debounced autosave of "My notes" (~600 ms after the last keystroke) + a final save on exit.
     LaunchedEffect(notes) {
         snapshotFlow { notes.version }.drop(1).collectLatest {
@@ -228,15 +287,29 @@ private fun SlidesEditor(file: File, s: LoadState.Ready, onBack: () -> Unit) {
                 source = s.src,
                 isNote = false,
                 onBack = onBack,
-                extraActions = { controller -> SlidesHeaderActions(file, s, controller, compact = width == WidthClass.Compact) },
-                sidePanel = if (expanded) ({ controller -> SlideRail(s.src.deck, s.thumbs, controller) }) else null,
+                extraActions = { controller ->
+                    LaunchedEffect(controller) {
+                        ctlRef = controller
+                        // After a slide edit: show the edited slide once the new editor is ready.
+                        val p = host.pendingPage
+                        if (p >= 0) {
+                            host.pendingPage = -1
+                            snapshotFlow { controller.pageCount }.first { it > 0 }
+                            delay(80)
+                            controller.goToPage(p.coerceIn(0, controller.pageCount - 1))
+                        }
+                    }
+                    SlidesHeaderActions(file, s, controller, compact = width == WidthClass.Compact, edits)
+                },
+                sidePanel = if (expanded) ({ controller -> SlideRail(s.src.deck, s.thumbs, controller, edits) }) else null,
                 sidePanelLabel = railLabel,
                 sidePanelAtStart = true,
                 sidePanelOpen = !inPane,
-                bottomPanel = { controller -> NotesPane(s.src.deck, s.thumbs, notes, controller, tab, { tab = it }, withSlides = !expanded) },
+                bottomPanel = { controller -> NotesPane(s.src.deck, s.thumbs, notes, controller, tab, { tab = it }, withSlides = !expanded, edits = edits) },
                 bottomPanelLabel = paneLabel,
             )
         }
+        SlideEditDialogs(edits)
     }
 }
 
@@ -244,7 +317,7 @@ private fun SlidesEditor(file: File, s: LoadState.Ready, onBack: () -> Unit) {
 
 /** Present, Convert and the "Share and export" menu (its own icon; the scaffold already has a ⋮ menu). */
 @Composable
-private fun SlidesHeaderActions(file: File, s: LoadState.Ready, controller: EditorController, compact: Boolean) {
+private fun SlidesHeaderActions(file: File, s: LoadState.Ready, controller: EditorController, compact: Boolean, edits: SlideEditState) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     val c = D.c
@@ -267,11 +340,16 @@ private fun SlidesHeaderActions(file: File, s: LoadState.Ready, controller: Edit
             Spacer(Modifier.width(6.dp))
             Text(stringResource(R.string.slides_present), color = c.onAccent, style = MaterialTheme.typography.labelLarge, maxLines = 1)
         }
+        IconButton(onClick = { edits.askInsert(controller.currentPage + 1, controller.currentPage) }) {
+            Icon(Icons.Rounded.AddBox, stringResource(R.string.slides4_insert_after_current), tint = c.ink)
+        }
         ConvertButton(actions)
     }
     Box {
-        IconButton(onClick = { menu = true }) { Icon(Icons.Rounded.IosShare, stringResource(R.string.slides_file_menu), tint = c.ink) }
+        IconButton(onClick = { menu = true }) { Icon(Icons.Rounded.IosShare, stringResource(R.string.slides4_menu), tint = c.ink) }
         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+            SlideMenuItems(edits, controller.currentPage.coerceIn(0, s.src.deck.slides.size - 1), close = { menu = false }, withInsertBefore = false)
+            HorizontalDivider(color = c.line)
             ViewerMenuItems(actions, close = { menu = false }, showConvert = compact)
             DropdownMenuItem(
                 text = { Text(stringResource(R.string.slides_export_notes)) },

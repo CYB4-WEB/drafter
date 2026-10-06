@@ -44,4 +44,13 @@ interface EditorController {
     fun goToPage(i: Int, yPt: Float)
     /** Re-render the fixed page backgrounds (the source changed what it draws, e.g. search highlights). */
     fun refreshPages()
+
+    /**
+     * Night mode (on screen only, never saved or exported): page backgrounds are drawn through a hue-preserving
+     * inversion (white paper → #1C1F24, photos keep their hues) and ink colours are mapped for readability (dark ink →
+     * light). Observable. Default implementation: no night mode.
+     */
+    var nightMode: Boolean
+        get() = false
+        set(@Suppress("UNUSED_PARAMETER") value) {}
 }

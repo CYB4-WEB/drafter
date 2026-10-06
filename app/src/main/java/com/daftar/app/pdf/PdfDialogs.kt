@@ -223,7 +223,7 @@ private const val MAX_SHOWN_TEXT = 100_000
 
 /** Shows the text of the current page (or all pages) in a selectable, scrollable box with "Copy all". */
 @Composable
-fun CopyTextDialog(file: File, pageCount: Int, current: Int, onDismiss: () -> Unit) {
+fun CopyTextDialog(file: File, pageCount: Int, current: Int, onDismiss: () -> Unit, ocr: OcrStore? = null) {
     val ctx = LocalContext.current
     var all by remember { mutableStateOf(false) }
     var text by remember { mutableStateOf<String?>(null) }
@@ -231,7 +231,11 @@ fun CopyTextDialog(file: File, pageCount: Int, current: Int, onDismiss: () -> Un
     LaunchedEffect(all) {
         text = null; failed = false
         val r = withContext(Dispatchers.IO) {
-            runCatching { if (all) PdfTools.extractText(file, 1, pageCount) else PdfTools.extractText(file, current + 1, current + 1) }
+            runCatching {
+                val (from, to) = if (all) 1 to pageCount else (current + 1) to (current + 1)
+                // Scanned pages: their recognized text fills in where the PDF has no text layer.
+                if (ocr != null && !ocr.isEmpty) PdfOcr.extractTextMerged(file, from, to, ocr) else PdfTools.extractText(file, from, to)
+            }
         }
         r.onFailure { Log.e("PdfScreen", "extract text", it); failed = true }
         text = r.getOrNull() ?: ""

@@ -68,4 +68,27 @@ internal object InkPrefs {
     var textBold: Boolean
         get() = sp?.getBoolean("textBold", false) ?: false
         set(v) { sp?.edit()?.putBoolean("textBold", v)?.apply() }
+    /** Recently used stickers (kinds, newest first, at most 8). */
+    val recentStickers: List<String>
+        get() = sp?.getString("recentStickers", "")?.split(',')?.filter { it in InkStickers.all } ?: emptyList()
+    fun useSticker(kind: String) {
+        val l = (listOf(kind) + recentStickers.filter { it != kind }).take(8)
+        sp?.edit()?.putString("recentStickers", l.joinToString(","))?.apply()
+    }
+    /** Two-page (book spread) view for paged notes and PDF / slides, in landscape on wide windows. */
+    var twoPages: Boolean
+        get() = sp?.getBoolean("twoPages", false) ?: false
+        set(v) { sp?.edit()?.putBoolean("twoPages", v)?.apply() }
+    /** Two-page view: the first page (cover) stands alone. */
+    var coverAlone: Boolean
+        get() = sp?.getBoolean("coverAlone", true) ?: true
+        set(v) { sp?.edit()?.putBoolean("coverAlone", v)?.apply() }
+    /** Night paper for notes (on-screen only). */
+    var nightPaper: Boolean
+        get() = sp?.getBoolean("nightPaper", false) ?: false
+        set(v) { sp?.edit()?.putBoolean("nightPaper", v)?.apply() }
+    /** Shape tool: last library shape picked ("" = Auto, freehand → recognized). */
+    var shapeKind: String
+        get() = sp?.getString("shapeKind", InkShapes.RECT)?.takeIf { it.isEmpty() || InkShapes.base(it) in InkShapes.all } ?: InkShapes.RECT
+        set(v) { sp?.edit()?.putString("shapeKind", v)?.apply() }
 }

@@ -13,6 +13,11 @@ import com.daftar.app.ink.PageSource
 import java.io.File
 import java.io.IOException
 
+/** Extra drawing on top of a rendered page, in displayed page points (e.g. translation boxes). Called on the render thread. */
+fun interface PageOverlay {
+    fun draw(page: Int, canvas: Canvas)
+}
+
 /** Search highlights drawn into rendered pages: every match per page, plus the active match drawn stronger. */
 class SearchMarks(val byPage: Map<Int, List<RectF>>, val activePage: Int, val active: List<RectF>)
 
@@ -35,6 +40,9 @@ class PdfSource(val file: File) : PageSource {
     @Volatile var marks: SearchMarks? = null
     private val markPaint = Paint().apply { color = 0xFFFFE27A.toInt(); xfermode = PorterDuffXfermode(PorterDuff.Mode.MULTIPLY) }
     private val activePaint = Paint().apply { color = 0xFFFFA94D.toInt(); xfermode = PorterDuffXfermode(PorterDuff.Mode.MULTIPLY) }
+
+    /** Drawn after the page and the search marks (the editor's night mode inverts it with the page, so overlays follow the paper). */
+    @Volatile var overlay: PageOverlay? = null
 
     init {
         try {
@@ -62,6 +70,13 @@ class PdfSource(val file: File) : PageSource {
                 page.render(dest, null, m, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
             }
             drawMarks(i, dest, m)
+            overlay?.let { o ->
+                runCatching {
+                    val c = Canvas(dest)
+                    c.concat(m)
+                    o.draw(i, c)
+                }
+            }
         }
     }
 
@@ -101,3 +116,4 @@ class PdfSource(val file: File) : PageSource {
         }
     }
 }
+

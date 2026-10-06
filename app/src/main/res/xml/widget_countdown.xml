@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- countdown-agent: single-event countdown (2×2 → 4×2). No updatePeriodMillis polling: refreshed with planner changes and
+     by a non-wakeup alarm only when a label changes; under 24 h the system-animated Chronometer ticks without wakeups. -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="110dp" android:minHeight="110dp"
+    android:minResizeWidth="110dp" android:minResizeHeight="110dp"
+    android:maxResizeWidth="420dp" android:maxResizeHeight="220dp"
+    android:targetCellWidth="2" android:targetCellHeight="2"
+    android:resizeMode="horizontal|vertical"
+    android:updatePeriodMillis="0"
+    android:initialLayout="@layout/widget_countdown_small"
+    android:previewLayout="@layout/widget_countdown_small"
+    android:configure="com.daftar.app.widget.CountdownWidgetConfigActivity"
+    android:widgetFeatures="reconfigurable|configuration_optional"
+    android:description="@string/cd_widget_desc"
+    android:widgetCategory="home_screen" />

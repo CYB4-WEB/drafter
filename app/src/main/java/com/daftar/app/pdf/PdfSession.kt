@@ -32,6 +32,18 @@ internal class PdfSession(val file: File, density: Float) {
 
     val textIndex = PdfTextIndex(file, min(maxMem / 32, 8L shl 20))
 
+    /** OCR results for scanned pages (sidecar `ocr.json`); the search index reads them for pages without a text layer. */
+    val ocr = OcrStore(file).also { o -> textIndex.ocrPage = { i -> o.pageText(i) } }
+
+    /** Cached page translations (sidecar `translate.json`). */
+    val translations = TranslationCache(file)
+
+    /** Loads the OCR sidecar for the opened version (call on IO after [adopt]). */
+    fun loadOcr() {
+        val n = pageCount
+        ocr.load { i -> if (i in 0 until n) pageSize(i) else null }
+    }
+
     /** Outline, loaded on first use of the Outline tab (null = not loaded yet). */
     var outline by mutableStateOf<List<OutlineEntry>?>(null)
 

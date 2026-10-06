@@ -19,7 +19,7 @@ object DocxParser {
         if (isOle(file)) throw LegacyDocException()
         ZipFile(file).use { zip ->
             val docEntry = zip.getEntry("word/document.xml") ?: findMainPart(zip) ?: throw IllegalStateException("no document part")
-            val ctx = Ctx(zip)
+            val ctx = Ctx({ n -> zip.getEntry(n)?.let { zip.getInputStream(it) } }, { zip.getEntry(it) != null })
             zip.getEntry("word/styles.xml")?.let { e -> zip.getInputStream(e).use { ctx.parseStyles(it) } }
             zip.getEntry("word/numbering.xml")?.let { e -> zip.getInputStream(e).use { ctx.parseNumbering(it) } }
             val baseDir = docEntry.name.substringBeforeLast('/', "")
@@ -133,11 +133,11 @@ object DocxParser {
         val b: Boolean? = null, val bCs: Boolean? = null, val i: Boolean? = null, val iCs: Boolean? = null,
         val u: Boolean? = null, val strike: Boolean? = null, val sz: Float? = null, val szCs: Float? = null,
         val color: Int? = null, val colorSet: Boolean = false, val bg: Int? = null, val vert: Int? = null,
-        val mono: Boolean? = null, val caps: Boolean? = null, val vanish: Boolean? = null, val rStyle: String? = null,
+        val font: String? = null, val caps: Boolean? = null, val vanish: Boolean? = null, val rStyle: String? = null,
     ) {
         operator fun plus(o: RP?): RP = if (o == null) this else RP(
             o.b ?: b, o.bCs ?: bCs, o.i ?: i, o.iCs ?: iCs, o.u ?: u, o.strike ?: strike, o.sz ?: sz, o.szCs ?: szCs,
-            if (o.colorSet) o.color else color, o.colorSet || colorSet, o.bg ?: bg, o.vert ?: vert, o.mono ?: mono,
+            if (o.colorSet) o.color else color, o.colorSet || colorSet, o.bg ?: bg, o.vert ?: vert, o.font ?: font,
             o.caps ?: caps, o.vanish ?: vanish, o.rStyle ?: rStyle,
         )
 
@@ -150,7 +150,8 @@ object DocxParser {
             color = color,
             background = bg,
             vert = vert ?: 0,
-            mono = mono ?: false,
+            mono = font == "mono",
+            font = font?.takeIf { it != "sans" },
         )
     }
 
@@ -159,6 +160,8 @@ object DocxParser {
         val indStart: Float? = null, val indEnd: Float? = null, val hanging: Float? = null, val firstLine: Float? = null,
         val numId: String? = null, val ilvl: Int? = null, val bidi: Boolean? = null, val outline: Int? = null,
         val pStyle: String? = null, val pageBreakBefore: Boolean? = null, val sectBreak: Boolean? = null,
+        /** Direct bottom border (a horizontal line paragraph when it has no text). */
+        val rule: Boolean? = null,
     ) {
         operator fun plus(o: PP?): PP = if (o == null) this else PP(
             o.jc ?: jc, o.before ?: before, o.after ?: after, o.line ?: line, o.lineRule ?: lineRule,
@@ -167,7 +170,7 @@ object DocxParser {
             if (o.hanging != null || o.firstLine != null) o.hanging else hanging,
             if (o.hanging != null || o.firstLine != null) o.firstLine else firstLine,
             o.numId ?: numId, o.ilvl ?: ilvl, o.bidi ?: bidi, o.outline ?: outline, o.pStyle ?: pStyle, o.pageBreakBefore ?: pageBreakBefore,
-            o.sectBreak,
+            o.sectBreak, o.rule ?: rule,
         )
     }
 
@@ -199,8 +202,8 @@ object DocxParser {
                 "shd" -> hex(a("fill"))?.let { if (r.bg == null) r.copy(bg = it) else r } ?: r
                 "vertAlign" -> r.copy(vert = when (a("val")) { "superscript" -> 1; "subscript" -> 2; else -> 0 })
                 "rFonts" -> {
-                    val f = (a("ascii") ?: a("hAnsi") ?: "").lowercase()
-                    if (f.isEmpty()) r else r.copy(mono = f.contains("courier") || f.contains("consolas") || f.contains("mono") || f.contains("menlo"))
+                    val f = a("ascii") ?: a("hAnsi") ?: a("cs") ?: ""
+                    if (f.isEmpty()) r else r.copy(font = fontKeyOf(f) ?: "sans")
                 }
                 "caps" -> r.copy(caps = onOff())
                 "vanish", "webHidden" -> r.copy(vanish = onOff())
@@ -243,7 +246,12 @@ object DocxParser {
                     children { m -> if (m == "type") continuous = a("val") == "continuous" }
                     p = p.copy(sectBreak = !continuous)
                 }
-                "rPr", "pPrChange", "tabs", "framePr", "pBdr" -> skipTree()
+                "pBdr" -> {
+                    var bottom = false
+                    children { m -> if (m == "bottom") a("val").let { v -> if (v != null && v != "none" && v != "nil") bottom = true } }
+                    p = p.copy(rule = bottom)
+                }
+                "rPr", "pPrChange", "tabs", "framePr" -> skipTree()
             }
         }
         return p
@@ -251,7 +259,7 @@ object DocxParser {
 
     // ---------------------------------------------------------------- per-document context
 
-    private class Ctx(val zip: ZipFile) {
+    private class Ctx(val open: (String) -> InputStream?, val exists: (String) -> Boolean) {
         val styles = HashMap<String, Style>()
         var defRP = RP(sz = 11f)
         var defPP = PP()
@@ -264,6 +272,8 @@ object DocxParser {
         var page = PageSpec.A4
         private val rpCache = HashMap<String, RP>()
         private val ppCache = HashMap<String, PP>()
+
+        fun clearCaches() { rpCache.clear(); ppCache.clear() }
 
         // ------------------------------------------------ styles
 
@@ -420,9 +430,9 @@ object DocxParser {
         // ------------------------------------------------ rels
 
         fun parseRels(name: String, baseDir: String): Map<String, Pair<String, Boolean>> {
-            val e = zip.getEntry(name) ?: return emptyMap()
+            val input = open(name) ?: return emptyMap()
             val out = HashMap<String, Pair<String, Boolean>>()
-            zip.getInputStream(e).use { s ->
+            input.use { s ->
                 val p = newParser(s)
                 while (p.next() != XmlPullParser.END_DOCUMENT) {
                     if (p.eventType == XmlPullParser.START_TAG && p.name == "Relationship") {
@@ -615,7 +625,9 @@ object DocxParser {
             fun flush(final: Boolean) {
                 val (pp, base) = resolved()
                 val hasText = sb.isNotEmpty()
-                if (hasText || (final && !emitted && pending.isEmpty())) {
+                if (!hasText && final && !emitted && pending.isEmpty() && direct.rule == true) {
+                    out.add(DocBlock.Divider); emitted = true
+                } else if (hasText || (final && !emitted && pending.isEmpty())) {
                     out.add(buildPara(pp, direct, base, sb.toString(), ArrayList(spans), direct.pStyle ?: defaultParaStyle, continuation = segments > 0, footnote = footnote))
                     segments++; emitted = true
                 }
@@ -686,7 +698,7 @@ object DocxParser {
                         val d = Drawing()
                         scanDrawing(p, d, rels, footnote)
                         val target = d.embed?.let { rels[it] }?.takeIf { !it.second }?.first
-                        if (target != null && zip.getEntry(target) != null && d.cx > 0f && d.cy > 0f) {
+                        if (target != null && exists(target) && d.cx > 0f && d.cy > 0f) {
                             val (pp, _) = resolved()
                             val rtl = pp.bidi == true
                             pending.add(DocBlock.Image(target, d.cx / EMU_PER_PT, d.cy / EMU_PER_PT, d.alt, alignOf(pp.jc, rtl, rtl), rtl))
@@ -729,7 +741,10 @@ object DocxParser {
             }
         }
 
-        private fun buildPara(pp: PP, direct: PP, base: RP, text: String, spans: List<Span>, styleId: String?, continuation: Boolean, footnote: Int): DocBlock.Para {
+        fun buildPara(
+            pp: PP, direct: PP, base: RP, text: String, spans: List<Span>, styleId: String?, continuation: Boolean, footnote: Int,
+            markerFn: (String, Int) -> Pair<String, Lvl>? = { n, l -> marker(n, l) },
+        ): DocBlock.Para {
             val heading = if (footnote > 0) 0 else headingLevel(styleId, pp.outline)
             val styleRp = styleRP(styleId)
             var baseRp = base
@@ -752,7 +767,7 @@ object DocxParser {
             var lvlPP = PP()
             val numId = pp.numId
             if (!continuation && numId != null && numId != "0") {
-                marker(numId, pp.ilvl ?: 0)?.let { (m, lv) ->
+                markerFn(numId, pp.ilvl ?: 0)?.let { (m, lv) ->
                     if (m.isNotEmpty()) { marker = m; markerFmt = (baseRp + lv.rp).fmt(m.any { isRtlChar(it) }) }
                     lvlPP = lv.pp
                 }
@@ -813,6 +828,146 @@ object DocxParser {
                 }
             }
             return out
+        }
+    }
+
+    // ---------------------------------------------------------------- editor support
+
+    /** Font family key for a font name (shared by the viewer and the editor). null = default sans. */
+    fun fontKeyOf(name: String): String? {
+        val f = name.lowercase()
+        return when {
+            f.contains("courier") || f.contains("consolas") || f.contains("mono") || f.contains("menlo") -> "mono"
+            f.contains("cairo") -> "cairo"
+            f.contains("amiri") || f.contains("traditional arabic") -> "amiri"
+            f.contains("tehreer") -> "tehreer"
+            f.contains("sans") -> null
+            f.contains("times") || f.contains("georgia") || f.contains("cambria") || f.contains("garamond") ||
+                f.contains("serif") || f.contains("palatino") || f.contains("book antiqua") || f.contains("minion") -> "serif"
+            else -> null
+        }
+    }
+
+    /**
+     * Style / numbering resolution for the editor: the same rules as [parse], applied to the property XML the editor
+     * writes, so what the editor shows is what the saved file shows. [ns] = the xmlns declarations of the document root
+     * (raw property XML copied from the document may use any prefix declared there). Thread-safe (synchronized).
+     */
+    internal class StyleSession private constructor(
+        private val ctx: Ctx, private val rels: Map<String, Pair<String, Boolean>>, private val ns: String, private val names: MutableSet<String>,
+    ) {
+        /** Resolved paragraph properties: [para] is an empty-text template (marker text left to [markerText]). */
+        class ParaLook(val para: DocBlock.Para, val styleId: String?, val numId: String?, val ilvl: Int, val numFmt: String?) {
+            val bullet: Boolean get() = numFmt == "bullet"
+        }
+
+        private val lookCache = HashMap<String, ParaLook>()
+        private val runCache = HashMap<String, RunFmt>()
+
+        private fun parser(xml: String): XmlPullParser = newParser(java.io.ByteArrayInputStream(xml.toByteArray(Charsets.UTF_8)))
+
+        @Synchronized
+        fun paraLook(pPr: String?): ParaLook = lookCache.getOrPut(pPr ?: "") {
+            val direct = if (pPr.isNullOrBlank()) PP() else runCatching {
+                val p = parser("<x $ns>$pPr</x>")
+                if (p.seekStart("pPr")) p.readPP() else PP()
+            }.getOrDefault(PP())
+            val styleId = direct.pStyle ?: ctx.defaultParaStyle
+            val pp = ctx.defPP + ctx.stylePP(styleId) + direct
+            val base = ctx.defRP + ctx.styleRP(styleId)
+            val numId = pp.numId?.takeIf { it != "0" }
+            val ilvl = (pp.ilvl ?: 0).coerceIn(0, 8)
+            val lv = numId?.let { ctx.lvl(it, ilvl) }
+            val para = ctx.buildPara(pp, direct, base, "", emptyList(), styleId, continuation = false, footnote = 0,
+                markerFn = { _, _ -> lv?.let { (if (it.fmt == "none") "" else "0") to it } })
+            ParaLook(para, styleId, if (lv != null) numId else null, ilvl, lv?.fmt)
+        }
+
+        /** Resolved run formatting: document defaults + paragraph style + character style + direct [rPr]. */
+        @Synchronized
+        fun runFmt(styleId: String?, rPr: String?, cs: Boolean): RunFmt = runCache.getOrPut("${styleId ?: ""}|$cs|${rPr ?: ""}") {
+            val direct = if (rPr.isNullOrBlank()) RP() else runCatching {
+                val p = parser("<x $ns>$rPr</x>")
+                if (p.seekStart("rPr")) p.readRP() else RP()
+            }.getOrDefault(RP())
+            (ctx.defRP + ctx.styleRP(styleId ?: ctx.defaultParaStyle) + ctx.styleRP(direct.rStyle) + direct).fmt(cs)
+        }
+
+        /** True when the paragraph style chain (or document default) sets bold / a size, so headings don't need the fallback. */
+        @Synchronized
+        fun styleSetsSize(styleId: String?): Boolean = ctx.styleRP(styleId ?: ctx.defaultParaStyle).sz != null
+
+        @Synchronized
+        fun resetCounters() = ctx.counters.clear()
+
+        /** Next list marker of (numId, ilvl) in document order (call [resetCounters] before a pass). */
+        @Synchronized
+        fun markerText(numId: String, ilvl: Int): String? = ctx.marker(numId, ilvl)?.first
+
+        /** Read-only preview of preserved body XML (tables, content controls, locked paragraphs). */
+        @Synchronized
+        fun parseFragment(xml: String): List<DocBlock> = runCatching {
+            val out = ArrayList<DocBlock>()
+            val p = parser("<w:body $ns>$xml</w:body>")
+            if (p.seekStart("body")) ctx.parseBlocks(p, rels, out)
+            out as List<DocBlock>
+        }.getOrDefault(emptyList())
+
+        /** Style id for a built-in kind: Normal, Title, Heading1..Heading6, Quote — matched by id or name. */
+        @Synchronized
+        fun styleIdFor(kind: String): String? {
+            val want = kind.lowercase()
+            ctx.styles.values.firstOrNull { it.type == "paragraph" && it.id.equals(kind, true) }?.let { return it.id }
+            return ctx.styles.values.firstOrNull { it.type == "paragraph" && it.name.lowercase().replace(" ", "") == want }?.id
+        }
+
+        /** Built-in kind of a paragraph style (see [styleIdFor]) or null for other styles. */
+        @Synchronized
+        fun kindOf(styleId: String?): String? {
+            val s = ctx.styles[styleId ?: ctx.defaultParaStyle ?: return "Normal"] ?: return if (styleId == null) "Normal" else null
+            val n = s.name.lowercase().replace(" ", "")
+            return when {
+                n == "normal" || s.id.equals("Normal", true) -> "Normal"
+                n == "title" || s.id.equals("Title", true) -> "Title"
+                n == "quote" || s.id.equals("Quote", true) -> "Quote"
+                else -> Regex("^heading([1-6])$").find(n)?.let { "Heading" + it.groupValues[1] }
+                    ?: Regex("^heading([1-6])$", RegexOption.IGNORE_CASE).find(s.id)?.let { "Heading" + it.groupValues[1] }
+            }
+        }
+
+        /** True when the paragraph style chain carries numbering (turning a list off then needs numId 0). */
+        @Synchronized
+        fun styleHasNumbering(styleId: String?): Boolean = ctx.stylePP(styleId ?: ctx.defaultParaStyle).numId.let { it != null && it != "0" }
+
+        /** Adds `w:style` elements (styles the editor appends to styles.xml). */
+        @Synchronized
+        fun addStyles(xml: String) {
+            runCatching { ctx.parseStyles(java.io.ByteArrayInputStream("<w:styles $ns>$xml</w:styles>".toByteArray(Charsets.UTF_8))) }
+            ctx.clearCaches(); lookCache.clear(); runCache.clear()
+        }
+
+        /** Adds `w:abstractNum` / `w:num` elements (lists the editor appends to numbering.xml). */
+        @Synchronized
+        fun addNumbering(xml: String) {
+            runCatching { ctx.parseNumbering(java.io.ByteArrayInputStream("<w:numbering $ns>$xml</w:numbering>".toByteArray(Charsets.UTF_8))) }
+            lookCache.clear()
+        }
+
+        @Synchronized
+        fun addEntry(name: String) { names.add(name) }
+
+        companion object {
+            /** Loads styles, numbering and the main part's relationships of [file]. */
+            fun open(file: File, docPart: String, ns: String): StyleSession = ZipFile(file).use { zip ->
+                val names = HashSet<String>()
+                val en = zip.entries()
+                while (en.hasMoreElements()) names.add(en.nextElement().name)
+                val ctx = Ctx({ n -> zip.getEntry(n)?.let { zip.getInputStream(it) } }, { it in names })
+                zip.getEntry("word/styles.xml")?.let { e -> zip.getInputStream(e).use { ctx.parseStyles(it) } }
+                zip.getEntry("word/numbering.xml")?.let { e -> zip.getInputStream(e).use { ctx.parseNumbering(it) } }
+                val rels = ctx.parseRels(relsName(docPart), docPart.substringBeforeLast('/', ""))
+                StyleSession(ctx, rels, ns, names)
+            }
         }
     }
 
