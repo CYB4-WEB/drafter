@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Chat panel -->
+    <string name="ai_title">AI assistant</string>
+    <string name="ai_new_chat">New chat</string>
+    <string name="ai_new_chat_confirm">Start a new chat? The current conversation for this file will be deleted.</string>
+    <string name="ai_close">Close AI panel</string>
+    <string name="ai_more">More</string>
+    <string name="ai_empty">Select part of a page with the lasso and tap Ask AI, or ask anything about this file.</string>
+    <string name="ai_input_hint">Ask about this…</string>
+    <string name="ai_send">Send</string>
+    <string name="ai_selection_from_page">Selection · page %1$d</string>
+    <string name="ai_selection_image">Selected area</string>
+    <string name="ai_remove_attachment">Remove selection</string>
+    <string name="ai_thinking">Thinking…</string>
+    <string name="ai_reading_pages">Reading pages %1$d–%2$d…</string>
+    <string name="ai_reading_page">Reading page %1$d…</string>
+    <string name="ai_stop">Stop</string>
+    <string name="ai_retry">Retry</string>
+    <string name="ai_stopped">Stopped.</string>
+    <string name="ai_dismiss">Dismiss</string>
+    <string name="ai_you">You</string>
+
+    <!-- Quick chips (the prompt is what is sent) -->
+    <string name="ai_chip_explain">Explain</string>
+    <string name="ai_chip_answer">Answer</string>
+    <string name="ai_chip_solve">Solve step by step</string>
+    <string name="ai_chip_translate">Translate</string>
+    <string name="ai_chip_questions">Make questions</string>
+    <string name="ai_prompt_explain">Explain this clearly.</string>
+    <string name="ai_prompt_answer">Answer this question.</string>
+    <string name="ai_prompt_solve">Solve this step by step.</string>
+    <string name="ai_prompt_translate">Translate this. If it is in English, translate it into Arabic; otherwise translate it into English.</string>
+
+    <!-- Errors -->
+    <string name="ai_err_no_key">Add your Gemini API key in Settings → AI to use the assistant.</string>
+    <string name="ai_err_bad_key">Your API key was rejected. Check it in Settings → AI (and its restrictions in Google Cloud).</string>
+    <string name="ai_err_quota">The free limit for your key was reached. Wait a minute and try again, or try later today.</string>
+    <string name="ai_err_network">No connection to Gemini. Check your internet and try again.</string>
+    <string name="ai_err_blocked">Gemini did not answer this request (it may have been blocked by its safety filters). Try rephrasing it.</string>
+    <string name="ai_err_server">Gemini had a problem answering. Try again in a moment.</string>
+    <string name="ai_err_memory">Not enough memory to prepare the pages. Try fewer pages.</string>
+    <string name="ai_err_generic">Something went wrong: %1$s</string>
+    <string name="ai_open_settings">Open Settings → AI</string>
+
+    <!-- Permission to read more of the file -->
+    <string name="ai_perm_title">Share more of this file?</string>
+    <string name="ai_perm_pages">The AI wants pages %1$d–%2$d of %3$s.</string>
+    <string name="ai_perm_page">The AI wants page %1$d of %2$s.</string>
+    <string name="ai_perm_whole">The AI wants to read all of %1$s.</string>
+    <string name="ai_perm_reason">Because: %1$s</string>
+    <string name="ai_perm_only_allowed">Only what you allow is sent (page text and page images).</string>
+    <string name="ai_perm_allow_pages">Allow these pages</string>
+    <string name="ai_perm_allow_whole">Allow whole file</string>
+    <string name="ai_perm_deny">Deny</string>
+    <string name="ai_perm_always">Always allow for this file</string>
+    <string name="ai_always_on">Always allowed for this file</string>
+    <string name="ai_always_revoke">Ask before sharing pages</string>
+    <string name="ai_note_shared">Shared pages %1$d–%2$d</string>
+    <string name="ai_note_shared_one">Shared page %1$d</string>
+    <string name="ai_note_denied">You declined to share more of the file</string>
+
+    <!-- One-time privacy notice -->
+    <string name="ai_privacy_title">Before you use AI</string>
+    <string name="ai_privacy_text">Requests go directly from this device to Google Gemini using your own API key.\n\n• Only what you select or allow is sent: the selected area, your question and any pages you approve.\n• On the free tier, Google may use prompts and images to improve its products, and people may review them. Do not send personal or confidential material.\n• Answers can be wrong. Check important results.</string>
+    <string name="ai_privacy_accept">I understand</string>
+
+    <!-- Settings → AI -->
+    <string name="ai_set_title">AI (Gemini)</string>
+    <string name="ai_set_key">Gemini API key</string>
+    <string name="ai_set_key_hint">Paste your key</string>
+    <string name="ai_set_key_saved">Key saved on this device only.</string>
+    <string name="ai_set_no_key">No key yet. AI features stay off until you add one.</string>
+    <string name="ai_set_paste">Paste</string>
+    <string name="ai_set_show">Show key</string>
+    <string name="ai_set_hide">Hide key</string>
+    <string name="ai_set_clear">Remove key</string>
+    <string name="ai_set_clear_confirm">Remove the API key from this device?</string>
+    <string name="ai_set_remove">Remove</string>
+    <string name="ai_set_save">Save</string>
+    <string name="ai_set_test">Test key</string>
+    <string name="ai_set_testing">Testing…</string>
+    <string name="ai_set_test_ok">The key works. Models available: %1$d.</string>
+    <string name="ai_set_model">Model</string>
+    <string name="ai_set_model_hint">Test the key to choose from the models it can use.</string>
+    <string name="ai_set_model_default">%1$s (default)</string>
+    <string name="ai_set_get_key">Get a free key in Google AI Studio</string>
+    <string name="ai_set_privacy">Your key is stored only in this app\'s private storage on this device. It is never shared, exported or backed up. On the free tier Google may use what you send to improve its products; only what you select or allow is sent.</string>
+    <string name="ai_set_restrict_title">Protect your key (recommended)</string>
+    <string name="ai_set_restrict_text">In Google Cloud Console → APIs &amp; Services → Credentials, open your key:\n1. Application restrictions → Android apps → Add: the package name and SHA-1 fingerprint below.\n2. API restrictions → Restrict key → Generative Language API.\nThen a copied key will not work in other apps.</string>
+    <string name="ai_set_package">Package name</string>
+    <string name="ai_set_sha1">SHA-1 certificate fingerprint</string>
+    <string name="ai_set_sha1_unknown">Unavailable</string>
+    <string name="ai_set_privacy_reset">Show the privacy notice again</string>
+</resources>

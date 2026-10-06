@@ -50,6 +50,8 @@ import com.daftar.app.ui.card
 import com.daftar.app.ui.pane
 import com.daftar.app.ui.rememberTickingNow
 import com.daftar.app.ui.theme.D
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import java.time.format.TextStyle
 import java.util.Locale
@@ -271,8 +273,7 @@ internal fun StatsSection() {
     val bySubject = remember(lv, week, today) { StudyLog.minutesBySubject(from, today).entries.sortedByDescending { it.value } }
     val days = remember(lv, today) { (6 downTo 0).map { today - it } }
     val perDay = remember(lv, today) { days.map { d -> StudyLog.sessions().filter { epochDay(it.start) == d }.groupBy { it.subject }.mapValues { e -> e.value.sumOf { it.minutes } } } }
-    val reviewedToday = StudyLog.reviewedOn(today)
-    val reviewedWeek = remember(lv, today) { (StudyLog.weekStart()..today).sumOf { StudyLog.reviewedOn(it) } }
+    val blocks = remember(lv, week, today) { StudyLog.sessions().count { epochDay(it.start) in from..today } }
     val streak = remember(lv, today) { StudyLog.streak() }
     val totalMin = bySubject.sumOf { it.value }
 
@@ -285,7 +286,7 @@ internal fun StatsSection() {
     Column(Modifier.fillMaxWidth().card(c).padding(16.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             StatTile(stringResource(R.string.study_minutes_short, totalMin), stringResource(R.string.study_focused), Modifier.weight(1f))
-            StatTile("${if (week) reviewedWeek else reviewedToday}", stringResource(R.string.study_reviewed), Modifier.weight(1f))
+            StatTile("$blocks", stringResource(R.string.study_blocks), Modifier.weight(1f))
             StatTile(pluralStringResource(R.plurals.study_n_days, streak, streak), stringResource(R.string.study_streak_label), Modifier.weight(1f))
         }
         Spacer(Modifier.height(16.dp))
@@ -363,7 +364,7 @@ private fun WeekChart(days: List<Long>, perDay: List<Map<String, Int>>) {
 // Home card
 // =====================================================================================
 
-/** Home screen card: today's due cards + Review, focus minutes today, start / control the focus timer. */
+/** Home screen card: saved practice quizzes + New quiz, focus minutes today, start / control the focus timer. */
 @Composable
 fun StudyHomeCard() {
     val c = D.c
@@ -371,16 +372,15 @@ fun StudyHomeCard() {
     val pending = MainActivity.pendingAction.value
     var handled by remember { mutableStateOf<String?>(null) }
     SideEffect {
-        if ((pending == ACTION_STUDY || pending == ACTION_STUDY_REVIEW) && handled != pending) {
+        if (pending == ACTION_STUDY && handled != pending) {
             handled = pending
             MainActivity.pendingAction.value = null
             Nav.tab(Screen.Study)
-            if (pending == ACTION_STUDY_REVIEW) Nav.push(Screen.Review(null))
         }
     }
-    val v = Flashcards.version
+    LaunchedEffect(Unit) { withContext(Dispatchers.IO) { StudyCleanup.runOnce() } }
     val now = rememberTickingNow(60_000)
-    val due = remember(v, now) { Flashcards.dueCount(null, now) }
+    val quizzes = rememberQuizList().size
     val minutes = remember(StudyLog.version, now / 60_000) { StudyLog.minutesToday() }
     val s = FocusTimer.state
     val start = rememberStarter()
@@ -390,14 +390,15 @@ fun StudyHomeCard() {
     }
     Column(Modifier.fillMaxWidth().card(c).padding(4.dp)) {
         Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { Nav.tab(Screen.Study) }.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            HomeIcon(Icons.Rounded.Style, c.accent)
+            HomeIcon(Icons.Rounded.Quiz, c.accent)
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text(pluralStringResource(R.plurals.study_n_cards_due, due, due), style = MaterialTheme.typography.bodyLarge, color = c.ink, maxLines = 1)
+                Text(if (quizzes == 0) stringResource(R.string.quiz_practice) else pluralStringResource(R.plurals.quiz_n_quizzes, quizzes, quizzes),
+                    style = MaterialTheme.typography.bodyLarge, color = c.ink, maxLines = 1)
                 Text(stringResource(R.string.study_focus_today, minutes), style = MaterialTheme.typography.bodySmall, color = c.muted, maxLines = 1)
             }
-            if (due > 0) Button(onClick = { pane.push(Screen.Review(null)) }, colors = ButtonDefaults.buttonColors(containerColor = c.accent),
-                contentPadding = PaddingValues(horizontal = 14.dp)) { Text(stringResource(R.string.study_review)) }
+            Button(onClick = { QuizRequests.prepare(null, null, null); pane.push(Screen.NewQuiz) }, colors = ButtonDefaults.buttonColors(containerColor = c.accent),
+                contentPadding = PaddingValues(horizontal = 14.dp)) { Text(stringResource(R.string.quiz_new)) }
         }
         Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp).height(1.dp).background(c.line))
         Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -462,27 +463,10 @@ fun FocusChip(modifier: Modifier = Modifier) {
 
 @Composable
 fun StudySettingsSection() {
-    val ctx = LocalContext.current
     val c = D.c
     var timer by remember { mutableStateOf(false) }
-    val notifLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
-    val at = java.time.LocalTime.of(StudyPrefs.dailyAt / 60, StudyPrefs.dailyAt % 60)
-    val atText = android.text.format.DateFormat.getTimeFormat(ctx).format(java.util.Date(
-        java.time.LocalDate.now().atTime(at).atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()))
-
     SectionTitle(stringResource(R.string.study_title))
     Column(Modifier.fillMaxWidth().card(c)) {
-        SetRow(Icons.Rounded.NotificationsActive, stringResource(R.string.study_daily_reminder), stringResource(R.string.study_daily_reminder_desc, atText),
-            switch = StudyPrefs.dailyReminder) {
-            val on = !StudyPrefs.dailyReminder
-            StudyPrefs.putDaily(on)
-            StudyAlarms.scheduleDaily(ctx)
-            if (on && Build.VERSION.SDK_INT >= 33 && !StudyNotify.permitted(ctx)) notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-        }
-        if (StudyPrefs.dailyReminder) SetRow(Icons.Rounded.Schedule, stringResource(R.string.study_reminder_time), atText) {
-            android.app.TimePickerDialog(ctx, { _, h, m -> StudyPrefs.putDailyAt(h * 60 + m); StudyAlarms.scheduleDaily(ctx) },
-                StudyPrefs.dailyAt / 60, StudyPrefs.dailyAt % 60, android.text.format.DateFormat.is24HourFormat(ctx)).show()
-        }
         SetRow(Icons.Rounded.Timer, stringResource(R.string.study_focus_timer),
             stringResource(R.string.study_timer_summary, StudyPrefs.focusMin, StudyPrefs.shortMin, StudyPrefs.longMin, StudyPrefs.longEvery)) { timer = true }
     }
