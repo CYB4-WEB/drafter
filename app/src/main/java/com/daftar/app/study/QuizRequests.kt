@@ -3,9 +3,9 @@ package com.daftar.app.study
 import android.graphics.Bitmap
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import com.daftar.app.ai.FileContext
 import com.daftar.app.ai.Gemini
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -24,12 +24,8 @@ object QuizRequests {
     enum class Stage { IDLE, READING, WRITING, SAVING }
 
     // ---------------- draft ----------------
-    /** Library file to build the quiz from (null = none). */
-    var file by mutableStateOf<File?>(null)
-    /** Page range of [file], 0-based inclusive (ignored when [wholeFile]). */
-    var from by mutableIntStateOf(0)
-    var to by mutableIntStateOf(0)
-    var wholeFile by mutableStateOf(true)
+    /** Library files / folders to build the quiz from (in the order shown). */
+    val sources = mutableStateListOf<QuizSource>()
     /** The lasso selection as a JPEG part (not a Bitmap: nothing large stays in RAM). */
     var image by mutableStateOf<Gemini.Part.Blob?>(null)
         private set
@@ -42,6 +38,13 @@ object QuizRequests {
 
     // ---------------- job ----------------
     var stage by mutableStateOf(Stage.IDLE)
+        private set
+    /** While [Stage.READING]: file n of total and its name. */
+    var readIndex by mutableIntStateOf(0)
+        private set
+    var readTotal by mutableIntStateOf(0)
+        private set
+    var readName by mutableStateOf("")
         private set
     var error by mutableStateOf<Throwable?>(null)
     /** Id of the quiz just created; the screen opens it and clears this. */
@@ -62,10 +65,11 @@ object QuizRequests {
         imageJob?.cancel()
         error = null
         done = null
-        this.file = file
-        wholeFile = pages == null
-        from = pages?.first?.coerceAtLeast(0) ?: 0
-        to = pages?.last?.coerceAtLeast(from) ?: 0
+        sources.clear()
+        if (file != null) {
+            val a = pages?.first?.coerceAtLeast(0) ?: 0
+            sources += QuizSource(file, folder = file.isDirectory, whole = pages == null || file.isDirectory, from = a, to = pages?.last?.coerceAtLeast(a) ?: 0)
+        }
         this.image = null
         options = options.copy(instructions = instructions)
         draftVersion++
@@ -82,7 +86,14 @@ object QuizRequests {
 
     fun clearImage() { imageJob?.cancel(); image = null; imageLoading = false }
 
-    val hasSource get() = file != null || image != null
+    val hasSource get() = sources.isNotEmpty() || image != null
+
+    /** Adds files / folders that are not in the list yet. */
+    fun add(files: List<File>, folder: Boolean) {
+        files.forEach { f -> if (sources.none { it.file.absolutePath == f.absolutePath }) sources += QuizSource(f, folder = folder) }
+    }
+
+    fun update(i: Int, s: QuizSource) { if (i in sources.indices) sources[i] = s }
 
     /** Starts generating (no-op while running). Result: [done] = new quiz id, or [error]. */
     fun generate(fallbackTitle: String) {
@@ -90,10 +101,8 @@ object QuizRequests {
         error = null
         done = null
         val o = options
-        val f = file
+        val srcs = sources.toList()
         val img = image
-        val whole = wholeFile
-        val a0 = from; val b0 = to
         job = scope.launch {
             try {
                 val parts = ArrayList<Gemini.Part>()
@@ -101,18 +110,13 @@ object QuizRequests {
                     parts += Gemini.Part.text("A part of the student's notes they selected (image):")
                     parts += img
                 }
-                var pagesLabel = ""
-                if (f != null) {
+                var infos: List<QuizSourceInfo> = emptyList()
+                if (srcs.isNotEmpty()) {
                     stage = Stage.READING
-                    val n = FileContext.pageCount(f)
-                    if (n <= 0) throw QuizException(com.daftar.app.R.string.quiz_err_read)
-                    val a = if (whole) 0 else a0.coerceIn(0, n - 1)
-                    val b = if (whole) n - 1 else b0.coerceIn(a, n - 1)
-                    val content = FileContext.parts(f, a, b)
-                    if (content.isEmpty()) throw QuizException(com.daftar.app.R.string.quiz_err_read)
-                    parts += Gemini.Part.text(if (n > 1) "Material from the file \"${f.name}\", pages ${a + 1} to ${b + 1} of $n:" else "Material from the file \"${f.name}\":")
-                    parts += content
-                    if (!whole && n > 1) pagesLabel = if (a == b) "${a + 1}" else "${a + 1}–${b + 1}"
+                    readIndex = 0; readTotal = 0; readName = ""
+                    val built = QuizContext.build(srcs) { i, n, name -> readIndex = i; readTotal = n; readName = name }
+                    parts += built.parts
+                    infos = built.infos
                 }
                 if (parts.isEmpty()) {
                     if (o.instructions.isBlank()) throw QuizException(com.daftar.app.R.string.quiz_err_no_source)
@@ -124,9 +128,12 @@ object QuizRequests {
                 val now = System.currentTimeMillis()
                 val quiz = Quiz(
                     id = QuizStore.newId(),
-                    title = title.ifBlank { f?.nameWithoutExtension ?: fallbackTitle },
+                    title = title.ifBlank { srcs.singleOrNull()?.file?.nameWithoutExtension ?: fallbackTitle },
                     created = now, updated = now,
-                    sourcePath = f?.absolutePath ?: "", sourceName = f?.name ?: "", pages = pagesLabel,
+                    // single-source fields kept for older readers; [sources] holds everything
+                    sourcePath = infos.singleOrNull()?.takeIf { !it.folder }?.path ?: "",
+                    sourceName = infos.firstOrNull()?.name ?: "", pages = infos.singleOrNull()?.pages ?: "",
+                    sources = infos,
                     fromSelection = img != null, difficulty = o.difficulty, language = o.language, instructions = o.instructions.trim(),
                     questions = qs, answers = qs.map { QuizAnswer() },
                 )

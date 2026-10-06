@@ -96,3 +96,22 @@
 | "Ask AI about this question" (optional) | not done |
 | No API key written anywhere | PASS |
 | Not tested on a device (no emulator) | — |
+
+# v3.6
+
+## Understanding
+New quiz sources: any mix of the selection image + several library files + whole folders (recursive, every
+AI-readable file, hidden / `.`-prefixed entries skipped). Each row: name, kind, page count (folders: file count),
+single files get an optional page range, remove per row. Generation reads every source within the shared caps
+(~120k chars, ≤20 images in total), split fairly across files, text preferred when there are many files, file names
+given to Gemini so questions can cite their source, per-file reading progress. All source names saved in the quiz
+JSON; old quizzes (single `sourcePath/sourceName/pages`) still load. `QuizRequests.prepare(...)` keeps its signature.
+
+## Plan
+- `QuizRequests`: `sources` list (`QuizSource(file, folder, whole, from, to)`) replaces the single file; `prepare()`
+  maps its `file/pages` to one source. Reading progress = (index, total, name).
+- `QuizContext.kt` (study/): expands folders, then builds parts with a budget: pass 1 text only (`FileContext.pages(…,
+  images = false)`), char budget water-filled across files; pass 2 images water-filled across visual files (with
+  many files only pages that have little text get images), rendered one page at a time and freed immediately.
+- `Quiz.sources: List<QuizSourceInfo>` (default empty → old files decode); helper falls back to the old fields.
+- `FolderPickerDialog` in study/ (built on `Storage.list`). NewQuiz source list UI. Strings en + ar.

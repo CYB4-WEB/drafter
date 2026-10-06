@@ -235,4 +235,15 @@
     <string name="tr_channel">تسجيل المحاضرات</string>
     <string name="tr_notif_recording">جارٍ تسجيل المحاضرة</string>
     <string name="tr_notif_paused">التسجيل متوقف مؤقتًا · %1$s</string>
+    <string name="ink_thinner">أرفع</string>
+    <string name="ink_thicker">أعرض</string>
+    <string name="ink_show_labels">إظهار أسماء الأزرار</string>
+    <string name="ink_palette">لوحة الألوان</string>
+    <string name="ink_custom_color">مخصص</string>
+    <string name="ink_recent_colors">الأخيرة</string>
+    <string name="ink_hex">الرمز</string>
+    <string name="ink_hue">درجة اللون</string>
+    <string name="ink_saturation">التشبع</string>
+    <string name="ink_brightness">السطوع</string>
+    <string name="ink_use_color">استخدام اللون</string>
 </resources>

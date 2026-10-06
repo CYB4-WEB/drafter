@@ -13,6 +13,7 @@ import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
@@ -27,6 +28,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.daftar.app.R
 import com.daftar.app.data.Prefs
 import com.daftar.app.ui.theme.D
@@ -111,21 +113,21 @@ internal class InkToolState {
     }
 
     val range: ClosedFloatingPointRange<Float> get() = when (tool) {
-        Tool.HIGHLIGHTER -> 4f..48f
-        Tool.ERASER -> 4f..48f
-        Tool.TAPE -> 8f..80f
-        else -> 0.5f..24f
+        Tool.HIGHLIGHTER -> 4f..64f
+        Tool.ERASER -> 4f..64f
+        Tool.TAPE -> 8f..96f
+        else -> 0.3f..40f
     }
 
     val presets: List<Float> get() = when (tool) {
-        Tool.HIGHLIGHTER -> listOf(10f, 16f, 24f)
-        Tool.ERASER -> listOf(8f, 16f, 32f)
-        Tool.TAPE -> listOf(16f, 28f, 44f)
+        Tool.HIGHLIGHTER -> listOf(6f, 10f, 16f, 24f, 36f)
+        Tool.ERASER -> listOf(6f, 12f, 20f, 32f, 48f)
+        Tool.TAPE -> listOf(12f, 20f, 28f, 44f, 64f)
         else -> when (penStyle) {
-            PenStyle.BRUSH -> listOf(3f, 5f, 9f)
-            PenStyle.MARKER -> listOf(4f, 6f, 10f)
-            PenStyle.FOUNTAIN -> listOf(1.6f, 2.6f, 4.5f)
-            else -> listOf(1.2f, 2.2f, 4f)
+            PenStyle.BRUSH -> listOf(2f, 3f, 5f, 9f, 16f)
+            PenStyle.MARKER -> listOf(3f, 4.5f, 6f, 10f, 18f)
+            PenStyle.FOUNTAIN -> listOf(1.2f, 2f, 2.6f, 4.5f, 8f)
+            else -> listOf(0.8f, 1.5f, 2.2f, 4f, 7f)
         }
     }
 
@@ -232,7 +234,7 @@ internal fun InkToolbar(
             val colors = when (st.tool) {
                 Tool.HIGHLIGHTER -> HlColors
                 Tool.TAPE -> InkRender.tapeColors
-                else -> PenColors
+                else -> PenColors + InkPrefs.recentColors.filter { it !in PenColors }.take(4)
             }
             val cur = st.currentColor
             colors.forEach { col ->
@@ -288,7 +290,12 @@ private fun SizeBar(st: InkToolState, wide: Boolean, big: Boolean, onChanged: ()
             Modifier.padding(horizontal = 1.dp).size(if (big) 40.dp else 34.dp).clip(RoundedCornerShape(10.dp))
                 .background(if (sel) c.accent.copy(alpha = 0.12f) else Color.Transparent).clickable { st.setWidth(p); onChanged() },
             contentAlignment = Alignment.Center,
-        ) { Box(Modifier.size((5 + i * 5).dp).clip(CircleShape).background(if (sel) c.accent else c.muted)) }
+        ) { Box(Modifier.size((4 + i * 4).dp).clip(CircleShape).background(if (sel) c.accent else c.muted)) }
+    }
+    Spacer(Modifier.width(4.dp))
+    fun step(v: Float) = if (v < 2f) 0.1f else if (v < 10f) 0.5f else 1f
+    ToolButton(Icons.Rounded.Remove, stringResource(R.string.ink_thinner), false, if (big) 40.dp else 34.dp, 18.dp) {
+        st.setWidth((w - step(w - 0.01f)).coerceIn(range.start, range.endInclusive)); onChanged()
     }
     Spacer(Modifier.width(6.dp))
     // live preview of the size in the current colour
@@ -307,6 +314,9 @@ private fun SizeBar(st: InkToolState, wide: Boolean, big: Boolean, onChanged: ()
         modifier = Modifier.width(if (wide) 170.dp else 140.dp).padding(horizontal = 6.dp),
     )
     Text(fmtWidth(w), style = MaterialTheme.typography.labelMedium, color = c.ink, maxLines = 1, modifier = Modifier.width(34.dp))
+    ToolButton(Icons.Rounded.Add, stringResource(R.string.ink_thicker), false, if (big) 40.dp else 34.dp, 18.dp) {
+        st.setWidth((w + step(w)).coerceIn(range.start, range.endInclusive)); onChanged()
+    }
 }
 
 private fun abs1(v: Float) = if (v < 0f) -v else v
@@ -431,12 +441,28 @@ private fun sampleStroke(style: Int, color: Int): Stroke {
 @Composable
 internal fun Divider() = Box(Modifier.padding(horizontal = 6.dp).width(1.dp).height(28.dp).background(D.c.line))
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 internal fun ToolButton(icon: ImageVector, label: String, selected: Boolean, size: Dp = 42.dp, iconSize: Dp = 22.dp, onClick: () -> Unit) {
     val c = D.c
-    Box(
-        Modifier.padding(horizontal = 1.dp).size(size).clip(RoundedCornerShape(12.dp))
-            .background(if (selected) c.accent.copy(alpha = 0.12f) else Color.Transparent).clickable(onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) { Icon(icon, label, tint = if (selected) c.accent else c.ink, modifier = Modifier.size(iconSize)) }
+    val named = selected || InkPrefs.showLabels
+    // S Pen hover or a long press shows the name; the chosen tool (or every button, if enabled) shows it underneath
+    androidx.compose.material3.TooltipBox(
+        positionProvider = androidx.compose.material3.TooltipDefaults.rememberPlainTooltipPositionProvider(),
+        tooltip = { PlainTooltip { Text(label) } },
+        state = androidx.compose.material3.rememberTooltipState(),
+    ) {
+        Column(Modifier.padding(horizontal = 1.dp).widthIn(min = size), horizontalAlignment = Alignment.CenterHorizontally) {
+            Box(
+                Modifier.size(size).clip(RoundedCornerShape(12.dp))
+                    .background(if (selected) c.accent.copy(alpha = 0.12f) else Color.Transparent).clickable(onClick = onClick),
+                contentAlignment = Alignment.Center,
+            ) { Icon(icon, label, tint = if (selected) c.accent else c.ink, modifier = Modifier.size(iconSize)) }
+            if (named) Text(
+                label, color = if (selected) c.accent else c.muted, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, lineHeight = 11.sp),
+                modifier = Modifier.widthIn(max = size + 22.dp).padding(bottom = 1.dp),
+            )
+        }
+    }
 }

@@ -586,6 +586,9 @@ internal fun InkEditorImpl(
                     if (isNote && !whiteboard) {
                         DropdownMenuItem({ Text(stringResource(R.string.ink_add_page)) }, { showMore = false; view.addPage(ctl.currentPage, view.doc.pages.getOrNull(ctl.currentPage)?.paper?.let { PaperTemplates.nextKey(it) } ?: PaperTemplates.stamp(Prefs.defaultPaper)) }, leadingIcon = { Icon(Icons.Rounded.NoteAdd, null) })
                     }
+                    DropdownMenuItem({ Text(stringResource(R.string.ink_show_labels)) }, { InkPrefs.putShowLabels(!InkPrefs.showLabels) },
+                        leadingIcon = { Icon(Icons.Rounded.Label, null) },
+                        trailingIcon = { Checkbox(InkPrefs.showLabels, { InkPrefs.putShowLabels(it) }) })
                     if (isNote) DropdownMenuItem({ Text(stringResource(R.string.ink_paper)) }, { showMore = false; showPaper = true }, leadingIcon = { Icon(Icons.Rounded.GridOn, null) })
                     if (isNote && !whiteboard) DropdownMenuItem({ Text(stringResource(R.string.pages_title)) }, { showMore = false; view.finishEditing(); showPages = true }, leadingIcon = { Icon(Icons.Rounded.AutoAwesomeMosaic, null) })
                     if (isNote && !whiteboard && ctl.pageCount > 1) {
@@ -841,7 +844,7 @@ internal fun InkEditorImpl(
     if (showPages && isNote && !whiteboard) PageManagerPanel(view, inkFile, title, onDismiss = { showPages = false },
         onOpenFile = { f -> saveAsync(); com.daftar.app.ui.pane.open(ctx, f) })
 
-    if (showColors) ColorGridDialog(onDismiss = { showColors = false; colorForText = false }) { col ->
+    if (showColors) ColorPickerDialog(if (colorForText) (textUi?.item?.color ?: ts.currentColor) else ts.currentColor, onDismiss = { showColors = false; colorForText = false }) { col ->
         if (colorForText && textUi != null) view.formatText { it.copy(color = col) }
         else { ts.pickColor(col); view.finishEditing() }
         showColors = false; colorForText = false
@@ -1092,23 +1095,6 @@ private fun TextBoxDialog(existing: TextItem?, defaultColor: Int, onDismiss: () 
                 TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
             }
         },
-    )
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun ColorGridDialog(onDismiss: () -> Unit, onPick: (Int) -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.ink_more_colors)) },
-        text = {
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                (PenColors + MoreColors).forEach { col ->
-                    Box(Modifier.size(40.dp).clip(CircleShape).background(Color(col)).border(1.dp, D.c.line, CircleShape).clickable { onPick(col) })
-                }
-            }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
     )
 }
 

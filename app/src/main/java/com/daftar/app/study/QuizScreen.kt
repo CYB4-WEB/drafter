@@ -194,7 +194,7 @@ internal fun QuizScreenImpl(id: String) {
 private fun SourceLine(quiz: Quiz) {
     val c = D.c
     val parts = buildList {
-        if (quiz.sourceName.isNotEmpty()) add(if (quiz.pages.isNotEmpty()) stringResource(R.string.quiz_source_pages, quiz.sourceName, quiz.pages) else quiz.sourceName)
+        quizSourceLabel(quiz)?.let { add(it) }
         if (quiz.fromSelection) add(stringResource(R.string.quiz_selection))
         add(pluralStringResource(R.plurals.quiz_n_questions, quiz.questions.size, quiz.questions.size))
     }
@@ -309,6 +309,8 @@ private fun QuestionCard(i: Int, q: QuizQuestion, a: QuizAnswer, grading: Boolea
         }
         Spacer(Modifier.height(10.dp))
         SelectionContainer { Text(q.question, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Medium), color = c.ink) }
+        if (q.source.isNotBlank()) Text(stringResource(R.string.quiz_question_source, q.source), style = MaterialTheme.typography.bodySmall,
+            color = c.muted, modifier = Modifier.padding(top = 4.dp))
         Spacer(Modifier.height(14.dp))
         when (q.type) {
             QType.MCQ, QType.TF -> {
@@ -449,5 +451,15 @@ private fun Results(quiz: Quiz, onRetake: () -> Unit) {
     }
 }
 
-/** Opens the quiz's source file (if it still exists) in the current pane. */
+/** "Lecture.pdf (p. 3–5)", "Lecture.pdf, Chapter 2 +3" — null when the quiz has no file source. Works for pre-v3.6 quizzes. */
+@Composable
+internal fun quizSourceLabel(q: Quiz): String? {
+    if (q.sources.isEmpty()) return q.sourceName.takeIf { it.isNotEmpty() }?.let { n ->
+        if (q.pages.isNotEmpty()) stringResource(R.string.quiz_source_pages, n, q.pages) else n
+    }
+    val names = q.sources.map { s -> if (s.pages.isNotEmpty()) stringResource(R.string.quiz_source_pages, s.name, s.pages) else s.name }
+    return if (names.size <= 2) names.joinToString(", ") else stringResource(R.string.quiz_more_sources, names.take(2).joinToString(", "), names.size - 2)
+}
+
+/** True when the quiz has exactly one source file and it still exists ("Open source file"). */
 internal fun quizSourceExists(q: Quiz) = q.sourcePath.isNotEmpty() && File(q.sourcePath).exists()

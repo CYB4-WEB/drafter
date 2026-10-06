@@ -103,12 +103,7 @@
     <string name="quiz_selection_desc">الجزء الذي حدّدته بالحبل في المحرّر</string>
     <string name="quiz_remove">إزالة</string>
     <string name="quiz_no_file">لم يُختر ملف</string>
-    <string name="quiz_add_file_too">أضف ملفًا لسياق أوسع (اختياري)</string>
-    <string name="quiz_choose_file">اختيار ملف</string>
-    <string name="quiz_pick_file">اختر ملفًا للاختبار</string>
-    <string name="quiz_change">تغيير</string>
     <string name="quiz_counting">جارٍ عدّ الصفحات…</string>
-    <string name="quiz_n_pages">%1$d صفحة</string>
     <string name="quiz_whole_file">الملف كاملًا</string>
     <string name="quiz_some_pages">صفحات محددة</string>
     <string name="quiz_from">من</string>
@@ -173,7 +168,37 @@
     <string name="quiz_attempts">المحاولات: %1$s</string>
     <string name="quiz_review_answers">إجاباتك</string>
     <string name="quiz_mistakes_only">الأخطاء فقط</string>
+    <!-- v3.6: several files / folders -->
+    <string name="quiz_pick_files">اختر ملفات للاختبار</string>
+    <string name="quiz_add_files">إضافة ملفات</string>
+    <string name="quiz_add_folder">إضافة مجلد</string>
+    <string name="quiz_pick_folder">اختر مجلدًا</string>
+    <string name="quiz_use_folder">استخدام هذا المجلد</string>
+    <string name="quiz_budget_note">تُختصر المواد الطويلة بإنصاف بين كل المصادر (نحو 120,000 حرف و20 صورة صفحة إجمالًا)؛ ويُفضَّل النص عند كثرة الملفات.</string>
+    <string name="quiz_kind_note">ملاحظة</string>
+    <string name="quiz_kind_folder">مجلد</string>
+    <string name="quiz_folder_empty">لا توجد ملفات قابلة للقراءة</string>
+    <string name="quiz_folder_capped">%1$d ملف (تُستخدم أول %2$d)</string>
+    <string name="quiz_stage_reading_n">جارٍ قراءة الملف %1$d من %2$d…</string>
+    <string name="quiz_question_source">المصدر: %1$s</string>
+    <string name="quiz_more_sources">%1$s و%2$d غيرها</string>
 
+    <plurals name="quiz_n_files">
+        <item quantity="zero">لا ملفات</item>
+        <item quantity="one">ملف واحد</item>
+        <item quantity="two">ملفان</item>
+        <item quantity="few">%d ملفات</item>
+        <item quantity="many">%d ملفًا</item>
+        <item quantity="other">%d ملف</item>
+    </plurals>
+    <plurals name="quiz_n_pages">
+        <item quantity="zero">لا صفحات</item>
+        <item quantity="one">صفحة واحدة</item>
+        <item quantity="two">صفحتان</item>
+        <item quantity="few">%d صفحات</item>
+        <item quantity="many">%d صفحة</item>
+        <item quantity="other">%d صفحة</item>
+    </plurals>
     <plurals name="quiz_n_questions">
         <item quantity="zero">لا أسئلة</item>
         <item quantity="one">سؤال واحد</item>

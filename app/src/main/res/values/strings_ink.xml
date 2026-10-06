@@ -235,4 +235,15 @@
     <string name="tr_channel">Lecture recording</string>
     <string name="tr_notif_recording">Recording lecture</string>
     <string name="tr_notif_paused">Recording paused · %1$s</string>
+    <string name="ink_thinner">Thinner</string>
+    <string name="ink_thicker">Thicker</string>
+    <string name="ink_show_labels">Show button names</string>
+    <string name="ink_palette">Palette</string>
+    <string name="ink_custom_color">Custom</string>
+    <string name="ink_recent_colors">Recent</string>
+    <string name="ink_hex">Hex</string>
+    <string name="ink_hue">Hue</string>
+    <string name="ink_saturation">Saturation</string>
+    <string name="ink_brightness">Brightness</string>
+    <string name="ink_use_color">Use colour</string>
 </resources>
