@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release tag (e.g. v3.0)'
+        description: 'Release tag (e.g. v3.0.1)'
         required: true
 
 permissions:
@@ -21,6 +21,8 @@ jobs:
     timeout-minutes: 60
     env:
       KS: ${{ secrets.DAFTAR_KEYSTORE_BASE64 }}
+      # Certificate every Daftar release has been signed with since 1.1 — never change it, or updates stop installing.
+      DAFTAR_CERT_SHA256: fa87e2908e974bbcf8446a86cd634c891b690e4fc5d9043e194025410b5dd392
     steps:
       - uses: actions/checkout@v4
       - name: Decide tag
@@ -32,7 +34,10 @@ jobs:
           elif [ "${{ github.ref_type }}" = "tag" ]; then TAG="${{ github.ref_name }}"
           else TAG="v$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts)"; fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          if gh release view "$TAG" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+          if [ -z "$KS" ]; then
+            echo "::warning::Secret DAFTAR_KEYSTORE_BASE64 is not set — skipping: without the original signing key the APK would not update over the installed app."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          elif gh release view "$TAG" --repo "${{ github.repository }}" >/dev/null 2>&1; then
             echo "Release $TAG already exists — nothing to do."; echo "skip=true" >> "$GITHUB_OUTPUT"
           else echo "skip=false" >> "$GITHUB_OUTPUT"; fi
       - uses: actions/setup-java@v4
@@ -40,15 +45,13 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - uses: android-actions/setup-android@v3
+      - name: Install SDK packages (runner already has the Android SDK)
         if: steps.ver.outputs.skip != 'true'
-      - name: Install SDK packages
-        if: steps.ver.outputs.skip != 'true'
-        run: sdkmanager "platforms;android-36" "build-tools;36.0.0" "platform-tools"
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0" > /dev/null
       - uses: gradle/actions/setup-gradle@v4
         if: steps.ver.outputs.skip != 'true'
-      - name: Signing key from secrets (optional)
-        if: ${{ env.KS != '' && steps.ver.outputs.skip != 'true' }}
+      - name: Signing key from secrets (required, so the APK updates over the installed version)
+        if: steps.ver.outputs.skip != 'true'
         run: |
           echo "$KS" | base64 -d > "$RUNNER_TEMP/release.jks"
           echo "DAFTAR_KEYSTORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
@@ -61,6 +64,14 @@ jobs:
           chmod +x gradlew
           echo "sdk.dir=$ANDROID_HOME" > local.properties
           ./gradlew :app:assembleRelease --no-daemon --stacktrace
+      - name: Verify signing key (must match the key of 1.1 / 2.0 / 3.0 so updates install over them)
+        if: steps.ver.outputs.skip != 'true'
+        run: |
+          SIGNER="$ANDROID_HOME/build-tools/36.0.0/apksigner"
+          for a in app/build/outputs/apk/release/*.apk; do
+            "$SIGNER" verify --print-certs "$a" | grep -q "SHA-256 digest: $DAFTAR_CERT_SHA256" \
+              || { echo "::error::$a is not signed with the Daftar key ($DAFTAR_CERT_SHA256) — refusing to publish."; exit 1; }
+          done
       - name: Package
         if: steps.ver.outputs.skip != 'true'
         id: pkg
