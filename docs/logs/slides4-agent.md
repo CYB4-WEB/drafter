@@ -63,3 +63,42 @@ then rewrite from disk, then reopen at the focus page).
   exists, content types cover every part, no orphan Overrides, sldIdLst ids/rIds unique ≥ 256, python-pptx opens each
   file with the expected slide order/titles/layouts/hidden flag. Changed parts per op = exactly presentation.xml (+ its
   rels + [Content_Types] when parts are added/removed) or the one slide (hide); all other parts byte-identical.
+- `tools/compile.sh` → **BUILD OK** (whole module; a first FILTER=slides/ run failed with no slides errors listed — another
+  agent's transient error; the rerun was clean and the new slides classes are in the build output).
+
+## Decisions & limits
+- **Text splicing, not a DOM rewrite.** Changed XML parts are edited as text (sldIdLst, rels, Override, root `show`),
+  so namespaces, mc:AlternateContent, extLst and formatting survive exactly; everything not touched stays byte-identical
+  (zip entries are re-compressed, part contents identical; entry order kept, new parts appended).
+- **New blank slide** = the chosen layout's placeholders (except date/footer/slide number) as empty `p:sp` with
+  `<p:spPr/>`, like PowerPoint's "New Slide"; they inherit position/style, show nothing in Daftar or a slide show and show
+  "Click to add…" in PowerPoint. The typed title fills the title placeholder; Arabic titles get `rtl="1"` + `lang="ar-SA"`.
+  If the layout has no title (Blank) a title placeholder is added with the master title's xfrm (explicit, so it renders in
+  both apps). Default layout = the layout of the slide before the gap, or Title and Content after a title slide.
+- **Note page** = the deck's Blank layout (fewest placeholders if none), `showMasterSp="0"` and a white `p:bg`.
+- **Duplicate** copies ink of the source slide onto the copy (it is what the student sees on it) but not My notes or
+  comments; speaker notes come along (notes page copied).
+- **Delete** removes parts reachable only through the deleted slide (graph walk before/after). A slide still reached from
+  elsewhere (e.g. a hyperlink "jump to slide" on another slide) is kept as a part but no longer listed; PowerPoint may then
+  offer a repair — rare in lecture decks. `docProps/app.xml` (slide count/titles cache) is not updated; PowerPoint
+  rewrites it on save and does not validate it.
+- **Validation** on device: `PptxEdit.check` (only problems the edit introduced count) + full `PptxParser.open` with the
+  expected slide count; failure → toast, original deck/ink/notes untouched, viewer reopens where it was.
+- No undo (per request); delete is confirmed. Other per-slide data owned by other agents (study links / flashcards
+  pointing at a slide index, if any) is not remapped.
+- If the same deck is open in the other split pane it keeps the old version until reopened (same as PDF).
+
+## Requests to lead
+- None required.
+
+## Self-check
+1. Insert slide anywhere (rail "+" between thumbnails and after the last, filmstrip "+", long-press Insert before/after,
+   header "Insert slide after current" button + menu item) with Blank-on-named-layout / Note page / Duplicate; real
+   slide part + rels + Override + presentation rel + sldIdLst at the right position (unique id ≥ 256, unique rId);
+   temp → validate → atomic replace; ink + My notes remapped; reload on the new slide — **PASS** (JVM + python verified
+   package side; UI by compile + review, no device here).
+2. Delete (confirm), duplicate, move up/down, hide/unhide with ink + My notes remap — **PASS** (sections and custom shows kept
+   consistent).
+3. Optional title as `p:sp` with `p:ph type="title"` — **PASS** (python-pptx reads it back as the slide title).
+4. Validation with python3 + python-pptx on lecture_en/ar and a chart/sections deck — **PASS** (all outputs clean).
+5. en + real Arabic strings (`slides4_*`), compiles — **PASS**.
