@@ -165,12 +165,14 @@ class AiSession internal constructor(val file: File) {
         busy = true
         status = Status.Thinking
         job = scope.launch {
-            loadJob?.join()
-            val imageName = if (att != null) withContext(Dispatchers.IO) { AiChatStore.saveImage(file, id, att.jpeg) } else null
-            val msg = ChatMsg(id, "user", t, image = imageName, page = att?.page, recognized = att?.recognized, time = id)
-            messages.add(msg)
-            persist()
-            runTurn(msg, att?.jpeg)
+            try {
+                loadJob?.join()
+                val imageName = if (att != null) withContext(Dispatchers.IO) { AiChatStore.saveImage(file, id, att.jpeg) } else null
+                val msg = ChatMsg(id, "user", t, image = imageName, page = att?.page, recognized = att?.recognized, time = id)
+                messages.add(msg)
+                persist()
+                runTurn(msg, att?.jpeg)
+            } finally { busy = false }
         }
     }
 
@@ -192,8 +194,10 @@ class AiSession internal constructor(val file: File) {
         busy = true
         status = Status.Thinking
         job = scope.launch {
-            val jpeg = last.image?.let { withContext(Dispatchers.IO) { AiChatStore.readImage(it) } }
-            runTurn(last, jpeg)
+            try {
+                val jpeg = last.image?.let { withContext(Dispatchers.IO) { AiChatStore.readImage(it) } }
+                runTurn(last, jpeg)
+            } finally { busy = false }
         }
     }
 
@@ -397,6 +401,8 @@ class AiSession internal constructor(val file: File) {
             if (textOnly) append("; for this format a \"page\" is a ~3000-character part of the text")
             append(").\n")
             if (msg.page != null && msg.image != null) append("The current selection image comes from page ${msg.page + 1}.\n")
+            if (msg.page != null && msg.image != null && (kind == Kind.PDF || kind == Kind.PPTX))
+                append("If the selection image shows only the student's marks (circles, highlights) and not the printed content they point at, call request_pages for page ${msg.page + 1}.\n")
             append("\nRules:\n")
             append("- Answer in the language of the student's request (Arabic or English). If the request is only a button prompt, use that prompt's language.\n")
             append("- Use Markdown: short paragraphs, **bold** for key terms, headings and lists when helpful. Write math as plain text; inline formulas may use \$…\$ without LaTeX commands where possible.\n")

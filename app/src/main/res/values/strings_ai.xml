@@ -19,7 +19,6 @@
     <string name="ai_retry">Retry</string>
     <string name="ai_stopped">Stopped.</string>
     <string name="ai_dismiss">Dismiss</string>
-    <string name="ai_you">You</string>
 
     <!-- Quick chips (the prompt is what is sent) -->
     <string name="ai_chip_explain">Explain</string>

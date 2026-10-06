@@ -19,7 +19,6 @@
     <string name="ai_retry">إعادة المحاولة</string>
     <string name="ai_stopped">تم الإيقاف.</string>
     <string name="ai_dismiss">إغلاق</string>
-    <string name="ai_you">أنت</string>
 
     <!-- Quick chips (the prompt is what is sent) -->
     <string name="ai_chip_explain">اشرح</string>
